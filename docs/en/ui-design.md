@@ -347,3 +347,9 @@ Preserves nameGXF's mention keyboard navigation, remark/nickname filtering, comm
 Any current group member may mention everyone. Delivery remains per-member unicast excluding the sender; former members cannot send. The reserved mentions value `"@all"` marks the conversation and emphasizes notification titles while preserving mute, notification and focused-window gates. Older clients, including v0.60.3, receive the text without everyone emphasis. No new field, capability, database schema, dependency or external request. Editing the label into a different token removes the outgoing broadcast marker.
 
 Official repository, download, issue and source links remain skyjt/teahouse; fork migration is excluded. This feature increments v0.60.3 to v0.61.0. The original PR's #308–#310 conflict with upstream decision numbers, so this integration uses #318. Twemoji SVGs are packaged as separate local assets loaded on demand, reducing inline graphics parsed by each window without raising JS/CSS budgets or changing Electron 22 / Chrome 108.
+
+## Pending pasted attachments (Decision #319)
+
+The composer displays a compact inline preview between toolbar and text input. Responsive one/two-column cards show a 72px image thumbnail or existing file icon, truncated filename with tooltip, size, and an always visible accessible remove button. The list scrolls within 176px. A count and Cancel all action sit above it; the existing send button shows the attachment count. Existing theme tokens, keyboard send preference, IME protection, and focus rings apply. Failed items remain with feedback; conversation changes discard pending items. No modal or added animation.
+
+Implementation budget: the preview stays in the static App dependency graph to preserve the five-window entry contract. The App CSS budget increases from 116 to 119 KiB for the approximately 3 KiB preview styles. JS and bootstrap budgets are unchanged.

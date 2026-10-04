@@ -9,7 +9,8 @@ const DEFAULT_ROOT_BUDGETS = {
   // 主窗（决议 #284）：文件柜进主窗后带来 NSelect 与两块视图，静态闭包较 v0.49 抬了约 150 KiB。
   // 不改用动态 import——App 内再套动态 import 会让 Rollup 把 App 的 facade 并进匿名共享块，
   // manifest 里就没有 src/App.vue 这个动态入口了，四入口契约（决议 #210）随之失效。
-  'App.vue': { js: 800 * 1024, css: 116 * 1024 },
+  // 决议 #319：输入区附件预览新增约 3 KiB CSS，保持静态入口契约。
+  'App.vue': { js: 800 * 1024, css: 119 * 1024 },
   'SettingsApp.vue': { js: 704 * 1024, css: 40 * 1024 },
   'CaptureApp.vue': { js: 112 * 1024, css: 12 * 1024 },
   'ImageViewerApp.vue': { js: 160 * 1024, css: 20 * 1024 }

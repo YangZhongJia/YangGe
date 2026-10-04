@@ -44,6 +44,8 @@ import GroupAvatar from './GroupAvatar.vue'
 import ForwardDialog from './ForwardDialog.vue'
 import ScreenRequestDialog from './ScreenRequestDialog.vue'
 import PantryIcon from './PantryIcon.vue'
+import PendingAttachments from './PendingAttachments.vue'
+import { usePendingAttachments, type PendingAttachment } from '../utils/pending-attachments'
 import Win7ChatEditor from './Win7ChatEditor.vue'
 import type {
   ConversationMessageHit,
@@ -76,6 +78,13 @@ const transfersStore = useTransfersStore()
 transfersStore.init()
 
 const draft = ref('')
+const attachments = usePendingAttachments()
+const { items: pendingAttachments, busy: attachmentsSending, failed: attachmentsFailed } = attachments
+const sendDisabled = computed(() => attachmentsSending.value || overLimit.value || !canSend.value ||
+  (!draft.value.trim() && !pendingAttachments.value.length) ||
+  (pendingAttachments.value.length > 0 && !canSendMedia.value))
+function cancelAttachments(): void { attachments.clear(); markClipboardPasteHandled(); focusInput() }
+watch(() => chatStore.activeConvId, () => { attachments.clear(); markClipboardPasteHandled() }, { flush: 'sync' })
 const screenState = ref<ScreenState | null>(null)
 const screenAvailability = ref<ScreenAvailability | null>(null)
 const screenFeedback = ref('')
@@ -464,6 +473,7 @@ function onEscape(event: KeyboardEvent): void {
   else if (showEmoji.value) showEmoji.value = false
   else if (showPk.value) showPk.value = false
   else if (showPeerProfile.value) closePeerProfile()
+  else if (pendingAttachments.value.length && !attachmentsSending.value) cancelAttachments()
   else return
   event.preventDefault()
 }
@@ -508,6 +518,8 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  attachments.clear()
+  markClipboardPasteHandled()
   stopScreenState?.()
   window.removeEventListener('focus', refreshScreenAvailability)
   rememberConversationScroll()
@@ -1065,9 +1077,25 @@ function insertTextAtCursor(text: string): number {
   return start
 }
 
+async function submitAttachment(item: PendingAttachment, valid: () => boolean): Promise<boolean> {
+  if (!valid() || !canSendMedia.value) return false
+  if (item.path) {
+    // 确认后才申请一次性授权；每次 await 后复核会话/取消代次。
+    const paths = await grantLocalFilePaths([item.path])
+    if (!valid() || !canSendMedia.value || paths.length !== 1) return false
+    return item.image ? chatStore.sendImagePath(paths[0]) : chatStore.sendFilePaths(paths)
+  }
+  const bytes = await item.file.arrayBuffer()
+  if (!valid() || !canSendMedia.value) return false
+  return chatStore.sendImageBytes(item.name, bytes)
+}
+
 async function send(): Promise<void> {
+  if (sendDisabled.value) return
   const text = draft.value.trim()
-  if (!text || overLimit.value || !canSend.value) return
+  const originalDraft = draft.value
+  const generation = attachments.token()
+  const convId = chatStore.activeConvId
   const mentions = isGroup.value
     ? [...new Set(mentionIds.value)].filter((id) =>
         id === MENTION_ALL
@@ -1075,12 +1103,25 @@ async function send(): Promise<void> {
           : text.includes(`@${peersStore.nameOf(id)}`)
       )
     : []
-  const id = replyToId.value ? replyToId.value : undefined
-  draft.value = ''
-  mentionIds.value = []
-  closeMentionPicker()
-  replyToId.value = null
-  await chatStore.send(text, mentions, id)
+  const id = replyToId.value || undefined
+  await attachments.send(submitAttachment, text ? async () => {
+    // 同步摘下本次文字，发送期间继续输入不会带着已发正文再发一次。
+    draft.value = ''
+    mentionIds.value = []
+    closeMentionPicker()
+    replyToId.value = null
+    const restore = (): void => {
+      if (!attachments.isCurrent(generation) || chatStore.activeConvId !== convId) return
+      draft.value = originalDraft + (draft.value ? '\n' + draft.value : '')
+      mentionIds.value = [...new Set([...mentions, ...mentionIds.value])]
+      if (!replyToId.value) replyToId.value = id ?? null
+    }
+    try {
+      const ok = await chatStore.send(text, mentions, id)
+      if (!ok) restore()
+      return ok
+    } catch (error) { restore(); throw error }
+  } : undefined)
 }
 
 async function sendClipboardImageFallback(event?: Event): Promise<boolean> {
@@ -1094,7 +1135,7 @@ async function sendClipboardImageFallback(event?: Event): Promise<boolean> {
     if (!bytes) return false
     event?.preventDefault()
     markClipboardPasteHandled()
-    await chatStore.sendImageBytes(tr('粘贴图片.png'), bytes)
+    attachments.add(new Blob([bytes], { type: 'image/png' }), tr('粘贴图片.png'))
     return true
   } finally {
     clipboardImagePasteBusy = false
@@ -1659,25 +1700,21 @@ async function sendTablePasteImage(): Promise<void> {
   await chatStore.sendImageBytes(tr('粘贴表格{0}', { 0: payload.imageExt }), bytes, payload.meta)
 }
 
-/** Ctrl+V 粘贴：复制的文件按路径发（保留文件名/类型），截图位图按 bytes 发（F-MSG-3 / 决议 #76） */
+/** Ctrl+V 只加入本地附件草稿；普通文本与表格保留原有优先级。 */
 async function onPaste(event: ClipboardEvent): Promise<void> {
-  if (!canSendMedia.value) return
+  if (!canSend.value) return
   const data = event.clipboardData
-  // paste 已派发即由本链路独占（决议 #207）：必须在任何 await 之前同步 mark 并清 IPC 定时器，
-  // 否则大截图 arrayBuffer 间隙里兜底会再发一张（UOS/Wayland 慢机双发根因）。
+  // 任何 await 前同步标记，避免原生剪贴板兜底重复入队（#207）。
   markClipboardPasteHandled()
-  // 1) 从文件管理器复制的真实文件：Electron 为剪贴板 File 注入 path（与拖拽同机制）
-  const paths: string[] = []
   if (data) {
-    for (const file of Array.from(data.files)) {
-      const p = (file as File & { path?: string }).path
-      if (p) paths.push(p)
-    }
-    if (paths.length > 0) {
+    const files = Array.from(data.files)
+    const localFiles = files.filter(file => (file as File & { path?: string }).path)
+    if (localFiles.length) {
       event.preventDefault()
-      const granted = await grantLocalFilePaths(paths)
-      if (granted.length === 1 && isImagePath(granted[0])) await chatStore.sendImagePath(granted[0])
-      else if (granted.length > 0) await chatStore.sendFilePaths(granted)
+      for (const file of files) {
+        const path = (file as File & { path?: string }).path || ''
+        if (path || file.type.startsWith('image/')) attachments.add(file, file.name, path)
+      }
       return
     }
     const tableText = readClipboardTableText(data)
@@ -1686,19 +1723,15 @@ async function onPaste(event: ClipboardEvent): Promise<void> {
       await prepareTablePaste(data, tableText)
       return
     }
-    // 复制网页 / 富文本 emoji 时，剪贴板常同时带 text/plain 和 image/png；文本交给 textarea 原生粘贴。
-    if (hasClipboardText(data)) {
-      return
-    }
-    // 2) 截图位图（无对应文件路径）：直接按图片 bytes 发送
-    const imageItem = await readClipboardImageItem(data)
-    if (imageItem) {
+    // 富文本中的附带位图不替代正文（已有 emoji/表格粘贴约定）。
+    if (hasClipboardText(data)) return
+    const images = files.filter(file => file.type.startsWith('image/'))
+    if (images.length) {
       event.preventDefault()
-      await chatStore.sendImageBytes(tr('粘贴图片{0}', { 0: imageItem.ext }), imageItem.bytes)
+      for (const file of images) attachments.add(file, file.name || tr('粘贴图片{0}', { 0: imageExtFromMime(file.type) }))
       return
     }
   }
-  // clipboardData 无图时显式走原生剪贴板（#138）；与 IPC 调度互斥，不双发
   await sendClipboardImageFallback(event)
 }
 
@@ -2285,6 +2318,15 @@ async function onDrop(event: DragEvent): Promise<void> {
           <PantryIcon name="x" :size="12" />
         </button>
       </div>
+      <PendingAttachments
+        v-if="pendingAttachments.length"
+        :items="pendingAttachments"
+        :busy="attachmentsSending"
+        :failed="attachmentsFailed"
+        :available="canSendMedia"
+        @remove="attachments.remove"
+        @cancel="cancelAttachments"
+      />
       <div
         class="input-shell"
         :class="{ 'has-mirror': draftUsesEmojiMirror }"
@@ -2348,7 +2390,7 @@ async function onDrop(event: DragEvent): Promise<void> {
         <span v-if="draftBytes > 600" class="counter" :class="{ over: overLimit }">
           {{ tr('{0} / {1} 字节{2}', { 0: draftBytes, 1: TEXT_TCP_LIMIT, 2: overLimit ? tr('（文本过长）') : overUdpLimit ? tr('（将通过 TCP 发送）') : '' }) }}
         </span>
-        <button class="send" :disabled="!draft.trim() || overLimit || !canSend" @click="send">{{ tr('发送') }}</button>
+        <button class="send" :disabled="sendDisabled" @click="send">{{ attachmentsSending ? tr('正在发送…') : pendingAttachments.length ? tr('发送（{0}）', { 0: pendingAttachments.length }) : tr('发送') }}</button>
       </div>
     </footer>
   </div>

@@ -1,5 +1,14 @@
 /** 本地英文文案；中文源模板即回退词典。 */
 const english: Record<string, string> = {
+  '待发送附件': 'Attachments to send',
+  '取消全部': 'Cancel all',
+  '移除附件：{0}': 'Remove attachment: {0}',
+  '未发送的附件已保留，请重试或移除': 'Unsent attachments kept. Retry or remove them.',
+  '正在发送，请稍候…': 'Sending, please wait…',
+  '对方离线，附件暂不能发送': 'Recipient offline. Attachments cannot be sent yet.',
+  '确认后发送 · 可继续粘贴': 'Send when ready · Paste to add more',
+  '发送（{0}）': 'Send ({0})',
+
   "诊断与反馈": "Diagnostics and feedback",
   "遇到问题时，导出诊断包并附在问题反馈中。": "Export a diagnostic bundle and attach it to your bug report.",
   "仅保存到本机，不会自动上传。包含环境信息与近期运行记录，不含聊天和文件内容。": "Saved locally, never uploaded automatically. Includes environment details and recent events, without chat or file contents.",

@@ -2,7 +2,8 @@
 
 > [简体中文](handoff.md) · [English](en/handoff.md)
 
-> 当前更新：2026-10-02，准备 v0.61.1 补丁发布：修复 issue #53 断点预哈希超时/取消回收及旧端兼容，修复 issue #51 已复现的受限重新邀请累计快照路径。Mac 已验收功能提交 `a9fe833`；Win7/UOS ARM64 真机与真实多机传输仍未验收。正式发布状态以 GitHub Release 为准，下一决议 #319。
+> 当前发布准备：2026-10-04，v0.61.2 / 决议 #319 粘贴附件发送前确认已完成本地验证，用户已确认实际界面并批准发布；正式状态以 GitHub Release 为准。下一决议 #320；详见文末本地待审记录。
+> 上次发布准备：2026-10-02，准备 v0.61.1 补丁发布：修复 issue #53 断点预哈希超时/取消回收及旧端兼容，修复 issue #51 已复现的受限重新邀请累计快照路径。Mac 已验收功能提交 `a9fe833`；Win7/UOS ARM64 真机与真实多机传输仍未验收。正式发布状态以 GitHub Release 为准，下一决议 #319。
 > 给接手本项目的任何 AI 代理或开发者。读完本文 + [AGENTS.md](../AGENTS.md) 即可无缝继续开发。
 > 历史更新：2026-09-18，**v0.60.2 信息同步与扫描可靠性修复（#317）**。陌生心跳补握手、同版本资料乱序/时钟回拨保护、dp1 定向探活、扫描排队/续扫/周期补排、网段来源校验、gossip 分包错峰。`services/range-scan.ts` 编排后台周期；`Discovery` 统一所有逐地址扫描。下一决议 **#318**。本轮本地优化，尚未发布。
 > 本轮验证：126 个测试文件 / 842 测试、Electron ABI 数据库、双端类型、构建与渲染体积门禁、隔离 smoke 全部通过。真实 Electron 22 验证资料/分组刷新、dp1 能力公布和全局/单段扫描 IPC/完成进度；回环含旧端延迟应答，模拟千节点和长期调度覆盖限速/续扫/补排。Win7/UOS/麒麟及真实 VLAN/千台终端仍须目标环境复测。
@@ -247,3 +248,7 @@ renderer/  main.ts 公共 bootstrap；renderer-entry.ts 按 hash 动态加载 Ap
 上游仓库及下载、反馈、源码链接保持 skyjt/teahouse；不采用 fork 迁移。版本按功能增量从 v0.60.3 升到 v0.61.0。原 PR 的 #308–#310 在主线已用于其他功能，本次统一记作 #318。Twemoji SVG 改为独立本地文件按需读取，减少各窗口解析的内联图形数据；保持原有 JS/CSS 预算及 Electron 22 / Chrome 108 基线。
 
 本轮验证：129 个测试文件 / 864 测试、类型检查、真实 Electron Node16.17.1 / ABI110 数据库自测、构建和版本一致性通过。Xvfb 隔离环境的 Electron 22 启动冒烟通过；提取真实组件事件函数的 Electron/Chromium 回归验证光标、正文保留与全员标签编辑，独立 SVG 文件全部可加载。新增 8 个事件函数回归在原 PR 上 7 项失败、修复版全部通过。Win7/UOS 原生中文输入法与物理平台通知仍需真机验证。
+
+## v0.61.2 发布准备：Issue #45 粘贴附件（2026-10-04）
+
+v0.61.2 / 决议 #319，只修复粘贴附件误发；加密明确不在范围。`PendingAttachments.vue` 负责预览，`utils/pending-attachments.ts` 管理队列/清理/串行发送，`ChatPane.vue` 复用现有 IPC。五连验证外增加 `node scripts/paste-attachments-selftest.cjs`（先 build）：真实 Electron 22、临时资料与回环同事，截图默认写入工作目录上级 artifacts，可通过 PANTRY_PASTE_TEST_ARTIFACTS 指定。仅合成 DataTransfer/测试剪贴板 IPC，无真实系统剪贴板或真实局域网流量。用户确认实际界面后已授权发布；全量 887 测试、focused 36 测试、数据库、类型、构建、smoke 与真实 Electron 验收通过。发布说明保留目标系统剪贴板未验收限制；下一决议 #320。

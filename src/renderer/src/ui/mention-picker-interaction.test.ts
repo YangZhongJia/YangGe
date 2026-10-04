@@ -3,6 +3,7 @@ import ts from 'typescript'
 import { computed, nextTick, ref, watch } from 'vue'
 import { describe, expect, it } from 'vitest'
 import * as picker from '../utils/mention-picker'
+import { usePendingAttachments } from '../utils/pending-attachments'
 import { isImeCompositionKey } from '../utils/ime'
 
 // 执行真实组件的事件函数和 watcher；显式模拟 keydown 之后才发生的原生光标移动。
@@ -24,7 +25,7 @@ const actual = ast.statements.filter(statement =>
 
 function harness() {
   const compiled = ts.transpileModule(`
-    const { ref, computed, watch, nextTick, isImeCompositionKey, ...helpers } = deps;
+    const { ref, computed, watch, nextTick, isImeCompositionKey, usePendingAttachments, ...helpers } = deps;
     const { filterMentionCandidates, detectMentionInsertion, hasMentionAllToken,
       matchesMentionAll, parseMentionQuery, stepMentionIndex } = helpers;
     const MENTION_ALL = '@all', props = { win7ImeCompat: false };
@@ -38,13 +39,15 @@ function harness() {
     const peersStore = { nameOf: id => names[id], byId: id => ({ nick: names[id], remark: '' }) };
     const tr = text => text, syncInputMirrorScroll = () => {}, tablePasteHintIntact = () => true;
     const clearTablePasteHint = () => {}, insertNewline = () => { draft.value += '\\n' };
-    const sent = [], chatStore = { send: async (...args) => { sent.push(args) } };
+    const attachments = usePendingAttachments(), sendDisabled = computed(() => attachments.busy.value || !draft.value.trim());
+    const submitAttachment = async () => true;
+    const sent = [], chatStore = { activeConvId: 'test', send: async (...args) => { sent.push(args); return true } };
     ${actual}
     return { draft, inputEl, showMentionPicker, mentionCandidates, mentionIds, mentionActiveIndex,
-      settings, sent, onKeydown, insertMention, syncMentionQuery, send,
+      settings, sent, chatStore, attachments, onKeydown, insertMention, syncMentionQuery, send,
       onInputCompositionStart, onInputCompositionEnd, setInputSelection };
   `, { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText
-  const h = new Function('deps', compiled)({ ref, computed, watch, nextTick, isImeCompositionKey, ...picker })
+  const h = new Function('deps', compiled)({ ref, computed, watch, nextTick, isImeCompositionKey, usePendingAttachments, ...picker })
   h.edit = async (text: string, start = text.length, end = start) => {
     h.draft.value = text
     h.setInputSelection(start, end)
@@ -68,6 +71,7 @@ describe('提及真实事件函数回归', () => {
     await nextTick() // 原实现会在此读到旧 caret=1
     h.setInputSelection(0) // 原生默认动作晚于 keydown listener/microtask
     h.key('Enter')
+    await nextTick()
     expect(h.sent[0]).toEqual(['@', [], undefined])
     expect(h.mentionIds.value).toEqual([])
   })
@@ -78,6 +82,7 @@ describe('提及真实事件函数回归', () => {
     await h.edit('@ suffix', 1)
     h.setInputSelection(8)
     h.key('Enter')
+    await nextTick()
     expect(h.sent[0]).toEqual(['@ suffix', [], undefined])
   })
 
@@ -119,13 +124,16 @@ describe('提及真实事件函数回归', () => {
     expect(h.mentionActiveIndex.value).toBe(0)
     await h.edit('@a')
     h.key('Enter')
+    await nextTick()
     expect(h.draft.value).toBe('@Alice ')
     await h.edit('')
     await h.edit('@')
     await h.edit('@all')
     h.key('Enter')
+    await nextTick()
     expect(h.draft.value).toBe('@所有人 ')
     h.key('Enter')
+    await nextTick()
     expect(h.sent[0]).toEqual(['@所有人', ['@all'], undefined])
   })
 
@@ -137,6 +145,7 @@ describe('提及真实事件函数回归', () => {
     await nextTick()
     await h.edit('@所有人Else')
     h.key('Enter')
+    await nextTick()
     expect(h.sent[0]).toEqual(['@所有人Else', [], undefined])
   })
 
@@ -151,6 +160,7 @@ describe('提及真实事件函数回归', () => {
     expect(h.key('Enter', { keyCode: 229 }).prevented).toBe(false)
     expect(h.sent).toEqual([])
     h.key('Enter')
+    await nextTick()
     expect(h.draft.value).toBe('@Alice ')
   })
 
@@ -163,5 +173,42 @@ describe('提及真实事件函数回归', () => {
     expect(h.sent).toEqual([])
     h.key('Enter', { ctrlKey: true })
     expect(h.sent[0]).toEqual(['@zzz', [], undefined])
+  })
+})
+
+
+describe('混合发送的文字草稿保护', () => {
+  it('发送期间继续输入不会把旧正文保留到下一次发送', async () => {
+    const h = harness()
+    await h.edit('本次正文')
+    let finish!: (value: boolean) => void
+    h.chatStore.send = () => new Promise<boolean>(resolve => { finish = resolve })
+    const sending = h.send()
+    expect(h.draft.value).toBe('')
+    await h.edit('下一次正文')
+    finish(true); await sending
+    expect(h.draft.value).toBe('下一次正文')
+  })
+  it('失败恢复原正文，并保留期间新增的文字', async () => {
+    const h = harness()
+    await h.edit('本次正文')
+    let finish!: (value: boolean) => void
+    h.chatStore.send = () => new Promise<boolean>(resolve => { finish = resolve })
+    const sending = h.send()
+    await h.edit('补充')
+    finish(false); await sending
+    expect(h.draft.value).toBe('本次正文\n补充')
+  })
+  it('切换会话后失败不恢复旧会话文字', async () => {
+    const h = harness()
+    await h.edit('旧会话')
+    let finish!: (value: boolean) => void
+    h.chatStore.send = () => new Promise<boolean>(resolve => { finish = resolve })
+    const sending = h.send()
+    h.attachments.clear()
+    h.chatStore.activeConvId = 'other'
+    await h.edit('新会话')
+    finish(false); await sending
+    expect(h.draft.value).toBe('新会话')
   })
 })
