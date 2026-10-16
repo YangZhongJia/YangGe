@@ -2,10 +2,10 @@
 
 > [简体中文](handoff.md) · [English](en/handoff.md)
 
-> 当前工作树：2026-10-16，Issue #48 / 决议 #320 传输可靠性修复，分支 `fix/48-transfer-reliability`，未提交/未发布。TCP 监听失败阻止附件发送并显示端口；`ta1` + `file-ctl result` 区分已通知、接收确认送达与失败；完整供流后 15 秒无回执回退，旧端不等回执。保留取消/重试与 issue #3 的迟到 offer ACK 保护，增加跨平台 Windows 设备名清洗。协议详见 [protocol.md §8](protocol.md#8-文件传输tcp拉取式)，无需迁移或新增依赖。下一决议 #321。
-> 本轮验证：新增无需监听端口的状态机/协议/路径/真实磁盘故障测试通过；`npm run typecheck`、`npm run test:db`（Electron ABI 110）、构建/包体门禁与双语文档检查通过。全量 `npx vitest run` 为 882 通过 / 73 失败（955 项），失败均受当前沙箱禁止 UDP/TCP 监听的 `EPERM` 限制，需在允许回环端口的环境重跑。Xvfb 启动 smoke 同样受 Chromium sandbox `shutdown: Operation not permitted` 限制，未完成 GUI/真实多机验收。
+> 当前发布准备：2026-10-17，v0.61.3 / 决议 #320 修复 Issue #48 传输可靠性：TCP 监听失败阻止附件发送并提示端口；`ta1` + `file-ctl result` 区分已通知、接收确认送达与失败；完整供流后 15 秒无回执回退，旧端不等回执；跨平台清洗 Windows 设备名。PR #60 已合并，用户已批准发布；正式状态以 GitHub Release 为准。下一决议 #321。
+> 本轮验证：允许回环端口的 Linux 环境全量 133 个测试文件 / 955 测试、双端类型、构建/包体门禁与双语文档检查通过；真实 Electron 22 双实例回环验收图片、1 GB 文件、CON.txt、接收目录不可写、TCP 端口被占及新旧版互通。Windows/macOS 真机与真实多机网络仍未验收。
 
-> 当前发布准备：2026-10-04，v0.61.2 / 决议 #319 粘贴附件发送前确认已完成本地验证，用户已确认实际界面并批准发布；正式状态以 GitHub Release 为准。下一决议 #320；详见文末本地待审记录。
+> 上次发布准备：2026-10-04，v0.61.2 / 决议 #319 粘贴附件发送前确认已完成本地验证，用户已确认实际界面并批准发布；正式状态以 GitHub Release 为准。下一决议 #320；详见文末本地待审记录。
 > 上次发布准备：2026-10-02，准备 v0.61.1 补丁发布：修复 issue #53 断点预哈希超时/取消回收及旧端兼容，修复 issue #51 已复现的受限重新邀请累计快照路径。Mac 已验收功能提交 `a9fe833`；Win7/UOS ARM64 真机与真实多机传输仍未验收。正式发布状态以 GitHub Release 为准，下一决议 #319。
 > 给接手本项目的任何 AI 代理或开发者。读完本文 + [AGENTS.md](../AGENTS.md) 即可无缝继续开发。
 > 历史更新：2026-09-18，**v0.60.2 信息同步与扫描可靠性修复（#317）**。陌生心跳补握手、同版本资料乱序/时钟回拨保护、dp1 定向探活、扫描排队/续扫/周期补排、网段来源校验、gossip 分包错峰。`services/range-scan.ts` 编排后台周期；`Discovery` 统一所有逐地址扫描。下一决议 **#318**。本轮本地优化，尚未发布。
@@ -255,3 +255,7 @@ renderer/  main.ts 公共 bootstrap；renderer-entry.ts 按 hash 动态加载 Ap
 ## v0.61.2 发布准备：Issue #45 粘贴附件（2026-10-04）
 
 v0.61.2 / 决议 #319，只修复粘贴附件误发；加密明确不在范围。`PendingAttachments.vue` 负责预览，`utils/pending-attachments.ts` 管理队列/清理/串行发送，`ChatPane.vue` 复用现有 IPC。五连验证外增加 `node scripts/paste-attachments-selftest.cjs`（先 build）：真实 Electron 22、临时资料与回环同事，截图默认写入工作目录上级 artifacts，可通过 PANTRY_PASTE_TEST_ARTIFACTS 指定。仅合成 DataTransfer/测试剪贴板 IPC，无真实系统剪贴板或真实局域网流量。用户确认实际界面后已授权发布；全量 887 测试、focused 36 测试、数据库、类型、构建、smoke 与真实 Electron 验收通过。发布说明保留目标系统剪贴板未验收限制；下一决议 #320。
+
+## v0.61.3 发布准备：Issue #48 传输可靠性（2026-10-17）
+
+v0.61.3 / 决议 #320，经 PR #60 合入。`FilesService.canSend()` 在 TCP 未监听时拦截全部附件入口并广播端口不可用；接收端经 `file-ctl` `op:'result'` 回传 delivered / failed（write-error、hash-mismatch、connection-error、decode-error、invalid-data、canceled），仅对声明 `ta1` 的对端收发。旧端保持完整供流即完成；新端完整供流后 15 秒无回执回退完成，迟到失败仍可纠正。状态复用 transfers 状态与 files JSON 列，无迁移、无新依赖。接收文件/目录名统一规避 CON/PRN/AUX/NUL/COM1-9/LPT1-9 与尾随点空格。验证：全量 955 测试、类型、构建与文档检查通过；Xvfb 下真实 Electron 22 双实例回环验收图片、1 GB 文件（SHA-256 一致）、CON.txt、接收目录不可写、TCP 端口被占和 v0.61.2 互通。Windows/macOS 真机、Windows 落盘保留名与真实多机网络仍未验收；下一决议 #321。
