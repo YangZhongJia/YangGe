@@ -99,7 +99,7 @@ pantry/
 
 ## 打包与发布
 
-- GitHub Actions `release.yml`：构建 Windows 7 x64、Debian 10 / UOS 20 x64 等产物并上传；推送 `v*` tag 时自动创建 Release。
+- GitHub Actions `release.yml`：构建 Windows 7 x64、Debian 10 / UOS 20 x64 等产物并上传；推送 `main` 后，全部平台构建与产物版本校验通过时，按 `package.json` 版本创建带注释的 `v<version>` tag 并发布 Release；远端已有该 tag 则跳过发布。推送 `v*` tag 仍会创建或更新 Release，tag 必须与包版本一致；手动触发仅在 `v*` tag 上发布。发布任务串行执行，构建不受限制且不会被取消。
 - 各平台产物仍需在对应真机 / VM 上冒烟验证（Win7 SP1 x64、Debian 10 / UOS 20）。
 
 ## 常见问题

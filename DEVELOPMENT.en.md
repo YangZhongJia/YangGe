@@ -187,4 +187,4 @@ npm run smoke
 
 Network tests use `127.0.0.1` and empty broadcast targets. Use `npm run dev:2` or `npm run dev:3` for real local discovery, message, and file flows with isolated client data.
 
-Package and lock versions must advance with each complete increment. Multi-platform installers are produced by the tag-triggered GitHub Actions release workflow.
+Package and lock versions must advance with each complete increment. The GitHub Actions release workflow builds multi-platform installers; after a push to `main` passes all platform and artifact version checks, it creates an annotated version tag and publishes the Release, skipping publication if the tag already exists remotely. Tag-triggered releases remain supported; manual dispatch publishes only on a `v*` tag.

@@ -464,6 +464,9 @@ jobs:
   publish-github-release:
     name: 发布 GitHub Release
     runs-on: ubuntu-22.04
+    concurrency:
+      group: publish-github-release
+      cancel-in-progress: false
     permissions:
       contents: write
     needs:
@@ -472,29 +475,92 @@ jobs:
       - windows7-x64
       - windows7-ia32
       - macos-arm64
-    if: startsWith(github.ref, 'refs/tags/')
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     steps:
       - name: 拉取源码（获取完整提交历史与 tag）
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          fetch-tags: true
+
+      - name: 确定发布版本与 tag
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION=$(node -p "require('./package.json').version")
+          TAG="v${VERSION}"
+          SKIP=false
+          MODE=main
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            if [ "$TAG" != "$GITHUB_REF_NAME" ]; then
+              echo "tag ${GITHUB_REF_NAME} 与版本 ${VERSION} 不一致。" >&2
+              exit 1
+            fi
+            MODE=tag
+          elif git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null; then
+            echo "版本 ${TAG} 已发布，跳过发布步骤。"
+            SKIP=true
+          elif [ "$?" -ne 2 ]; then
+            echo "查询远端 tag 失败。" >&2
+            exit 1
+          fi
+          {
+            echo "tag=${TAG}"
+            echo "version=${VERSION}"
+            echo "skip=${SKIP}"
+            echo "mode=${MODE}"
+          } >> "$GITHUB_OUTPUT"
 
       - name: 下载构建产物
+        if: steps.release.outputs.skip != 'true'
         uses: actions/download-artifact@v4
         with:
           path: artifacts
 
       - name: 校验发布产物版本
+        if: steps.release.outputs.skip != 'true'
         run: npm run check:version -- --artifacts artifacts
 
+      - name: 创建带注释的版本 tag
+        if: steps.release.outputs.mode == 'main' && steps.release.outputs.skip != 'true'
+        shell: bash
+        env:
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898283+github-actions[bot]@users.noreply.github.com'
+          MSG="发布 ${TAG}"
+          NOTES_FILE=".github/release-notes/${TAG}.md"
+          if [ -f "$NOTES_FILE" ]; then
+            TITLE=$(sed -nE '/^[[:space:]]*[-*+][[:space:]]+/ { s/^[[:space:]]*[-*+][[:space:]]+\*\*([^*]+)\*\*.*/\1/p; q; }' "$NOTES_FILE" || true)
+            if [ -n "$TITLE" ]; then
+              MSG="发布 ${TAG}：${TITLE}"
+            fi
+          fi
+          # 再次检查远端；若 tag 已出现，拉取后继续创建或更新 Release。
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null; then
+            echo "远端 tag ${TAG} 已存在，继续发布。"
+            git fetch --force origin "refs/tags/${TAG}:refs/tags/${TAG}"
+          elif [ "$?" -eq 2 ]; then
+            git tag -a "$TAG" -m "$MSG" "$GITHUB_SHA"
+            # checkout 保留的 GITHUB_TOKEN 凭据推送 tag 不会触发新的工作流。
+            git push origin "refs/tags/${TAG}"
+          else
+            echo "查询远端 tag 失败。" >&2
+            exit 1
+          fi
+
       - name: 生成发布说明
+        if: steps.release.outputs.skip != 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          CURRENT_TAG: ${{ steps.release.outputs.tag }}
         run: |
           set -euo pipefail
 
-          CURRENT_TAG="${GITHUB_REF_NAME}"
           VERSION="${CURRENT_TAG#v}"
 
           # 优先以上一个 GitHub Release 为范围起点；若查询失败，再退回本地 tag。
@@ -604,19 +670,21 @@ jobs:
           find artifacts -type f | sort
 
       - name: 创建或更新 GitHub Release
+        if: steps.release.outputs.skip != 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          CURRENT_TAG: ${{ steps.release.outputs.tag }}
         run: |
           set -euo pipefail
           mapfile -t files < <(find artifacts -type f | sort)
-          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" "${files[@]}" --repo "$GITHUB_REPOSITORY" --clobber
-            gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
-              --title "茶话间 · Teahouse ${GITHUB_REF_NAME}" \
+          if gh release view "$CURRENT_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$CURRENT_TAG" "${files[@]}" --repo "$GITHUB_REPOSITORY" --clobber
+            gh release edit "$CURRENT_TAG" --repo "$GITHUB_REPOSITORY" \
+              --title "茶话间 · Teahouse ${CURRENT_TAG}" \
               --notes-file release-notes.md
           else
-            gh release create "$GITHUB_REF_NAME" "${files[@]}" --repo "$GITHUB_REPOSITORY" \
-              --title "茶话间 · Teahouse ${GITHUB_REF_NAME}" \
+            gh release create "$CURRENT_TAG" "${files[@]}" --repo "$GITHUB_REPOSITORY" --verify-tag \
+              --title "茶话间 · Teahouse ${CURRENT_TAG}" \
               --notes-file release-notes.md
           fi

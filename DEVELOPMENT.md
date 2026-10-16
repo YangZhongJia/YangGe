@@ -134,7 +134,7 @@ pantry/
 ├─ build/                  # 打包资源：各平台图标、NSIS / mac 本地化配置
 ├─ scripts/                # 构建/发布脚本、本机多客户端联调脚本、OCR 资源准备
 ├─ references/             # 参考资料（ipmsg / iptux 源码本地克隆，不入库；见该目录 readme）
-├─ .github/                # CI：release.yml（三平台构建 + tag 自动发版）
+├─ .github/                # CI：release.yml（三平台构建；main 推送校验后自动打版本 tag 发版，已有 tag 跳过；保留 tag 发版）
 ├─ electron.vite.config.ts # 构建配置（node16 / chrome108 目标写死在这）
 └─ tsconfig*.json          # 两套类型基线：node（主进程/preload）+ web（渲染）
 ```

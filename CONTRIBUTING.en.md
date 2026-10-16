@@ -133,7 +133,7 @@ Keep `package.json`, the root and top-level versions in `package-lock.json`, the
 - Debian 10 / UOS 20 x64 and arm64: deb and AppImage;
 - macOS Apple Silicon: dmg and zip.
 
-A `v*` tag triggers a GitHub Release after every platform job succeeds. Platform packages still require smoke tests on the target operating systems before a production rollout.
+After a push to `main`, once every platform job and artifact version check succeeds, the workflow creates an annotated `v<version>` tag from `package.json` and publishes a GitHub Release; publication is skipped if that tag already exists remotely. Pushing a `v*` tag still creates or updates the Release, and the tag must match the package version. Manual dispatch publishes only on a `v*` tag. Publishing jobs run serially; builds remain unrestricted and are not canceled. Platform packages still require smoke tests on the target operating systems before a production rollout.
 
 ## Troubleshooting
 
