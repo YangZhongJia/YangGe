@@ -14,6 +14,7 @@ import {
   OFFER_ASSEMBLE_TIMEOUT,
   OFFER_FILES_PER_PACKET,
   PULL_IDLE_TIMEOUT,
+  TRANSFER_ACK_TIMEOUT,
   SHARE_PUT_MAX_BYTES,
   CAPS,
   TABLE_TEXT_LIMIT_BYTES,
@@ -21,6 +22,8 @@ import {
   type Envelope,
   type FileCtlOffer,
   type FileCtlPayload,
+  type FileCtlResult,
+  type TransferFailureReason,
   type FileMeta,
   type GroupPayload
 } from '../../shared/protocol'
@@ -35,10 +38,10 @@ import {
   type IncomingFilePlan,
   type OutgoingFile
 } from '../net/transfer'
-import { sanitizeRelPath } from '../util/sanitize'
+import { sanitizeRelPath, sanitizeWindowsName } from '../util/sanitize'
 import { convRowToView, type ConvRepo } from '../store/conv-repo'
 import { MsgRepo, msgRowToView, type MsgRow } from '../store/msg-repo'
-import type { TransferRepo } from '../store/transfer-repo'
+import type { TransferRepo, TransferRow } from '../store/transfer-repo'
 import type { GroupRepo } from '../store/group-repo'
 
 // 文件传输编排（protocol §8 / 需求 F-FILE-1~3）：
@@ -57,6 +60,7 @@ interface OutgoingState {
   expiresAt: number
   /** 最近一次在期限内收到 accept 的本机时间，用于等待 TCP 建连的短宽限。 */
   acceptedAt: number
+  servedFiles?: Set<string>
 }
 
 interface AssemblingOffer {
@@ -98,6 +102,13 @@ interface FilesBlob {
   directPeerName?: string
   /** 普通入站文件的已清洗相对清单，用于期限内重启恢复。 */
   plans?: IncomingFilePlan[]
+  /** 复用 JSON 列持久化通知/结果，不改变表结构与既有状态枚举。 */
+  notified?: boolean
+  failureReason?: TransferFailureReason
+  deliveryConfirmed?: boolean
+  servedAt?: number
+  /** 同一接收端的控制信封时间；重试后忽略上一轮迟到的失败/取消。 */
+  receiverControlTs?: number
 }
 
 interface PreparedOutgoing {
@@ -130,6 +141,8 @@ export interface FilesDeps {
   getSaveDir: () => string
   /** 图片缓存目录（免确认接收的落点） */
   getImagesDir: () => string
+  /** 落盘后、发 delivered 前检查图片格式/像素；装配层注入，原图解码另行反馈。 */
+  validateReceivedImage?: (path: string) => Promise<boolean>
   /** 更新包临时目录（决议 #166）：不进聊天接收目录 */
   getUpdateDir?: () => string
   /** 用户确认更新请求后，对来源、包名与大小做一次性授权消费。 */
@@ -157,6 +170,7 @@ export class FilesService extends EventEmitter {
   private readonly assembling = new Map<string, AssemblingOffer>()
   private readonly incoming = new Map<string, IncomingState>()
   private readonly lastEmit = new Map<string, number>()
+  private readonly deliveryTimers = new Map<string, ReturnType<typeof setTimeout>>()
   private expiryTimer: ReturnType<typeof setTimeout> | null = null
   private convsScheduled = false
 
@@ -184,20 +198,18 @@ export class FilesService extends EventEmitter {
       out.bytesDone += delta
       this.emitTransfer(transferId, false)
     })
-    this.server.on('served', (transferId: string) => {
-      deps.diagnostic?.('transfer.phase', { transferId, direction: 'out', stage: 'served' })
-      const row = this.deps.transferRepo.get(transferId)
-      if (!row || row.direction !== 'out') return
+    this.server.on('file-served', (transferId: string, fileId: string) => {
       const out = this.outgoing.get(transferId)
-      this.deps.transferRepo.updateProgress(transferId, out?.totalSize ?? row.total)
-      // 数据完整送达是最权威的成功信号：即便 offer 回程 ACK 判负已先把卡片标为 failed，
-      // 这里也以数据面为准救回 done/sent（issue #3，决议 #165）。
-      this.applyMsgStatus(row.msg_id, 'sent')
-      this.finish(transferId, 'done')
+      if (!out?.files.has(fileId)) return
+      out.servedFiles ??= new Set()
+      out.servedFiles.add(fileId)
+      if (out.servedFiles.size === out.files.size) this.onAllBytesServed(transferId)
     })
+    this.server.on('served', (transferId: string) => this.onAllBytesServed(transferId))
     this.server.on('disconnected', (transferId: string) => {
       deps.diagnostic?.('transfer.phase', { transferId, direction: 'out', stage: 'disconnected' })
       const row = this.deps.transferRepo.get(transferId)
+      if (this.deliveryTimers.has(transferId)) return
       if (row?.status === 'accepted' && this.isExpired(row)) {
         this.finish(transferId, 'expired')
       } else {
@@ -216,7 +228,20 @@ export class FilesService extends EventEmitter {
     return this.server.start()
   }
 
+  availability(): { available: boolean; port: number } {
+    return { available: this.server.listening, port: this.deps.tcpPort }
+  }
+
+  /** 所有发送入口在读文件、建消息、发 offer 前检查，监听失败不影响文字聊天。 */
+  canSend(): boolean {
+    if (this.server.listening) return true
+    this.emit('send-blocked', this.availability())
+    return false
+  }
+
   stop(): Promise<void> {
+    for (const timer of this.deliveryTimers.values()) clearTimeout(timer)
+    this.deliveryTimers.clear()
     if (this.expiryTimer) {
       clearTimeout(this.expiryTimer)
       this.expiryTimer = null
@@ -233,6 +258,7 @@ export class FilesService extends EventEmitter {
     want: 'file' | 'image' | 'sticker' = 'file',
     tableTextMeta?: TableTextMeta
   ): Promise<MessageView | null> {
+    if (!this.canSend()) return null
     const peer = this.deps.registry.get(peerId)
     if (!peer || !peer.online || paths.length === 0) return null
     const prepared = this.prepareOutgoing(paths, want)
@@ -333,6 +359,7 @@ export class FilesService extends EventEmitter {
     want: 'file' | 'image' | 'sticker' = 'file',
     tableTextMeta?: TableTextMeta
   ): Promise<MessageView | null> {
+    if (!this.canSend()) return null
     const meta = this.deps.groupRepo?.get(groupId)
     if (!meta || !meta.members.includes(this.deps.selfId) || paths.length === 0) return null
     const recipients = meta.members.filter((member) => {
@@ -500,6 +527,7 @@ export class FilesService extends EventEmitter {
 
   /** 自更新包：隐藏传输，不写聊天消息，不进入普通传输列表（决议 #170）。 */
   async offerUpdatePackage(peerId: string, path: string): Promise<boolean> {
+    if (!this.canSend()) return false
     const peer = this.deps.registry.get(peerId)
     if (!peer || !peer.online) return false
     const prepared = this.prepareUpdatePackage(path)
@@ -512,6 +540,7 @@ export class FilesService extends EventEmitter {
    * 不写聊天消息、不套领取期限；路径已由 ShareService 复核在共享根内。
    */
   async offerSharePaths(peerId: string, absPaths: string[]): Promise<boolean> {
+    if (!this.canSend()) return false
     const peer = this.deps.registry.get(peerId)
     if (!peer || !peer.online) return false
     const prepared = this.prepareOutgoing(absPaths, 'file')
@@ -525,6 +554,7 @@ export class FilesService extends EventEmitter {
    * 不写聊天消息、不套领取期限；落点由接收方本机计算，本端无从指定。
    */
   async offerSharePut(peerId: string, absPaths: string[]): Promise<boolean> {
+    if (!this.canSend()) return false
     const peer = this.deps.registry.get(peerId)
     if (!peer || !peer.online) return false
     if (!Array.isArray(peer.profile.caps) || !peer.profile.caps.includes(CAPS.fileCabinet)) {
@@ -539,6 +569,7 @@ export class FilesService extends EventEmitter {
 
   /** 发送方在已有私聊文件卡片上请求直接发送；只升级当前 transfer，不重新建消息。 */
   async requestDirect(transferId: string): Promise<boolean> {
+    if (!this.canSend()) return false
     this.expireTransferIfDue(transferId)
     const row = this.deps.transferRepo.get(transferId)
     if (!row || row.direction !== 'out' || row.status !== 'offering') return false
@@ -666,6 +697,8 @@ export class FilesService extends EventEmitter {
       )
       if (!ok) return false
     }
+    this.updateBlob(transferId, { notified: true })
+    this.emitTransfer(transferId, true)
     return true
   }
 
@@ -686,7 +719,7 @@ export class FilesService extends EventEmitter {
     if (row.status === 'canceled' && !this.peerSupportsTransferWait(inc.peerId)) return false
     const peer = this.deps.registry.get(inc.peerId)
     if (!peer || !peer.online) {
-      this.finish(transferId, 'failed')
+      this.receiveFailed(transferId, 'connection-error')
       return false
     }
 
@@ -720,7 +753,8 @@ export class FilesService extends EventEmitter {
     inc.bytesDone = 0
     inc.queued = false
     inc.cancelRef = { canceled: false, socket: null }
-    this.updateBlob(transferId, { savedPath })
+    const cancelRef = inc.cancelRef
+    this.updateBlob(transferId, { savedPath, failureReason: undefined })
     this.scheduleExpiry()
     this.emitTransfer(transferId, true)
 
@@ -730,9 +764,10 @@ export class FilesService extends EventEmitter {
         op: 'accept',
         transferId
       } satisfies FileCtlPayload)
-    )
+    ).catch(() => false)
+    if (cancelRef.canceled) return false
     if (!ok) {
-      this.finish(transferId, this.isExpired(this.deps.transferRepo.get(transferId)) ? 'expired' : 'failed')
+      this.receiveFailed(transferId, 'connection-error')
       return false
     }
 
@@ -746,7 +781,7 @@ export class FilesService extends EventEmitter {
       transferId,
       files: plans,
       saveDir: base,
-      cancelRef: inc.cancelRef,
+      cancelRef,
       supportsWait: this.peerSupportsTransferWait(inc.peerId),
       onProgress: (delta) => {
         inc.bytesDone += delta
@@ -758,23 +793,28 @@ export class FilesService extends EventEmitter {
         this.emitTransfer(transferId, true)
       }
     })
-      .then(() => {
+      .then(async () => {
+        const msg = this.deps.msgRepo.get(inc.msgId)
+        if ((msg?.kind === 'image' || msg?.kind === 'sticker') && this.deps.validateReceivedImage) {
+          let valid = false
+          try { valid = await this.deps.validateReceivedImage(savedPath) } catch { /* 统一报告解码失败 */ }
+          if (!valid) throw new Error('decode-error')
+        }
+        if (cancelRef.canceled) return
         inc.queued = false
         this.deps.transferRepo.updateProgress(transferId, inc.bytesDone)
         this.finish(transferId, 'done')
+        this.sendResult(inc.peerId, { op: 'result', transferId, status: 'delivered' })
       })
       .catch((err: Error & { stage?: string }) => {
+        if (cancelRef.canceled) return
         this.deps.diagnostic?.('transfer.error', { transferId, peerId: inc.peerId, host: peer.ip,
           port: peer.profile.tcpPort, direction: 'in', stage: err.stage, reason: err.message.replace(/^peer:/, '') }, err)
         inc.queued = false
         this.deps.transferRepo.updateProgress(transferId, inc.bytesDone)
-        const status = this.isExpired(this.deps.transferRepo.get(transferId))
-          ? 'expired'
-          : inc.cancelRef.canceled
-            ? 'canceled'
-            : 'failed'
-        this.finish(transferId, status)
-        if (!inc.cancelRef.canceled) console.warn('[files] 拉取失败：', err.message)
+        // 主动取消已经发过结果，避免旧拉取回调重复通知或覆盖重新下载。
+        this.receiveFailed(transferId, receiveFailureReason(err.message))
+        console.warn('[files] 拉取失败：', err.message)
       })
     return true
   }
@@ -801,9 +841,15 @@ export class FilesService extends EventEmitter {
       inc.cancelRef.canceled = true
       inc.cancelRef.socket?.destroy()
     }
+    this.clearDeliveryTimer(transferId)
     // 本机发送方主动取消：消息与传输同步进入取消终态，供文件卡区分真实失败。
     if (out) this.applyMsgStatus(out.msgId, 'canceled')
     this.finish(transferId, 'canceled')
+    if (inc) {
+      this.updateBlob(transferId, { failureReason: 'canceled' })
+      this.emitTransfer(transferId, true)
+      this.sendResult(inc.peerId, { op: 'result', transferId, status: 'failed', reason: 'canceled' })
+    }
     if (out) this.clearTerminalExpiry(transferId)
     if (inc && !this.peerSupportsTransferWait(inc.peerId)) {
       this.discardIncomingContext(transferId)
@@ -863,6 +909,9 @@ export class FilesService extends EventEmitter {
       direct: blob.direct === true || fileRef?.direct === true,
       queued: inc?.queued === true,
       retryable,
+      notified: blob.notified === true,
+      deliveryConfirmed: blob.deliveryConfirmed === true,
+      ...(blob.failureReason ? { failureReason: blob.failureReason } : {}),
       ...(blob.directPeerName ? { directPeerName: blob.directPeerName } : {})
     }
   }
@@ -951,15 +1000,28 @@ export class FilesService extends EventEmitter {
     this.expireTransferIfDue(ctl.transferId)
     const row = this.deps.transferRepo.get(ctl.transferId)
     if (!row || row.peer_id !== env.from) return // 只认传输双方
+    if (row.direction === 'out' && this.peerSupportsTransferAck(row.peer_id) &&
+      (ctl.op === 'accept' || ctl.op === 'cancel' || ctl.op === 'result') &&
+      env.ts < (parseFilesBlob(row.files).receiverControlTs ?? 0)) return
+    if (ctl.op === 'result') {
+      this.onResult(ctl, row, env.ts)
+      return
+    }
     if (ctl.op === 'accept') {
       const out = this.outgoing.get(ctl.transferId)
       // canceled → accepted：对端取消后点「重新下载」，供流授权仍在，卡片恢复传输中（决议 #211）
       if (
         out &&
-        (row.status === 'offering' || row.status === 'failed' || row.status === 'canceled')
+        (row.status === 'offering' || row.status === 'failed' || row.status === 'canceled' ||
+          (row.status === 'accepted' && this.peerSupportsTransferAck(row.peer_id) &&
+            env.ts > (parseFilesBlob(row.files).receiverControlTs ?? 0)))
       ) {
         out.accepted = true
         out.acceptedAt = Date.now()
+        out.servedFiles = new Set()
+        this.clearDeliveryTimer(ctl.transferId)
+        this.updateBlob(ctl.transferId, { notified: true, failureReason: undefined, servedAt: undefined,
+          deliveryConfirmed: undefined, receiverControlTs: env.ts })
         this.deps.transferRepo.updateStatus(ctl.transferId, 'accepted')
         // 对方已接受即「已发送」，迟到的 offer-ACK 判负不再翻成失败（issue #3）
         this.applyMsgStatus(out.msgId, 'sent')
@@ -973,6 +1035,7 @@ export class FilesService extends EventEmitter {
         this.finish(ctl.transferId, 'declined')
       }
     } else if (ctl.op === 'cancel') {
+      this.clearDeliveryTimer(ctl.transferId)
       const inc = this.incoming.get(ctl.transferId)
       if (inc) {
         inc.cancelRef.canceled = true
@@ -988,6 +1051,7 @@ export class FilesService extends EventEmitter {
           // 对端（接收方）取消：卡片置已取消但保留供流授权，对方可断点重拉（决议 #211）
           const out = this.outgoing.get(ctl.transferId)
           if (out) this.applyMsgStatus(out.msgId, 'sent')
+          this.updateBlob(ctl.transferId, { failureReason: 'canceled', receiverControlTs: env.ts })
           this.deps.transferRepo.updateStatus(ctl.transferId, 'canceled')
           this.emitTransfer(ctl.transferId, true)
         } else {
@@ -1397,6 +1461,11 @@ export class FilesService extends EventEmitter {
           this.deps.transferRepo.clearExpiry(row.transfer_id)
           continue
         }
+        // 上次已完整供流但在回执等待期退出：重启后按丢回执回退，不能误判失败。
+        if (blob.servedAt && !blob.failureReason) {
+          this.deps.transferRepo.updateStatus(row.transfer_id, 'done')
+          continue
+        }
         if (row.expires_at <= now) {
           this.deps.transferRepo.updateStatus(row.transfer_id, 'expired')
           continue
@@ -1483,6 +1552,7 @@ export class FilesService extends EventEmitter {
   }
 
   private expireTransferIfDue(transferId: string): void {
+    if (this.deliveryTimers.has(transferId)) return
     const row = this.deps.transferRepo.get(transferId)
     if (!this.isExpired(row)) return
     if (row!.direction === 'out' && !this.outgoing.has(transferId)) return
@@ -1506,6 +1576,7 @@ export class FilesService extends EventEmitter {
     this.expiryTimer = null
     const now = Date.now()
     for (const row of this.deps.transferRepo.listRecoverable()) {
+      if (this.deliveryTimers.has(row.transfer_id)) continue
       if (row.direction === 'out' && !this.outgoing.has(row.transfer_id)) continue
       if (row.direction === 'in' && !this.incoming.has(row.transfer_id)) continue
       if (row.expires_at > now) continue
@@ -1525,6 +1596,7 @@ export class FilesService extends EventEmitter {
     const now = Date.now()
     let next = Number.POSITIVE_INFINITY
     for (const row of this.deps.transferRepo.listRecoverable()) {
+      if (this.deliveryTimers.has(row.transfer_id)) continue
       if (row.direction === 'out' && !this.outgoing.has(row.transfer_id)) continue
       if (row.direction === 'in' && !this.incoming.has(row.transfer_id)) continue
       let due = row.expires_at
@@ -1547,6 +1619,105 @@ export class FilesService extends EventEmitter {
   }
 
   // ---------- 内部 ----------
+
+  private clearDeliveryTimer(transferId: string): void {
+    const timer = this.deliveryTimers.get(transferId)
+    if (timer) clearTimeout(timer)
+    this.deliveryTimers.delete(transferId)
+  }
+
+  private peerSupportsTransferAck(peerId: string): boolean {
+    return this.deps.registry.get(peerId)?.profile.caps?.includes(CAPS.transferAck) === true
+  }
+
+  private sendResult(peerId: string, result: FileCtlResult): void {
+    if (!this.peerSupportsTransferAck(peerId)) return
+    // 仅支持 ta1 的端点走可靠控制面；旧端拒绝未知 op 且不会 ACK。
+    void this.deps.messenger.sendReliable(
+      peerId, makeEnvelope(MSG_TYPES.fileCtl, this.deps.selfId, result)
+    ).catch(() => undefined)
+  }
+
+  private receiveFailed(transferId: string, reason: TransferFailureReason): void {
+    const row = this.deps.transferRepo.get(transferId)
+    if (!row || row.direction !== 'in' || row.status === 'canceled') return
+    this.updateBlob(transferId, { failureReason: reason })
+    this.finish(transferId, this.isExpired(row) ? 'expired' : 'failed')
+    this.sendResult(row.peer_id, { op: 'result', transferId, status: 'failed', reason })
+  }
+
+  /** 渲染器原图解码失败也必须回传；只允许已接收图片，不能影响出站消息。 */
+  reportImageDecodeFailure(transferId: string): void {
+    const row = this.deps.transferRepo.get(transferId)
+    const msg = row && this.deps.msgRepo.get(row.msg_id)
+    if (row?.direction !== 'in' || row.status !== 'done' ||
+      (msg?.kind !== 'image' && msg?.kind !== 'sticker')) return
+    this.receiveFailed(transferId, 'decode-error')
+  }
+
+  private onAllBytesServed(transferId: string): void {
+    const row = this.deps.transferRepo.get(transferId)
+    if (!row || row.direction !== 'out' || ['done', 'declined', 'expired', 'canceled'].includes(row.status)) return
+    const blob = parseFilesBlob(row.files)
+    // 接收端明确失败高于供流完成，迟到 finish/offer 回调不得把失败翻绿。
+    if (blob.failureReason) return
+    this.deps.diagnostic?.('transfer.phase', { transferId, direction: 'out', stage: 'served' })
+    const out = this.outgoing.get(transferId)
+    if (out) out.bytesDone = row.total
+    this.deps.transferRepo.updateProgress(transferId, row.total)
+    this.updateBlob(transferId, { notified: true, servedAt: blob.servedAt ?? Date.now() })
+    this.applyMsgStatus(row.msg_id, 'sent')
+    if (!this.peerSupportsTransferAck(row.peer_id)) {
+      this.finish(transferId, 'done')
+      return
+    }
+    if (this.deliveryTimers.has(transferId)) return
+    this.deps.transferRepo.updateStatus(transferId, 'accepted')
+    this.emitTransfer(transferId, true)
+    const timer = setTimeout(() => {
+      this.deliveryTimers.delete(transferId)
+      const current = this.deps.transferRepo.get(transferId)
+      if (current?.status === 'accepted' && !parseFilesBlob(current.files).failureReason) {
+        this.finish(transferId, 'done')
+      }
+    }, TRANSFER_ACK_TIMEOUT)
+    timer.unref()
+    this.deliveryTimers.set(transferId, timer)
+  }
+
+  private onResult(result: FileCtlResult, row: TransferRow, receiverControlTs: number): void {
+    if (row.direction !== 'out' || !this.peerSupportsTransferAck(row.peer_id)) return
+    const msg = this.deps.msgRepo.get(row.msg_id)
+    if (msg?.status === 'canceled' || msg?.status === 'recalled' ||
+      row.status === 'expired' || row.status === 'declined') return
+    const blob = parseFilesBlob(row.files)
+    if (result.status === 'delivered') {
+      if (blob.failureReason || row.status === 'canceled') return
+      this.clearDeliveryTimer(result.transferId)
+      this.updateBlob(result.transferId, { notified: true, deliveryConfirmed: true, receiverControlTs })
+      this.deps.transferRepo.updateProgress(result.transferId, row.total)
+      this.finish(result.transferId, 'done')
+      this.applyMsgStatus(row.msg_id, 'sent')
+    } else {
+      // 成功回执后只接受原图解码失败；普通迟到错误不能覆盖确认送达。
+      if (blob.deliveryConfirmed && result.reason !== 'decode-error') return
+      this.clearDeliveryTimer(result.transferId)
+      this.updateBlob(result.transferId, { failureReason: result.reason, deliveryConfirmed: false, receiverControlTs })
+      if (result.reason === 'canceled') {
+        // 接收方取消仍保留供流；再次 accept 会清除上次结果。
+        this.deps.transferRepo.updateStatus(result.transferId, 'canceled')
+        this.emitTransfer(result.transferId, true)
+      } else {
+        this.finish(result.transferId, 'failed')
+      }
+      const ids = msg ? mediaTransferIds(msg) : [result.transferId]
+      const allFailed = ids.every((id) => {
+        const transfer = this.deps.transferRepo.get(id)
+        return transfer && ['failed', 'canceled', 'declined'].includes(transfer.status)
+      })
+      if (allFailed && result.reason !== 'canceled') this.applyMsgStatus(row.msg_id, 'failed', true)
+    }
+  }
 
   private finish(
     transferId: string,
@@ -1571,6 +1742,7 @@ export class FilesService extends EventEmitter {
       return
     }
     this.deps.transferRepo.updateStatus(transferId, status)
+    this.clearDeliveryTimer(transferId)
     const keepFailedOutgoing =
       status === 'failed' &&
       current.direction === 'out' &&
@@ -1674,13 +1846,20 @@ export class FilesService extends EventEmitter {
     }
   }
 
-  private applyMsgStatus(msgId: string, status: MessageView['status']): void {
+  private applyMsgStatus(msgId: string, status: MessageView['status'], receiverResult = false): void {
     const row = this.deps.msgRepo.get(msgId)
     if (!row) return
     if (row.status === 'recalled' && status !== 'recalled') return
     if (row.status === 'canceled' && status !== 'recalled') return
     // issue #3：'sent'（accept / 数据送达已确认）是成功终态，迟到的 offer-ACK 'failed' 不再覆盖
-    if (row.status === 'sent' && status === 'failed') return
+    if (row.status === 'sent' && status === 'failed' && !receiverResult) return
+    if (row.status === 'failed' && status === 'sent') {
+      const ids = mediaTransferIds(row)
+      if (ids.length && ids.every((id) => {
+        const transfer = this.deps.transferRepo.get(id)
+        return transfer && parseFilesBlob(transfer.files).failureReason
+      })) return
+    }
     this.deps.msgRepo.updateStatus(msgId, status)
     const event: MsgStatusEvent = { id: msgId, convId: row.conv_id, status }
     this.emit('status', event)
@@ -1793,7 +1972,7 @@ function truncateUtf8(text: string, maxBytes: number): { text: string; truncated
 }
 
 function mediaTransferIds(row: MsgRow): string[] {
-  if (row.kind !== 'file' && row.kind !== 'image') return []
+  if (row.kind !== 'file' && row.kind !== 'image' && row.kind !== 'sticker') return []
   if (!row.file_ref) return []
   try {
     const ref = JSON.parse(row.file_ref) as FileRefView
@@ -1817,7 +1996,16 @@ function sanitizeDirName(name: string): string {
     .slice(0, 80)
     .trim()
   if (!clean || clean === '.' || clean === '..') return '未知节点'
-  return clean
+  return sanitizeWindowsName(clean) || '未知节点'
+}
+
+function receiveFailureReason(message: string): TransferFailureReason {
+  if (message === 'hash-mismatch') return 'hash-mismatch'
+  if (message === 'write-error' || message === 'part-read-error') return 'write-error'
+  if (message === 'decode-error') return 'decode-error'
+  if (message === 'path-escape' || message === 'size-mismatch' || message === 'invalid-data' ||
+    message.startsWith('bad-')) return 'invalid-data'
+  return 'connection-error'
 }
 
 /** 递归展开文件夹（含空目录条目），相对路径以 rootName 开头 */

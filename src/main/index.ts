@@ -531,6 +531,7 @@ if (!gotLock) {
     if (!targetId || !name || !bytes) return null
     const tableTextMeta = parseTableTextMeta(tableText)
     if (tableTextMeta === null) return null
+    if (!files?.canSend()) return null
     const want = imagePreview.isInlineNamedBytes(name, bytes) ? 'image' : 'file'
     const path = await stageImageBytes(name, bytes)
     return (await offer(targetId, [path], want, want === 'image' ? tableTextMeta : undefined)) ?? null
@@ -545,6 +546,7 @@ if (!gotLock) {
     const targetId = parseImageSendTarget(target)
     const path = parseImageOfferPath(pathValue)
     if (!targetId || !path) return null
+    if (!files?.canSend()) return null
     if (!rendererPathGrants.consume(senderId, [path])) return null
     const staged = await stageOutgoingImagePath(path)
     if (!staged) return null
@@ -1298,6 +1300,7 @@ if (!gotLock) {
         getSaveDir: () =>
           appState?.config.fileDir || defaultFileDir(),
         getImagesDir: imagesDir,
+        validateReceivedImage: async (path) => Boolean(await imagePreview.inspectInlinePath(path)),
         getUpdateDir: updatesDir,
         authorizeUpdateOffer: (peerId, name, totalSize) =>
           updateRequestGate.consume(peerId, name, totalSize),
@@ -1316,6 +1319,7 @@ if (!gotLock) {
       files.on('status', onStatus)
       files.on('convs', onConvs)
       files.on('transfer', (view) => broadcastEvent(IpcEvents.transferUpdated, view))
+      files.on('send-blocked', (state) => broadcastEvent(IpcEvents.transferSendBlocked, state))
       try {
         await files.start() // TCP 数据端口
         tcpReady = true
@@ -1324,7 +1328,7 @@ if (!gotLock) {
       } catch (err) {
         tcpStatus = 'failed'
         diagnostics.record('network.listen', { kind: 'tcp', port: tcpPort, status: 'failed' }, err)
-        console.error('[files] TCP 端口监听失败，文件发送可用但无法被拉取：', err)
+        console.error('[files] TCP 端口监听失败，已禁止发送附件，文字消息仍可用：', err)
       }
 
       groups = new GroupsService({
@@ -1426,6 +1430,7 @@ if (!gotLock) {
       netState.error = err instanceof Error ? err.message : String(err)
       console.error('[net] UDP 启动失败，进入离线模式：', netState.error)
     }
+    netState.transfer = files?.availability() ?? { available: false, port: tcpPort }
     mainWindow?.webContents.send(IpcEvents.netState, netState)
   }
 
@@ -1770,7 +1775,14 @@ if (!gotLock) {
     }
   })
 
-  ipcMain.handle(IpcChannels.netState, (): NetState => netState)
+  ipcMain.handle(IpcChannels.netState, (): NetState => ({
+    ...netState, transfer: tcpStatus === 'starting' ? undefined : files?.availability() ?? { available: false, port: tcpPort }
+  }))
+  ipcMain.handle(IpcChannels.transferImageFailed, (_event, transferId: unknown) => {
+    if (typeof transferId === 'string' && transferId.length > 0 && transferId.length <= 64) {
+      files?.reportImageDecodeFailure(transferId)
+    }
+  })
 
   ipcMain.handle(IpcChannels.peersList, (): PeerView[] => peerViews())
 
@@ -3091,6 +3103,7 @@ if (!gotLock) {
       CAPS.fileDirect,
       CAPS.tableText,
       CAPS.transferWait,
+      CAPS.transferAck,
       CAPS.groupRoles,
       CAPS.avatarImages,
       CAPS.fileCabinet,

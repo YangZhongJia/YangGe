@@ -132,6 +132,10 @@ export class TransferServer extends EventEmitter {
     })
   }
 
+  get listening(): boolean {
+    return this.server?.listening === true
+  }
+
   isTransferActive(transferId: string): boolean {
     return (this.activeTransfers.get(transferId) ?? 0) > 0
   }
@@ -269,7 +273,8 @@ export class TransferServer extends EventEmitter {
         if (frame.type.startsWith('screen-')) { socket.destroy(); return }
         socket.setTimeout(this.limits.idleTimeoutMs)
         if (frame.type === 'finish') {
-          this.emit('served', frame.transferId)
+          // finish 只能确认这条连接已授权拉取过的传输。
+          if (socketTransfers.has(frame.transferId) && !busy) this.emit('served', frame.transferId)
           return
         }
         if (frame.type === 'msg') {
@@ -308,6 +313,7 @@ export class TransferServer extends EventEmitter {
           }
 
           const len = currentFile.size - offset
+          let sentBytes = 0
           send({ type: 'pull-ok', fileId: currentFile.fileId, len } satisfies PullOkFrame)
           const hash = createHash('sha256')
           const asBuffer = (chunk: Buffer | string): Buffer =>
@@ -317,6 +323,7 @@ export class TransferServer extends EventEmitter {
             chunk: Buffer | string
           ): void => {
             const data = asBuffer(chunk)
+            sentBytes += data.length
             this.emit('progress', pull.transferId, data.length)
             if (!socket.write(data) && !waitingDrain) {
               waitingDrain = true
@@ -330,7 +337,11 @@ export class TransferServer extends EventEmitter {
           const finish = (sha256: string): void => {
             stopWaitHeartbeat()
             if (socket.destroyed) return
-            send({ type: 'done', fileId: currentFile.fileId, sha256 } satisfies DoneFrame)
+            if (sentBytes !== len) { socket.destroy(); return }
+            socket.write(encodeFrame({ type: 'done', fileId: currentFile.fileId, sha256 } satisfies DoneFrame), (error) => {
+              // 只在完整字节和校验帧写出后记账；服务层按 fileId 去重、汇总整次传输。
+              if (!error) this.emit('file-served', pull.transferId, currentFile.fileId)
+            })
             busy = false
             this.releaseStreamStart(job)
             if (streamJob === job) streamJob = null
@@ -586,11 +597,18 @@ export function pullTransfer(opts: PullOptions): Promise<void> {
         if (!canContinue()) return
         phase('pull')
         if (!canContinue()) return
+        let stream: ReturnType<WriteStreamFactory>
+        try {
+          stream = (opts.openWriteStream ?? createWriteStream)(partPath, { flags: offset > 0 ? 'a' : 'w' })
+        } catch (error) {
+          fail('write-error', error)
+          return
+        }
         current = {
           plan,
           partPath,
           finalPath,
-          stream: (opts.openWriteStream ?? createWriteStream)(partPath, { flags: offset > 0 ? 'a' : 'w' }),
+          stream,
           hash,
           left: plan.size - offset,
           started: false,
@@ -678,7 +696,8 @@ export function pullTransfer(opts: PullOptions): Promise<void> {
             // Node Writable 在 end/finish 路径上可能不再 emit drain；
             // 若上一文件写盘背压 pause 了 socket，不 resume 则下一文件 pull-ok 永远读不到（死锁）。
             resumeSocket()
-            item.stream.end(() => {
+            item.stream.end((error?: Error | null) => {
+              if (error) { fail('write-error', error); return }
               if (!canContinue()) return
               const got = item.hash.digest('hex')
               if (got !== frame.sha256) {
@@ -720,7 +739,10 @@ export function pullTransfer(opts: PullOptions): Promise<void> {
       opts.cancelRef.socket = connection
       connection.setNoDelay(true)
       const reader = createReader(connection)
-      connection.on('data', chunk => { if (connection === socket && canContinue()) reader.feed(chunk) })
+      connection.on('data', chunk => {
+        if (connection !== socket || !canContinue()) return
+        try { reader.feed(chunk) } catch (error) { fail('invalid-data', error) }
+      })
       connection.on('timeout', () => { if (connection === socket) fail('timeout') })
       connection.on('error', error => { if (connection === socket) fail('socket-error', error) })
       connection.on('close', () => { if (connection === socket) fail('closed') })

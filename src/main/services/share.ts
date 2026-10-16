@@ -21,6 +21,7 @@ import {
   type SharePayload
 } from '../../shared/protocol'
 import type { ShareGrantRecord } from '../store/share-grants-repo'
+import { sanitizeWindowsName } from '../util/sanitize'
 
 // 共享文件柜（requirements §6.10 / protocol §8.2 / 决议 #271–#277）。
 // 本文件零 Electron 依赖（vitest 可直接实例化）：权限判定、共享根策略、目录列举与分页快照。
@@ -439,7 +440,7 @@ function cleanDirName(displayName: string): string {
     .trim()
     .slice(0, 60)
     .trim()
-  return clean && clean !== '.' && clean !== '..' ? clean : '未知节点'
+  return sanitizeWindowsName(clean) || '未知节点'
 }
 
 /**

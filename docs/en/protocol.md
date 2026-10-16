@@ -65,6 +65,7 @@ Known capability tokens:
 | `tbl1` | TSV metadata and image/text view for pasted tables |
 | `fd1` | Private-chat direct file send |
 | `tw1` | Transfer `wait` frames and recoverable receiver cancellation |
+| `ta1` | Receiver delivery/failure results via reliable `file-ctl` (`CAPS.transferAck`, issue #48) |
 | `shr1` | Shared file-cabinet control and transfer purposes |
 | `upd1` | This installed instance can provide a matching local update package |
 
@@ -207,6 +208,24 @@ For reinvitation catch-up (#51), a receiver absent from its local member list ma
 Profiles and groups announce a lowercase 64-character SHA-256 hash. Peers advertising `av1` may exchange `avatar` request/data/miss operations. Data is bounded to a validated static 192×192 WebP. Managed storage verifies format, size, and hash before atomic placement. A group avatar may fail over among online group members; `miss` is best-effort to avoid old-client ACK behavior.
 
 ## 8. File transfer
+
+**Issue #48 / decision #320 (2026-10-16): receiver results.** Envelope `v:1` and existing ports remain unchanged. Only send the following payloads to a sender advertising `ta1`, using reliable `file-ctl` (UDP ACK/retries with the existing TCP control-envelope fallback; no offline queue):
+
+```ts
+{ op: 'result', transferId: string, status: 'delivered' }
+{ op: 'result', transferId: string, status: 'failed', reason:
+  'write-error' | 'hash-mismatch' | 'connection-error' | 'decode-error' | 'invalid-data' | 'canceled' }
+```
+
+The receiver sends `delivered` after every file passes its checksum, `.part` write and final rename. Images must also pass format/pixel checks; a later original-image decode failure in the renderer sends `decode-error`. Directory creation, writing, rename and partial-file read errors use `write-error`; SHA-256 mismatch uses `hash-mismatch`; connection errors, disconnects and timeouts use `connection-error`; invalid data uses `invalid-data`. No paths or OS error text enter the result. Receiver cancellation sends `failed/canceled` alongside the existing `cancel`, preserving recoverable `tw1` behavior. Sender cancellation remains terminal.
+
+The sender accepts results only for an outgoing transfer belonging to that recipient, which must advertise `ta1`. Existing `transfers.status` values are reused: `offering` plus the offer ACK means **Notified**; `accepted` means receiving or awaiting a result; `done` means **Delivered**; receiver errors mean `failed` with a reason, and cancellation means `canceled`. Notification, reason, full-service time and receiver-confirmation flags live in the existing `files` JSON, requiring no schema migration. Group media tracks each recipient separately. Late offer ACKs/service callbacks cannot overwrite receiver failure; a fresh `accept` clears the previous result. Confirmed delivery can only be corrected by a later `decode-error`.
+
+Order `accept/result/cancel` from the same receiver by its envelope `ts`, persisting the latest processed time as `files.receiverControlTs`; do not compare clocks across peers. A newer `accept` starts a retry, protecting it from delayed failure/cancellation from the previous attempt.
+
+**Fallback:** for peers without `ta1`, never send or expect new results. Once all file bytes and `done` frames have been written, mark `done`; count unique file IDs, including empty files and resumed pulls. For `ta1` peers, wait **15 seconds** (`TRANSFER_ACK_TIMEOUT`) after full service for the result, then fall back to `done`. The UI tooltip says that all bytes were sent but saving was not confirmed. Restarting during this wait uses the same fallback. Missing ACKs alone never cause failure; late receiver failure can still correct fallback delivery. Without full-service evidence, leave the transfer incomplete. Old codecs safely drop unknown `file-ctl.op` values without ACK and ignore unknown top-level types (`known:false`), so capability gating is mandatory. No TCP frame type is added.
+
+If the local TCP listener is unavailable, block file/image/folder offers before reading sources or creating messages, including group sends and forwarding. IPC exposes `{available, port}` and the UI displays a bilingual error containing the port; UDP text messaging remains usable. On every platform, sanitize each received path segment by stripping trailing dots/spaces and prefixing `_` to case-insensitive Windows device names (`CON`, `PRN`, `AUX`, `NUL`, `COM1–9`, `LPT1–9`, with or without extensions). Existing character, length and traversal restrictions still apply.
 
 `file-ctl offer` declares a transfer ID, purpose, total size, and a bounded file tree. Optional group context and message ID are admitted only for relevant chat-media purposes. The receiver accepts, declines, cancels, or requests direct acceptance according to exact operation schemas.
 

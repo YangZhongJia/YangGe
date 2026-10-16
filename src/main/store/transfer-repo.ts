@@ -65,7 +65,9 @@ export class TransferRepo {
     `)
     // v13 前的活动记录没有截止时间与恢复清单，启动后按旧策略安全收口。
     this.resetLegacyActiveStmt = db.prepare(
-      "UPDATE transfers SET status = 'failed' WHERE expires_at = 0 AND status IN ('offering', 'accepted')"
+      `UPDATE transfers SET status = CASE
+        WHEN direction = 'out' AND files LIKE '%"servedAt":%' THEN 'done' ELSE 'failed' END
+        WHERE expires_at = 0 AND status IN ('offering', 'accepted')`
     )
     this.saveManifestStmt = db.prepare(`
       INSERT INTO outgoing_file_manifests (msg_id, files, expires_at)

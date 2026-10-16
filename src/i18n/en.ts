@@ -1,5 +1,17 @@
 /** 本地英文文案；中文源模板即回退词典。 */
 const english: Record<string, string> = {
+  '文件传输端口 {0} 不可用，无法发送文件、图片或文件夹。请检查端口占用或在设置中更换端口后重启。文字消息仍可使用。': 'Transfer port {0} is unavailable. Files, images and folders cannot be sent. Check for a port conflict or change the port in Settings and restart. Text messages still work.',
+  '已通知': 'Notified',
+  '已送达': 'Delivered',
+  '已送达 {0}/{1}': 'Delivered {0}/{1}',
+  '失败：{0}': 'Failed: {0}',
+  '接收方无法保存文件': 'The recipient could not save the file',
+  '接收方文件校验失败': 'The recipient reported a checksum mismatch',
+  '接收方连接中断或无法连接': 'The recipient could not connect or the connection was interrupted',
+  '接收方无法解码图片': 'The recipient could not decode the image',
+  '接收方收到无效数据': 'The recipient received invalid data',
+  '接收方已取消': 'Canceled by the recipient',
+  '文件已传完，接收方未确认保存结果': 'All bytes sent; saving has not been confirmed by the recipient',
   '待发送附件': 'Attachments to send',
   '取消全部': 'Cancel all',
   '移除附件：{0}': 'Remove attachment: {0}',

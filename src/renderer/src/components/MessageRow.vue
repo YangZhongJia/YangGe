@@ -198,7 +198,9 @@ const replyMeta = computed((): ReplyMeta => {
         <span class="reply-quote-text">{{ replyMeta.text }}</span>
       </div>
     </span>
-    <span v-if="props.msg.isMine && props.msg.kind !== 'system'" class="status">
+    <!-- 附件的 offer ACK 仅表示已通知；完成结果由 FileCard / ImageBubble 展示。 -->
+    <span v-if="props.msg.isMine && props.msg.kind !== 'system' &&
+      (props.msg.status !== 'sent' || !['file', 'image', 'sticker'].includes(props.msg.kind))" class="status">
       <PantryIcon v-if="props.msg.status === 'sending'" class="spin" name="loader" :size="13" />
       <PantryIcon v-else-if="props.msg.status === 'sent'" class="ok" name="check" :size="13" />
       <PantryIcon

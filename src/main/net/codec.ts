@@ -19,6 +19,7 @@ import {
   SHARE_NAME_MAX,
   SHARE_PATH_MAX,
   TABLE_TEXT_LIMIT_BYTES,
+  TRANSFER_FAILURE_REASONS,
   TEXT_TCP_LIMIT,
   TEXT_UDP_LIMIT,
   UDP_MAX_INBOUND,
@@ -276,6 +277,11 @@ function validatePayload(type: string, payload: unknown, textLimit = TEXT_UDP_LI
       if (!isRecord(payload)) return false
       const f = payload as Partial<FileCtlPayload>
       if (!isStr(f.transferId, LIMITS.id)) return false
+      if (f.op === 'result') {
+        if (f.status === 'delivered') return !('reason' in f)
+        return f.status === 'failed' &&
+          TRANSFER_FAILURE_REASONS.some((reason) => reason === f.reason)
+      }
       if (f.op === 'accept' || f.op === 'decline' || f.op === 'cancel' || f.op === 'direct') {
         return true
       }

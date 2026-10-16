@@ -6,6 +6,7 @@ import { parse } from '@vue/compiler-sfc'
 import { baseParse } from '@vue/compiler-dom'
 import { expect, it } from 'vitest'
 import english from './en'
+import { TRANSFER_FAILURE_TEXT } from './transfers'
 import { COMPAT_EMOJIS } from '../shared/compat-emoji'
 import { SHARE_FAIL_TEXT, SHARE_ROOT_REJECT_TEXT, SHARE_UPLOAD_FAIL_TEXT } from '../shared/ipc'
 import { QUOTES } from '../renderer/src/utils/quotes'
@@ -54,7 +55,7 @@ it('所有静态调用与动态应用标签均有英文模板', () => {
   for (const item of COMPAT_EMOJIS) check(item.label)
   for (const item of AVATAR_COLORS) check(item.name)
   for (const item of QUOTES) { check(item.text); check(item.author) }
-  for (const table of [SHARE_FAIL_TEXT, SHARE_ROOT_REJECT_TEXT, SHARE_UPLOAD_FAIL_TEXT]) Object.values(table).forEach(check)
+  for (const table of [SHARE_FAIL_TEXT, SHARE_ROOT_REJECT_TEXT, SHARE_UPLOAD_FAIL_TEXT, TRANSFER_FAILURE_TEXT]) Object.values(table).forEach(check)
   expect([...new Set(missing)]).toEqual([])
 })
 

@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { tr } from '../utils/i18n'
 import { computed, onUnmounted, ref, watch } from 'vue'
-import type { MessageView } from '../../../shared/ipc'
+import type { MessageView, TransferView } from '../../../shared/ipc'
+import { sentTransferText, sentTransferTitle, transferFailureText } from '../utils/transfer-status'
 import { RECALL_WINDOW_MS } from '../../../shared/protocol'
 import { imageMimeFromExt } from '../utils/clipboard'
 import {
@@ -166,6 +167,7 @@ function onPreviewError(event: Event): void {
     return
   }
   broken.value = true
+  if (!props.msg.isMine) void window.pantry.reportImageDecodeFailure(transferId.value)
 }
 
 function clearAddTipTimer(): void {
@@ -176,21 +178,36 @@ function clearAddTipTimer(): void {
 }
 
 const transferId = computed(() => props.msg.fileRef?.transferId ?? '')
+const transferIds = computed(() => props.msg.fileRef?.transferIds ?? [transferId.value])
+const transferList = computed(() => transferIds.value.map((id) => transfers.byId[id]).filter((t): t is TransferView => !!t))
 const transfer = computed(() => transfers.byId[transferId.value])
+const deliveryText = computed(() => {
+  if (props.msg.status === 'canceled') return tr('发送取消')
+  const list = transferList.value
+  const failed = list.find((t) => t.status === 'failed')
+  if (failed) return sentTransferText(failed)
+  if (transferIds.value.length > 1) {
+    const done = list.filter((t) => t.status === 'done').length
+    if (done === 0) return list.some((t) => t.status === 'canceled') ? tr('接收方已取消') :
+      list.every((t) => t.notified) && list.length === transferIds.value.length ? tr('已通知') : tr('发送中')
+    return done === transferIds.value.length ? tr('已全部送达') : tr('已送达 {0}/{1}', { 0: done, 1: transferIds.value.length })
+  }
+  return transfer.value ? sentTransferText(transfer.value) : props.msg.status === 'failed' ? tr('传输失败') : tr('发送中')
+})
 const ready = computed(
   () => transfer.value?.status === 'done' || (props.msg.isMine && !!transfer.value?.savedPath)
 )
 const failed = computed(() => {
   if (broken.value) return true
-  // 发送方：以消息状态为准——数据送达即 sent、迟到的 offer 判负不算失败（issue #3，与终态保护一致）；
-  // 接收方：看传输结果（下载失败 / 被取消 / 被拒）。
-  if (props.msg.isMine) return props.msg.status === 'failed'
+  // offer ACK 仅表示已通知；发送方也必须展示接收端报告的传输结果。
+  if (props.msg.isMine) return props.msg.status === 'failed' || transferList.value.some((t) => t.status === 'failed')
   const s = transfer.value?.status
   return s === 'failed' || s === 'canceled' || s === 'declined'
 })
 
-watch(transferId, (id, _previous, onCleanup) => {
-  if (id) onCleanup(transfers.retain(id))
+watch(transferIds, (ids, _previous, onCleanup) => {
+  const releases = ids.filter(Boolean).map((id) => transfers.retain(id))
+  onCleanup(() => releases.forEach((release) => release()))
 }, { immediate: true })
 
 onUnmounted(() => {
@@ -226,7 +243,7 @@ onUnmounted(() => {
     </div>
     <template v-else>
       <img
-        v-if="ready && !failed"
+        v-if="ready && !broken && (props.msg.isMine || !failed)"
         v-cached-image="{ transferId, cache: !isSticker }"
         class="thumb"
         :class="{ sticker: isSticker }"
@@ -237,10 +254,12 @@ onUnmounted(() => {
         @error="onPreviewError"
         @contextmenu.prevent.stop="onContextMenu"
       />
-      <div v-else-if="failed" class="ph fail">{{ tr('{0}传输失败', { 0: isSticker ? tr('表情') : tr('图片') }) }}</div>
+      <div v-else-if="failed" class="ph fail">{{ transfer?.failureReason ? transferFailureText(transfer) : tr('{0}传输失败', { 0: isSticker ? tr('表情') : tr('图片') }) }}</div>
       <div v-else class="ph" :class="{ sticker: isSticker }">
         {{ tr('{0}接收中…', { 0: isSticker ? tr('表情') : tr('图片') }) }}</div>
     </template>
+    <span v-if="props.msg.isMine" class="delivery-state" :class="{ fail: failed }"
+      :title="transfer ? sentTransferTitle(transfer) : undefined" role="status">{{ deliveryText }}</span>
     <div
       v-if="menuAt"
       class="ctx"
@@ -287,6 +306,8 @@ onUnmounted(() => {
 .img-bubble.mine {
   align-items: flex-end;
 }
+.delivery-state { margin-top: 4px; max-width: 280px; color: var(--text-3); font-size: 12px; }
+.delivery-state.fail { color: var(--danger); }
 .table-switch {
   position: relative;
   display: grid;
