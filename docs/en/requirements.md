@@ -282,6 +282,13 @@ Any current group member may mention everyone. Delivery remains per-member unica
 
 Official repository, download, issue and source links remain skyjt/teahouse; fork migration is excluded. This feature increments v0.60.3 to v0.61.0. The original PR's #308–#310 conflict with upstream decision numbers, so this integration uses #318. Twemoji SVGs are packaged as separate local assets loaded on demand, reducing inline graphics parsed by each window without raising JS/CSS budgets or changing Electron 22 / Chrome 108.
 
+## Decision #320: Transfer reliability (issue #48, 2026-10-16)
+
+- Block attachment offers before message creation if TCP listening failed; expose availability through IPC and show a clear error containing the transfer port. Keep messaging available.
+- Report receiver completion, save/checksum/connection/decode failure and user cancellation through capability-gated `ta1` / reliable `file-ctl result`. See [protocol §8](protocol.md#8-file-transfer) for the exact payloads. Sent files/images distinguish Notified, Delivered and failure reasons, persisted using existing transfer status and JSON fields.
+- Legacy peers complete after full service. Capable peers wait at most 15 seconds after full service; missing results never cause failure, and late failure may correct fallback delivery. Preserve terminal sender cancellation and recoverable receiver cancellation.
+- Sanitize Windows reserved names and trailing dots/spaces on all receiving platforms. Cover occupied ports, result transitions, compatibility, lost results and names with tests. Scope is limited to this fix; no version bump, commit or release.
+
 ## Decision #319: Confirm pasted attachments (Issue #45)
 
 2026-10-04, v0.61.2: Pasted images and files enter a composer preview before any path grant or send. Users can append, remove, cancel, or explicitly send with optional text. Pending paths are deduplicated; successful items are removed and failed items retained. Conversation changes clear attachments and invalidate asynchronous preparation; remaining batch items stop. Rich text and table behavior remain unchanged. Encryption, drag/drop, picker, capture and issues #51/#53 are outside this patch. The user approved release after reviewing the real UI.

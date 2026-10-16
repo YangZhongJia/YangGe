@@ -127,6 +127,9 @@ let stopSettingsWindowState: (() => void) | null = null
 let stopCabinetOpen: (() => void) | null = null
 let stopScanProgress: (() => void) | null = null
 let stopCaptureFailed: (() => void) | null = null
+let stopTransferBlocked: (() => void) | null = null
+let stopNetState: (() => void) | null = null
+const blockedTransferPort = ref<number | null>(null)
 let scanProgressHideTimer: ReturnType<typeof setTimeout> | null = null
 let captureNoticeTimer: ReturnType<typeof setTimeout> | null = null
 let railHintTimer: ReturnType<typeof setTimeout> | null = null
@@ -343,6 +346,13 @@ function onMainKeydown(event: KeyboardEvent): void {
 }
 
 onMounted(async () => {
+  stopTransferBlocked = window.pantry.onTransferSendBlocked((state) => { blockedTransferPort.value = state.port })
+  stopNetState = window.pantry.onNetState((state) => {
+    if (state.transfer) blockedTransferPort.value = state.transfer.available ? null : state.transfer.port
+  })
+  void window.pantry.getNetState().then((state) => {
+    if (state.transfer && !state.transfer.available) blockedTransferPort.value = state.transfer.port
+  })
   // 先订阅再等待初始化 IPC，避免用户启动后立即点设置时错过遮罩状态。
   stopSettingsWindowState = window.pantry.onSettingsWindowState((open) => {
     settingsWindowOpen.value = open
@@ -384,6 +394,8 @@ onUnmounted(() => {
   stopCabinetOpen?.()
   stopScanProgress?.()
   stopCaptureFailed?.()
+  stopTransferBlocked?.()
+  stopNetState?.()
   dismissCaptureFailure()
   clearScanProgressHideTimer()
   hideRailHint()
@@ -676,14 +688,17 @@ onUnmounted(() => {
   </div>
   <Transition name="capture-toast">
     <div
-      v-if="captureNotice"
+      v-if="captureNotice || blockedTransferPort !== null"
       class="capture-toast"
       role="status"
       aria-live="assertive"
     >
       <PantryIcon name="warning" :size="18" />
-      <span>{{ captureNotice.message }}</span>
-      <button type="button" :aria-label="tr('关闭截图提示')" @click="dismissCaptureFailure">×</button>
+      <span>{{ blockedTransferPort !== null
+        ? tr('文件传输端口 {0} 不可用，无法发送文件、图片或文件夹。请检查端口占用或在设置中更换端口后重启。文字消息仍可使用。', { 0: blockedTransferPort })
+        : captureNotice?.message }}</span>
+      <button type="button" :aria-label="blockedTransferPort !== null ? tr('关闭') : tr('关闭截图提示')"
+        @click="blockedTransferPort = null; dismissCaptureFailure()">×</button>
     </div>
   </Transition>
   </NConfigProvider>

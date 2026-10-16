@@ -165,6 +165,8 @@ export const CAPS = {
   tableText: 'tbl1',
   /** 支持 TCP wait 排队帧；作为发送方时对端取消后保留供流授权，允许断点重拉（决议 #211）。 */
   transferWait: 'tw1',
+  /** 支持 file-ctl result：接收端落盘/解码结果回执（issue #48）。 */
+  transferAck: 'ta1',
   /** 支持讨论组群主/管理员角色、普通成员邀请与角色权限校验（决议 #241）。 */
   groupRoles: 'gr1',
   /** 支持资料/群头像哈希与可靠 avatar 按需取图（决议 #243）。 */
@@ -360,6 +362,8 @@ export const MAX_FILES_PER_TRANSFER = 2000
 export const PULL_WAIT_HEARTBEAT = 20_000
 /** 接收端拉取空闲超时（§8，决议 #211）：超时判失败，可按 .part 断点续传重试 */
 export const PULL_IDLE_TIMEOUT = 60_000
+/** 完整供流后等待接收结果；丢回执时回退，不能因缺回执判失败。 */
+export const TRANSFER_ACK_TIMEOUT = 15_000
 /** 私聊/群聊普通文件从发送时刻起的领取窗口（§8，决议 #263） */
 export const FILE_OFFER_TTL = 24 * 60 * 60_000
 
@@ -497,7 +501,16 @@ export interface FileCtlSimple {
   transferId: string
 }
 
-export type FileCtlPayload = FileCtlOffer | FileCtlSimple
+export const TRANSFER_FAILURE_REASONS = [
+  'write-error', 'hash-mismatch', 'connection-error', 'decode-error', 'invalid-data', 'canceled'
+] as const
+export type TransferFailureReason = typeof TRANSFER_FAILURE_REASONS[number]
+
+export type FileCtlResult =
+  | { op: 'result'; transferId: string; status: 'delivered' }
+  | { op: 'result'; transferId: string; status: 'failed'; reason: TransferFailureReason }
+
+export type FileCtlPayload = FileCtlOffer | FileCtlSimple | FileCtlResult
 
 /** 局域网自更新控制报文（§8.1，决议 #166）：B 请求 A 发来其平台安装包 */
 export interface UpdateReqPayload {

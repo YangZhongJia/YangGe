@@ -336,10 +336,13 @@ describe('transfer 数据面回环', () => {
   })
 
   it('畸形 finish 只关闭当前连接，后续合法连接仍可完成', async () => {
+    const dir = makeTmp()
+    const path = join(dir, 'valid.txt')
+    writeFileSync(path, 'hello')
     nextPort += 1
     const server = new TransferServer(
       nextPort,
-      { resolve: () => null },
+      { resolve: (id) => id === 'valid-transfer' ? { fileId: 'f1', absPath: path, size: 5 } : null },
       '127.0.0.1'
     )
     const served: string[] = []
@@ -354,8 +357,13 @@ describe('transfer 数据面回环', () => {
 
     const goodSocket = await connectSocket(nextPort)
     goodSocket.write(encodeFrame({ type: 'finish', transferId: 'valid-transfer' }))
-    await waitFor(() => served.length > 0)
+    await delay(20)
+    expect(served).toEqual([]) // 未授权拉取过的 finish 不能伪造送达。
     goodSocket.destroy()
+    await pullTransfer({ host: '127.0.0.1', port: nextPort, selfId: 'receiver',
+      transferId: 'valid-transfer', files: [{ fileId: 'f1', relPath: 'copy.txt', size: 5 }],
+      saveDir: dir, cancelRef: { canceled: false, socket: null }, onProgress: () => undefined })
+    await waitFor(() => served.length > 0)
 
     expect(served).toEqual(['valid-transfer'])
   })

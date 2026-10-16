@@ -4,6 +4,7 @@ import { computed, watch } from 'vue'
 import type { MessageView, TransferView } from '../../../shared/ipc'
 import { useTransfersStore } from '../stores/transfers'
 import { formatBytes } from '../utils/format'
+import { sentTransferText, sentTransferTitle, transferFailureText } from '../utils/transfer-status'
 import { usePeersStore } from '../stores/peers'
 import FileTypeIcon from './FileTypeIcon.vue'
 import PantryIcon from './PantryIcon.vue'
@@ -37,6 +38,10 @@ const transferList = computed(() =>
   transferIds.value.map((id) => transfers.byId[id]).filter((item): item is TransferView => !!item)
 )
 const transfer = computed(() => transferList.value[0])
+const failureText = computed(() => transferList.value
+  .filter((t) => t.failureReason && t.failureReason !== 'canceled')
+  .map((t) => `${multiOut.value ? `${peersStore.nameOf(t.peerId)}: ` : ''}${transferFailureText(t)}`)
+  .join('；'))
 const directFile = computed(() => ref_.value?.direct === true || transfer.value?.direct === true)
 const multiOut = computed(
   () => transferIds.value.length > 1 && transferList.value.every((t) => t.direction === 'out')
@@ -106,9 +111,11 @@ const metaText = computed(() => {
 })
 
 const stateChipText = computed(() => {
+  if (multiOut.value && doneCount.value === 0 && transferList.value.length === totalCount.value &&
+    transferList.value.every((t) => t.notified && (t.status === 'offering' || t.status === 'accepted'))) return tr('已通知')
   const t = transfer.value
-  if (!multiOut.value && t?.direction === 'out' && t.status === 'offering') {
-    return directFile.value ? tr('发送中') : tr('等待接收')
+  if (!multiOut.value && t?.direction === 'out' && (t.status === 'offering' || t.status === 'accepted')) {
+    return sentTransferText(t)
   }
   return ''
 })
@@ -129,7 +136,7 @@ const statusText = computed(() => {
   if (!t) return ''
   switch (t.status) {
     case 'done':
-      return t.direction === 'out' ? tr('发送成功') : tr('已完成')
+      return t.direction === 'out' ? tr('已送达') : tr('已完成')
     case 'declined':
       return t.direction === 'out' ? tr('对方已拒收') : tr('已拒收')
     case 'canceled':
@@ -239,6 +246,7 @@ function requestDirect(): void {
         </span>
       </div>
       <div class="meta">{{ metaText }}</div>
+      <div v-if="failureText" class="failure-reason" :title="failureText">{{ failureText }}</div>
       <div v-if="inProgress" class="bar">
         <div class="fill" :style="{ width: `${percent}%` }"></div>
       </div>
@@ -250,7 +258,7 @@ function requestDirect(): void {
         </span>
       </div>
     </div>
-    <div class="tail">
+    <div class="tail" :title="transfer?.direction === 'out' ? sentTransferTitle(transfer) : undefined">
       <template v-if="showRecvActions">
         <div class="action-row recv-action-row">
           <button class="act primary recv-primary" @click="transfers.accept(ref_.transferId)">{{ tr('接收') }}</button>
@@ -305,6 +313,14 @@ function requestDirect(): void {
 </template>
 
 <style scoped>
+.failure-reason {
+  margin-top: 4px;
+  color: var(--danger);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .card {
   width: 276px;
   min-height: 58px;

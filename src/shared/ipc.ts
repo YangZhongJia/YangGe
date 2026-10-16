@@ -2,7 +2,7 @@ import type { Language, SystemMessage } from './i18n'
 // IPC 契约：main 与 renderer 之间唯一的对话词汇表（tech-design §4）。
 // 通道名、请求/响应类型、preload 暴露的 API 形状都只在这里定义。
 
-import type { Platform, ShareDenyReason, ShareEntry, ShareMode } from './protocol'
+import type { Platform, ShareDenyReason, ShareEntry, ShareMode, TransferFailureReason } from './protocol'
 import type { PkGame, PkRefView } from './pk'
 import type { ScreenAvailability, ScreenState, ScreenSource, ScreenMode, ScreenImage, ScreenSample, ScreenRequestResult } from './remote-view'
 
@@ -25,6 +25,7 @@ export const IpcChannels = {
   appInfo: 'app:info',
   appOpenUrl: 'app:open-url',
   netState: 'net:get-state',
+  transferImageFailed: 'transfer:image-failed',
   peersList: 'peers:list',
   peersProbe: 'peers:probe',
   convList: 'conv:list',
@@ -146,6 +147,7 @@ export const IpcEvents = {
   nudgeReceived: 'msg:nudge-received',
   convsUpdated: 'convs:updated',
   transferUpdated: 'transfer:updated',
+  transferSendBlocked: 'transfer:send-blocked',
   groupUpdated: 'group:updated',
   /** 截图框选窗初始化（本地 PNG 字节） */
   captureInit: 'capture:init',
@@ -234,6 +236,8 @@ export interface NetState {
   udpPort: number
   /** 端口被占等启动失败原因；ok 时为空 */
   error: string
+  /** TCP 监听独立于 UDP 消息；不可用时禁止发出文件 offer。 */
+  transfer?: { available: boolean; port: number }
 }
 
 export type ScanProgressStatus = 'idle' | 'running' | 'done' | 'empty' | 'unavailable'
@@ -348,6 +352,10 @@ export interface TransferView {
   retryable?: boolean
   /** 直接发送入站保存目录使用的发送人目录名。 */
   directPeerName?: string
+  notified?: boolean
+  /** true 为接收端回执确认；false 的 done 为完整供流后的兼容回退。 */
+  deliveryConfirmed?: boolean
+  failureReason?: TransferFailureReason
 }
 
 /** 同一会话相邻的可用图片；边界为 null，不暴露本地路径。 */
@@ -791,6 +799,7 @@ export interface PantryApi {
   openUrl(url: string): Promise<boolean>
   getPeers(): Promise<PeerView[]>
   getNetState(): Promise<NetState>
+  reportImageDecodeFailure(transferId: string): Promise<void>
   /** 局域网自更新：查询当前可用更新源，无则 null（决议 #166） */
   checkUpdate(): Promise<UpdateAvailability | null>
   /** 局域网自更新：向当前最佳更新源请求安装包，返回请求是否已送达 */
@@ -983,6 +992,8 @@ export interface PantryApi {
   onNudgeReceived(listener: (event: NudgeEvent) => void): () => void
   onConvsUpdated(listener: (convs: ConversationView[]) => void): () => void
   onTransferUpdated(listener: (transfer: TransferView) => void): () => void
+  onTransferSendBlocked(listener: (state: { available: boolean; port: number }) => void): () => void
+  onNetState(listener: (state: NetState) => void): () => void
   onGroupUpdated(listener: (group: GroupView) => void): () => void
   /** 截图窗：接收本地 PNG 字节 */
   onCaptureInit(listener: (pngBytes: ArrayBuffer) => void): () => void

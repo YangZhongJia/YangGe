@@ -2,11 +2,15 @@ import { EventEmitter } from 'node:events'
 import { mkdtempSync, rmSync, truncateSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createServer, Server, type AddressInfo } from 'node:net'
+import * as transferNet from '../net/transfer'
 import {
   CAPS,
   FILE_OFFER_TTL,
   MSG_TYPES,
+  TRANSFER_ACK_TIMEOUT,
+  TRANSFER_FAILURE_REASONS,
   type Envelope,
   type FileCtlOffer,
   type FileCtlPayload,
@@ -19,12 +23,19 @@ import type { ConvRepo } from '../store/conv-repo'
 import type { GroupRepo } from '../store/group-repo'
 import type { MsgRepo, MsgRow, NewMessage } from '../store/msg-repo'
 import type { TransferRepo, TransferRow } from '../store/transfer-repo'
-import { FilesService } from './files'
+import { FilesService, type FilesDeps } from './files'
 import { makeEnvelope } from '../net/codec'
 
 const tmpDirs: string[] = []
+const reliabilityServices: FilesService[] = []
+
+// 原有编排单测不启动真实监听器；端口占用专项会恢复真实 getter 验证。
+beforeEach(() => { vi.spyOn(transferNet.TransferServer.prototype, 'listening', 'get').mockReturnValue(true) })
 
 afterEach(async () => {
+  vi.useRealTimers()
+  for (const service of reliabilityServices.splice(0)) await service.stop()
+  vi.restoreAllMocks()
   for (const dir of tmpDirs.splice(0)) {
     let lastError: unknown
     for (let attempt = 0; attempt < 5; attempt += 1) {
@@ -247,6 +258,288 @@ function waitFor(predicate: () => boolean, timeoutMs = 1_000): Promise<void> {
     }, 10)
   })
 }
+
+describe('issue #48 传输结果与监听失败', () => {
+  function setup(caps: string[] = [CAPS.transferAck, CAPS.transferWait], overrides: Partial<FilesDeps> = {}) {
+    const dir = mkdtempSync(join(tmpdir(), 'teahouse-transfer-ack-'))
+    tmpDirs.push(dir)
+    const path = join(dir, 'CON.txt')
+    writeFileSync(path, 'hello')
+    const messenger = new FakeMessenger()
+    const msgRepo = new FakeMsgRepo()
+    const transferRepo = new FakeTransferRepo()
+    const deps: FilesDeps = {
+      selfId: 'node-self', messenger: messenger as unknown as Messenger,
+      registry: new FakeRegistry(['node-bob'], caps) as unknown as PeerRegistry,
+      convRepo: new FakeConvRepo() as unknown as ConvRepo,
+      msgRepo: msgRepo as unknown as MsgRepo, transferRepo: transferRepo as unknown as TransferRepo,
+      getSaveDir: () => dir, getImagesDir: () => dir, tcpPort: 0, bindAddress: '127.0.0.1',
+      ...overrides
+    }
+    const service = new FilesService(deps)
+    reliabilityServices.push(service)
+    const server = (service as unknown as { server: transferNet.TransferServer }).server
+    const ctl = (payload: FileCtlPayload, from = 'node-bob', ts = Date.now()) =>
+      messenger.emit('incoming', { ...makeEnvelope(MSG_TYPES.fileCtl, from, payload), ts })
+    const incoming = (purpose?: 'image') => {
+      ctl({ op: 'offer', transferId: 'incoming', seq: 1, total: 1, rootName: 'CON.txt',
+        files: [{ fileId: 'f1', path: 'CON.txt', size: 5 }], totalSize: 5, fileCount: 1,
+        ...(purpose ? { purpose } : {}) })
+      return 'incoming'
+    }
+    return { service, deps, dir, path, messenger, msgRepo, transferRepo, server, ctl, incoming }
+  }
+
+  it('监听异常可控注入：不读取无效源路径、不创建发送消息，保留接收控制通道', async () => {
+    vi.restoreAllMocks()
+    vi.spyOn(Server.prototype, 'listen').mockImplementation(function (this: Server) {
+      queueMicrotask(() => this.emit('error', Object.assign(new Error('occupied'), { code: 'EADDRINUSE' })))
+      return this
+    })
+    const { service, messenger, msgRepo, transferRepo, incoming } = setup([], { tcpPort: 17879 })
+    const blocked = vi.fn()
+    service.on('send-blocked', blocked)
+    await expect(service.start()).rejects.toMatchObject({ code: 'EADDRINUSE' })
+    for (const want of ['file', 'image', 'sticker'] as const) {
+      expect(await service.offerPaths('node-bob', ['/does/not/exist'], want)).toBeNull()
+      expect(await service.offerGroupPaths('group', ['/does/not/exist'], want)).toBeNull()
+    }
+    expect(msgRepo.rows.size).toBe(0)
+    expect(transferRepo.rows.size).toBe(0)
+    expect(messenger.sent).toEqual([])
+    expect(service.availability()).toEqual({ available: false, port: 17879 })
+    expect(blocked).toHaveBeenCalledWith({ available: false, port: 17879 })
+    expect(service.transferView(incoming())?.status).toBe('offering')
+  })
+
+  it('真实 TCP 端口占用时，所有发送入口在建记录/发 offer 前阻止并上报端口', async () => {
+    vi.restoreAllMocks()
+    const occupied = createServer()
+    await new Promise<void>((resolve) => occupied.listen(0, '127.0.0.1', resolve))
+    const port = (occupied.address() as AddressInfo).port
+    const { service, path, dir, messenger, transferRepo, msgRepo, incoming } = setup([], { tcpPort: port })
+    const blocked = vi.fn()
+    service.on('send-blocked', blocked)
+    try {
+      await expect(service.start()).rejects.toMatchObject({ code: 'EADDRINUSE' })
+      expect(service.availability()).toEqual({ available: false, port })
+      for (const want of ['file', 'image', 'sticker'] as const) {
+        expect(await service.offerPaths('node-bob', [path], want)).toBeNull()
+        expect(await service.offerGroupPaths('group', [path], want)).toBeNull()
+      }
+      expect(await service.offerPaths('node-bob', [dir])).toBeNull()
+      expect(await service.offerSharePut('node-bob', [path])).toBe(false)
+      expect(await service.offerSharePaths('node-bob', [path])).toBe(false)
+      expect(await service.offerUpdatePackage('node-bob', path)).toBe(false)
+      expect(await service.requestDirect('anything')).toBe(false)
+      expect(messenger.sent).toEqual([])
+      expect(transferRepo.rows.size).toBe(0)
+      expect(msgRepo.rows.size).toBe(0)
+      expect(blocked).toHaveBeenCalledWith({ available: false, port })
+      incoming()
+      expect(service.transferView('incoming')?.status).toBe('offering')
+    } finally {
+      await new Promise<void>((resolve) => occupied.close(() => resolve()))
+    }
+    // 释放端口后可重试启动，不需要重建服务。
+    await service.start()
+    expect(service.availability()).toEqual({ available: true, port })
+  })
+
+  it('offer ACK 只持久化已通知；正确接收人的 delivered 回执才确认完成', async () => {
+    const { service, path, ctl, transferRepo, msgRepo } = setup()
+    const msg = (await service.offerPaths('node-bob', [path], 'image'))!
+    const transferId = msg.fileRef!.transferId
+    await waitTick()
+    expect(service.transferView(transferId)).toMatchObject({ status: 'offering', notified: true, deliveryConfirmed: false })
+    ctl({ op: 'result', transferId, status: 'delivered' }, 'stranger')
+    expect(service.transferView(transferId)?.status).toBe('offering')
+    ctl({ op: 'result', transferId, status: 'delivered' })
+    expect(service.transferView(transferId)).toMatchObject({ status: 'done', deliveryConfirmed: true })
+    expect(JSON.parse(transferRepo.get(transferId)!.files).deliveryConfirmed).toBe(true)
+    expect(msgRepo.get(msg.id)?.status).toBe('sent')
+    ctl({ op: 'result', transferId, status: 'failed', reason: 'connection-error' })
+    expect(service.transferView(transferId)?.status).toBe('done')
+    // 实际原图解码晚于落盘回执时仍可纠正结果。
+    ctl({ op: 'result', transferId, status: 'failed', reason: 'decode-error' })
+    expect(service.transferView(transferId)).toMatchObject({ status: 'failed', failureReason: 'decode-error' })
+  })
+
+  it.each(TRANSFER_FAILURE_REASONS)('接收回执 %s 优先于迟到 offer ACK 与供流完成，重试后可完成', async (reason) => {
+    const { service, path, ctl, server, messenger, msgRepo } = setup()
+    let offerAck!: (value: boolean) => void
+    vi.spyOn(messenger, 'sendReliable').mockImplementation(async (_peer, env) =>
+      env.payload.op === 'offer' ? new Promise<boolean>((resolve) => { offerAck = resolve }) : true)
+    const msg = (await service.offerPaths('node-bob', [path]))!
+    const transferId = msg.fileRef!.transferId
+    ctl({ op: 'accept', transferId }, 'node-bob', 10)
+    ctl({ op: 'result', transferId, status: 'failed', reason }, 'node-bob', 20)
+    offerAck(true)
+    await waitTick()
+    server.emit('served', transferId)
+    expect(service.transferView(transferId)).toMatchObject({
+      status: reason === 'canceled' ? 'canceled' : 'failed', failureReason: reason
+    })
+    expect(msgRepo.get(msg.id)?.status).toBe(reason === 'canceled' ? 'sent' : 'failed')
+    ctl({ op: 'accept', transferId }, 'node-bob', 10)
+    expect(service.transferView(transferId)?.status).toBe(reason === 'canceled' ? 'canceled' : 'failed')
+    ctl({ op: 'accept', transferId }, 'node-bob', 30)
+    ctl({ op: 'result', transferId, status: 'failed', reason }, 'node-bob', 20)
+    ctl({ op: 'cancel', transferId }, 'node-bob', 20)
+    expect(service.transferView(transferId)).toMatchObject({ status: 'accepted' })
+    expect(service.transferView(transferId)?.failureReason).toBeUndefined()
+    // 失败回执尚未到达时，较新的 accept 也必须开启新一轮，不能把旧错误套上来。
+    ctl({ op: 'accept', transferId }, 'node-bob', 50)
+    ctl({ op: 'result', transferId, status: 'failed', reason }, 'node-bob', 40)
+    expect(service.transferView(transferId)?.status).toBe('accepted')
+    ctl({ op: 'result', transferId, status: 'delivered' }, 'node-bob', 60)
+    expect(service.transferView(transferId)).toMatchObject({ status: 'done', deliveryConfirmed: true })
+  })
+
+  it('发送方主动取消后不接受任何迟到结果', async () => {
+    const { service, path, ctl, server } = setup()
+    const msg = (await service.offerPaths('node-bob', [path]))!
+    const transferId = msg.fileRef!.transferId
+    await service.cancel(transferId)
+    ctl({ op: 'result', transferId, status: 'delivered' })
+    ctl({ op: 'result', transferId, status: 'failed', reason: 'write-error' })
+    server.emit('served', transferId)
+    expect(service.transferView(transferId)?.status).toBe('canceled')
+  })
+
+  it.each([false, true])('完整供流按 fileId 去重，支持回执=%s 时按兼容策略收敛', async (supportsAck) => {
+    vi.useFakeTimers()
+    const { service, path, dir, ctl, server, messenger } = setup(supportsAck ? [CAPS.transferAck] : [])
+    const second = join(dir, 'second.txt')
+    writeFileSync(second, 'more')
+    const msg = (await service.offerPaths('node-bob', [path, second]))!
+    const transferId = msg.fileRef!.transferId
+    await vi.advanceTimersByTimeAsync(0)
+    const offer = messenger.sent.find((entry) => entry.env.payload.op === 'offer')!.env.payload as FileCtlOffer
+    ctl({ op: 'accept', transferId })
+    server.emit('file-served', transferId, offer.files[0].fileId)
+    server.emit('file-served', transferId, offer.files[0].fileId)
+    await vi.advanceTimersByTimeAsync(TRANSFER_ACK_TIMEOUT + 1)
+    expect(service.transferView(transferId)?.status).toBe('accepted')
+    server.emit('file-served', transferId, offer.files[1].fileId)
+    expect(service.transferView(transferId)?.status).toBe(supportsAck ? 'accepted' : 'done')
+    await vi.advanceTimersByTimeAsync(TRANSFER_ACK_TIMEOUT + 1)
+    expect(service.transferView(transferId)).toMatchObject({ status: 'done', deliveryConfirmed: false })
+    ctl({ op: 'result', transferId, status: 'failed', reason: 'write-error' })
+    expect(service.transferView(transferId)?.status).toBe(supportsAck ? 'failed' : 'done')
+  })
+
+  it('回执等待期间的失败清除回退定时器，重启仍保留失败原因', async () => {
+    vi.useFakeTimers()
+    const { service, deps, path, ctl, server } = setup()
+    const msg = (await service.offerPaths('node-bob', [path]))!
+    const transferId = msg.fileRef!.transferId
+    server.emit('served', transferId)
+    ctl({ op: 'result', transferId, status: 'failed', reason: 'hash-mismatch' })
+    await vi.advanceTimersByTimeAsync(TRANSFER_ACK_TIMEOUT + 1)
+    expect(service.transferView(transferId)?.status).toBe('failed')
+    await service.stop()
+    const restarted = new FilesService(deps)
+    reliabilityServices.push(restarted)
+    expect(restarted.transferView(transferId)).toMatchObject({ status: 'failed', failureReason: 'hash-mismatch' })
+  })
+
+  it('完整供流后的等待状态重启时回退为送达', async () => {
+    const { service, deps, path, server } = setup()
+    const msg = (await service.offerPaths('node-bob', [path]))!
+    const transferId = msg.fileRef!.transferId
+    server.emit('served', transferId)
+    await service.stop()
+    const restarted = new FilesService(deps)
+    reliabilityServices.push(restarted)
+    expect(restarted.transferView(transferId)).toMatchObject({ status: 'done', deliveryConfirmed: false })
+  })
+
+  it.each([
+    ['write-error', 'write-error'], ['part-read-error', 'write-error'], ['hash-mismatch', 'hash-mismatch'],
+    ['socket-error', 'connection-error'], ['closed', 'connection-error'], ['timeout', 'connection-error'],
+    ['size-mismatch', 'invalid-data'], ['decode-error', 'decode-error']
+  ])('接收失败 %s 会经可靠消息发送原因 %s', async (error, reason) => {
+    vi.spyOn(transferNet, 'pullTransfer').mockRejectedValue(new Error(error))
+    const { service, messenger, incoming } = setup()
+    const transferId = incoming()
+    expect(await service.accept(transferId)).toBe(true)
+    await waitTick()
+    expect(service.transferView(transferId)).toMatchObject({ status: 'failed', failureReason: reason })
+    expect(messenger.sent.some(({ env }) => JSON.stringify(env.payload) === JSON.stringify({
+      op: 'result', transferId, status: 'failed', reason
+    }))).toBe(true)
+  })
+
+  it.each([true, false])('图片落盘后的校验结果=%s 决定回执', async (valid) => {
+    vi.spyOn(transferNet, 'pullTransfer').mockResolvedValue()
+    const { service, messenger, incoming } = setup(undefined, { validateReceivedImage: async () => valid })
+    const transferId = incoming('image')
+    await waitTick()
+    expect(service.transferView(transferId)?.status).toBe(valid ? 'done' : 'failed')
+    expect(messenger.sent.filter(({ env }) => env.payload.op === 'result').map(({ env }) => env.payload))
+      .toEqual([valid ? { op: 'result', transferId, status: 'delivered' } :
+        { op: 'result', transferId, status: 'failed', reason: 'decode-error' }])
+    if (valid) {
+      service.reportImageDecodeFailure(transferId)
+      expect(messenger.sent[messenger.sent.length - 1]?.env.payload).toEqual({ op: 'result', transferId, status: 'failed', reason: 'decode-error' })
+    }
+  })
+
+  it('接收方取消发送 canceled 原因，不把迟到断链错误当失败；旧端只收到旧 cancel', async () => {
+    let rejectPull!: (error: Error) => void
+    vi.spyOn(transferNet, 'pullTransfer').mockImplementation(() => new Promise((_resolve, reject) => { rejectPull = reject }))
+    const { service, messenger, incoming } = setup()
+    const transferId = incoming()
+    await service.accept(transferId)
+    await service.cancel(transferId)
+    rejectPull(new Error('closed'))
+    await waitTick()
+    expect(service.transferView(transferId)).toMatchObject({ status: 'canceled', retryable: true })
+    expect(messenger.sent.filter(({ env }) => env.payload.op === 'result').map(({ env }) => env.payload))
+      .toEqual([{ op: 'result', transferId, status: 'failed', reason: 'canceled' }])
+    const legacy = setup([])
+    await legacy.service.cancel(legacy.incoming())
+    expect(legacy.messenger.sent.map(({ env }) => env.payload.op)).toEqual(['cancel'])
+  })
+
+  it('旧端接收成功或失败均不发送新 result', async () => {
+    const pull = vi.spyOn(transferNet, 'pullTransfer').mockRejectedValue(new Error('write-error'))
+    const { service, messenger, incoming } = setup([])
+    const transferId = incoming()
+    await service.accept(transferId)
+    await waitTick()
+    pull.mockResolvedValue()
+    await service.accept(transferId)
+    await waitTick()
+    expect(service.transferView(transferId)?.status).toBe('done')
+    expect(messenger.sent.every(({ env }) => env.payload.op === 'accept')).toBe(true)
+  })
+
+  it.each([false, true])('真实回环拉取、磁盘保存不可用=%s 时，发送端收到最终结果', async (unwritable) => {
+    const sender = setup()
+    await sender.service.start()
+    const port = ((sender.server as unknown as { server: ReturnType<typeof createServer> }).server.address() as AddressInfo).port
+    const receiver = setup(undefined, { selfId: 'node-bob',
+      registry: new FakeRegistry(['node-self'], [CAPS.transferAck, CAPS.transferWait], port) as unknown as PeerRegistry })
+    vi.spyOn(sender.messenger, 'sendReliable').mockImplementation(async (_id, env) => {
+      queueMicrotask(() => receiver.messenger.emit('incoming', env))
+      return true
+    })
+    vi.spyOn(receiver.messenger, 'sendReliable').mockImplementation(async (_id, env) => {
+      queueMicrotask(() => sender.messenger.emit('incoming', env))
+      return true
+    })
+    const msg = (await sender.service.offerPaths('node-bob', [sender.path]))!
+    const transferId = msg.fileRef!.transferId
+    await waitTick()
+    expect(await receiver.service.accept(transferId, unwritable ? receiver.path : receiver.dir)).toBe(true)
+    await waitFor(() => sender.service.transferView(transferId)?.status === (unwritable ? 'failed' : 'done'))
+    expect(sender.service.transferView(transferId)).toMatchObject(unwritable
+      ? { status: 'failed', failureReason: 'write-error' } : { status: 'done', deliveryConfirmed: true })
+    expect(receiver.service.transferView(transferId)?.savedPath).toContain('_CON.txt')
+  })
+})
 
 describe('FilesService 群聊媒体', () => {
   it('同一同步批次内合并会话列表事件', async () => {

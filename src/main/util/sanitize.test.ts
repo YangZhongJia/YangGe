@@ -25,4 +25,21 @@ describe('sanitizeRelPath（路径穿越防护红线）', () => {
     expect(sanitizeRelPath('x'.repeat(513))).toBeNull()
     expect(sanitizeRelPath('')).toBeNull()
   })
+
+  it.each(['CON', 'prn', 'Aux', 'NUL', ...Array.from({ length: 9 }, (_, i) => `com${i + 1}`),
+    ...Array.from({ length: 9 }, (_, i) => `LPT${i + 1}`)])('跨平台清洗设备名 %s（含扩展名和目录段）', (name) => {
+    expect(sanitizeRelPath(name)).toBe(`_${name}`)
+    expect(sanitizeRelPath(`${name}.tar.gz`)).toBe(`_${name}.tar.gz`)
+    expect(sanitizeRelPath(`${name}/CON.txt`)).toBe(`_${name}/_CON.txt`)
+  })
+
+  it('剥离尾随点和空格，并保留普通名称与穿越拒绝行为', () => {
+    expect(sanitizeRelPath('folder. /file.txt...  ')).toBe('folder/file.txt')
+    expect(sanitizeRelPath('nul. ')).toBe('_nul')
+    expect(sanitizeRelPath('com1.tar.gz')).toBe('_com1.tar.gz')
+    expect(sanitizeRelPath('CONSOLE.txt/COM0/LPT10')).toBe('CONSOLE.txt/COM0/LPT10')
+    expect(sanitizeRelPath('a/.. /b')).toBeNull()
+    expect(sanitizeRelPath('a/.../b')).toBeNull()
+    expect(sanitizeRelPath(`CON.${'x'.repeat(251)}`)).toBeNull()
+  })
 })

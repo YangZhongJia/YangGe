@@ -228,6 +228,24 @@ UI 概念，协议上不存在：对每个收件人各发一条独立 `msg`，�
 
 ## 8. 文件传输（TCP，拉取式）
 
+**Issue #48 / 决议 #320：接收结果回执（2026-10-16）**。profile 增加 `CAPS.transferAck = "ta1"`，信封仍为 `v:1`，不新增端口。仅向声明 `ta1` 的发送方通过既有可靠 `file-ctl`（UDP ACK/重传，既有 TCP 控制信封兜底，不离线入队）发送以下载荷：
+
+```ts
+{ op: 'result', transferId: string, status: 'delivered' }
+{ op: 'result', transferId: string, status: 'failed', reason:
+  'write-error' | 'hash-mismatch' | 'connection-error' | 'decode-error' | 'invalid-data' | 'canceled' }
+```
+
+接收端在所有文件校验、`.part` 写入和改名成功后发 `delivered`；图片还需通过格式/像素检查，渲染器随后发现原图解码失败时补发 `decode-error`。建目录、写盘/改名、预哈希读取失败归 `write-error`；SHA-256 不符归 `hash-mismatch`；连接失败/断开/超时归 `connection-error`；非法数据归 `invalid-data`。原因码不含路径或系统异常文本。接收方主动取消发 `failed/canceled`（并保留旧 `cancel`），双方仍按 `tw1` 保留可恢复取消语义；发送方主动取消保持终态。
+
+发送端只处理匹配 `transferId`、记录中的接收节点且该节点声明 `ta1` 的结果。复用 `transfers.status`：`offering` + offer ACK 为「已通知」；`accepted` 表示拉取中或等待结果，仍未确认送达；`done` 为「已送达」；接收失败为 `failed` + 原因，取消为 `canceled`。通知标志、失败原因、完整供流时间和是否回执确认保存在既有 `files` JSON，**不新增表列/迁移**。群媒体按每个接收人的 transfer 独立记录。迟到的 offer ACK/供流回调不能覆盖接收失败；重新 `accept` 清除旧结果。已确认送达仅允许后续 `decode-error` 纠正。
+
+同一接收端的 `accept/result/cancel` 用其信封 `ts` 防旧包覆盖，并在 `files.receiverControlTs` 持久化最近处理的时间；不比较两端时钟。较新的 `accept` 开启重试，上一轮迟到的失败/取消不再影响新一轮。
+
+**兼容回退**：未声明 `ta1` 的旧端不收新回执，也不等待它；全部文件字节及 `done` 帧写出后（按 fileId 去重汇总，含零字节文件/断点续传）即可记 `done`。支持 `ta1` 时先等待接收结果；完整供流后 **15 秒**（`TRANSFER_ACK_TIMEOUT`）无结果，回退 `done`，UI 悬停说明「文件已传完，接收方未确认保存结果」。重启时已完整供流的待回执行同一回退。**没有回执本身永不判失败**；回退后的迟到失败仍可纠正状态。没有完整供流证据时保持未完成，不把未接收文件误标送达。旧 codec 对未知 `file-ctl.op` 安全丢包且不 ACK；未知顶层 `type` 标记 `known:false` 忽略。因此使用能力门控，不能向旧端可靠发送新 op；未新增 TCP 帧型。
+
+本机 TCP 监听不可用时，服务层在读取源文件、创建消息和发 offer 前阻止文件/图片/文件夹发送（含群聊和转发路径），通过 IPC 暴露 `{available, port}` 并显示带端口的双语提示，UDP 文字消息继续可用。接收路径在所有平台统一清洗各段：去掉末尾点/空格，`CON/PRN/AUX/NUL/COM1–9/LPT1–9`（不区分大小写，含扩展名）前加 `_`，其余既有非法字符/长度/路径穿越限制保持。
+
 方向选择：**接收方连接发送方拉取**（同 IPMSG 的 GETFILEDATA）。理由：续传天然（offset 由接收方说了算）、接收方控制落盘与并发、发送方只读不写无状态。
 
 ```mermaid

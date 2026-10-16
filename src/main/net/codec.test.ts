@@ -7,6 +7,7 @@ import {
   LIMITS,
   MSG_TYPES,
   TABLE_TEXT_LIMIT_BYTES,
+  TRANSFER_FAILURE_REASONS,
   UDP_MAX_INBOUND,
   type AvatarPayload,
   type FileCtlOffer,
@@ -19,6 +20,33 @@ import {
   type SharePayload,
   type UpdateReqPayload
 } from '../../shared/protocol'
+
+describe('issue #48 接收结果协议', () => {
+  it('delivered/failed 回执经 UDP 与 TCP 信封共用校验', () => {
+    const payloads: FileCtlPayload[] = [
+      { op: 'result', transferId: 't1', status: 'delivered' },
+      ...TRANSFER_FAILURE_REASONS.map((reason): FileCtlPayload => ({ op: 'result', transferId: 't1', status: 'failed', reason }))
+    ]
+    for (const payload of payloads) {
+      const env = makeEnvelope(MSG_TYPES.fileCtl, 'receiver', payload)
+      expect(decode(encode(env))).toMatchObject({ ok: true, known: true, env: { payload } })
+      expect(decodeTcpEnvelopeObject(env)).toMatchObject({ ok: true, known: true, env: { payload } })
+    }
+  })
+
+  it.each([
+    { op: 'result', transferId: '', status: 'delivered' },
+    { op: 'result', transferId: 'x'.repeat(65), status: 'delivered' },
+    { op: 'result', transferId: 't1', status: 'unknown' },
+    { op: 'result', transferId: 't1', status: 'failed' },
+    { op: 'result', transferId: 't1', status: 'failed', reason: 'arbitrary path' },
+    { op: 'result', transferId: 't1', status: 'delivered', reason: 'canceled' },
+    { op: 'future-result', transferId: 't1', status: 'delivered' }
+  ])('非法结果或未知 op 安全丢弃，不抛异常：%j', (payload) => {
+    expect(decode(encode(makeEnvelope(MSG_TYPES.fileCtl, 'receiver', payload))))
+      .toEqual({ ok: false, reason: 'bad-payload:file-ctl' })
+  })
+})
 
 function makeProfile(overrides: Partial<Profile> = {}): Profile {
   return {

@@ -570,5 +570,8 @@ describe('shareUploadDirName（上传落点目录名）', () => {
     expect(shareUploadDirName('张三')).toBe('张三')
     expect(shareUploadDirName('a/b\\c')).toBe('a b c')
     expect(shareUploadDirName('..')).toBe('未知节点')
+    expect(shareUploadDirName('CON.txt')).toBe('_CON.txt')
+    expect(shareUploadDirName('nul')).toBe('_nul')
+    expect(shareUploadDirName('张三. ')).toBe('张三')
   })
 })

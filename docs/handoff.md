@@ -2,6 +2,9 @@
 
 > [简体中文](handoff.md) · [English](en/handoff.md)
 
+> 当前工作树：2026-10-16，Issue #48 / 决议 #320 传输可靠性修复，分支 `fix/48-transfer-reliability`，未提交/未发布。TCP 监听失败阻止附件发送并显示端口；`ta1` + `file-ctl result` 区分已通知、接收确认送达与失败；完整供流后 15 秒无回执回退，旧端不等回执。保留取消/重试与 issue #3 的迟到 offer ACK 保护，增加跨平台 Windows 设备名清洗。协议详见 [protocol.md §8](protocol.md#8-文件传输tcp拉取式)，无需迁移或新增依赖。下一决议 #321。
+> 本轮验证：新增无需监听端口的状态机/协议/路径/真实磁盘故障测试通过；`npm run typecheck`、`npm run test:db`（Electron ABI 110）、构建/包体门禁与双语文档检查通过。全量 `npx vitest run` 为 882 通过 / 73 失败（955 项），失败均受当前沙箱禁止 UDP/TCP 监听的 `EPERM` 限制，需在允许回环端口的环境重跑。Xvfb 启动 smoke 同样受 Chromium sandbox `shutdown: Operation not permitted` 限制，未完成 GUI/真实多机验收。
+
 > 当前发布准备：2026-10-04，v0.61.2 / 决议 #319 粘贴附件发送前确认已完成本地验证，用户已确认实际界面并批准发布；正式状态以 GitHub Release 为准。下一决议 #320；详见文末本地待审记录。
 > 上次发布准备：2026-10-02，准备 v0.61.1 补丁发布：修复 issue #53 断点预哈希超时/取消回收及旧端兼容，修复 issue #51 已复现的受限重新邀请累计快照路径。Mac 已验收功能提交 `a9fe833`；Win7/UOS ARM64 真机与真实多机传输仍未验收。正式发布状态以 GitHub Release 为准，下一决议 #319。
 > 给接手本项目的任何 AI 代理或开发者。读完本文 + [AGENTS.md](../AGENTS.md) 即可无缝继续开发。
