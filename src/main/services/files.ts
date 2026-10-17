@@ -229,7 +229,7 @@ export class FilesService extends EventEmitter {
   }
 
   availability(): { available: boolean; port: number } {
-    return { available: this.server.listening, port: this.deps.tcpPort }
+    return { available: this.server.listening, port: this.server.port }
   }
 
   /** 所有发送入口在读文件、建消息、发 offer 前检查，监听失败不影响文字聊天。 */
