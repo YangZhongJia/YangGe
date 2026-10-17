@@ -12,8 +12,6 @@ import { PeerRegistry } from './peer-registry'
 import { RangeSync } from './range-sync'
 import { UdpChannel } from './udp'
 
-let nextPort = 43000 + Math.floor(Math.random() * 1000)
-
 interface RangeNode {
   udp: UdpChannel
   registry: PeerRegistry
@@ -41,7 +39,7 @@ function profile(name: string, port: number): Profile {
     profileRev: 1,
     host: `${name}-host`,
     platform: 'linux',
-    tcpPort: port + 1,
+    tcpPort: port,
     ver: '0.0.0-test',
     caps: []
   }
@@ -54,10 +52,10 @@ function fakeUdp(): FakeUdp {
 }
 
 async function makeNode(name: string): Promise<RangeNode> {
-  nextPort += 2
-  const port = nextPort
+  const udp = new UdpChannel({ port: 0, bindAddress: '127.0.0.1', broadcastTargets: [] })
+  await udp.start()
+  const port = udp.port
   const nodeProfile = profile(name, port)
-  const udp = new UdpChannel({ port, bindAddress: '127.0.0.1', broadcastTargets: [] })
   const registry = new PeerRegistry(nodeProfile.nodeId)
   const ranges: ScanRangeSummary[] = []
   const accepted: Array<{ from: string; ranges: ScanRangeSummary[] }> = []
@@ -75,7 +73,6 @@ async function makeNode(name: string): Promise<RangeNode> {
       scanRangeShareInterval: 1_000
     }
   })
-  await udp.start()
   const node = { udp, registry, rangeSync, profile: nodeProfile, port, ranges, accepted }
   nodes.push(node)
   return node

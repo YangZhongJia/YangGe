@@ -17,8 +17,6 @@ import { RangeSync } from './range-sync'
 // 回环集成测试：两套完整网络栈在 127.0.0.1 对发。
 // broadcastTargets 置空 —— 测试永不向真实局域网发包。
 
-let nextPort = 41000 + Math.floor(Math.random() * 1000)
-
 function makeProfile(name: string, port: number): Profile {
   return {
     nodeId: `node-${name}`,
@@ -30,7 +28,7 @@ function makeProfile(name: string, port: number): Profile {
     profileRev: 1,
     host: `${name}-host`,
     platform: 'linux',
-    tcpPort: port + 1,
+    tcpPort: port,
     ver: '0.0.0-test',
     caps: [DISCOVERY_PROBE_CAP]
   }
@@ -64,10 +62,10 @@ const FAST: Partial<Timings> = {
 const stacks: Stack[] = []
 
 async function makeStack(name: string, manualPeers: ManualPeer[] = []): Promise<Stack> {
-  nextPort += 2
-  const port = nextPort
+  const udp = new UdpChannel({ port: 0, bindAddress: '127.0.0.1', broadcastTargets: [] })
+  await udp.start()
+  const port = udp.port
   const profile = makeProfile(name, port)
-  const udp = new UdpChannel({ port, bindAddress: '127.0.0.1', broadcastTargets: [] })
   const registry = new PeerRegistry(profile.nodeId)
   const discovery = new Discovery({ udp, registry, profile, manualPeers, timings: FAST })
   const scanRanges: ScanRangeSummary[] = []
@@ -91,7 +89,6 @@ async function makeStack(name: string, manualPeers: ManualPeer[] = []): Promise<
       scanRangeShareInterval: 1_000
     }
   })
-  await udp.start()
   const stack: Stack = { udp, registry, discovery, rangeSync, profile, port, scanRanges, ignoredRanges }
   stacks.push(stack)
   return stack
