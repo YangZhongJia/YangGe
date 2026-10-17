@@ -290,13 +290,13 @@ describe('issue #48 传输结果与监听失败', () => {
     return { service, deps, dir, path, messenger, msgRepo, transferRepo, server, ctl, incoming }
   }
 
-  it('监听异常可控注入：不读取无效源路径、不创建发送消息，保留接收控制通道', async () => {
+  it('监听异常可控注入：阻止发送并保留接收控制通道，同一服务可重新启动', async () => {
     vi.restoreAllMocks()
     vi.spyOn(Server.prototype, 'listen').mockImplementation(function (this: Server) {
       queueMicrotask(() => this.emit('error', Object.assign(new Error('occupied'), { code: 'EADDRINUSE' })))
       return this
     })
-    const { service, messenger, msgRepo, transferRepo, incoming } = setup([], { tcpPort: 17879 })
+    const { service, messenger, msgRepo, transferRepo, incoming } = setup([], { tcpPort: 0 })
     const blocked = vi.fn()
     service.on('send-blocked', blocked)
     await expect(service.start()).rejects.toMatchObject({ code: 'EADDRINUSE' })
@@ -307,9 +307,13 @@ describe('issue #48 传输结果与监听失败', () => {
     expect(msgRepo.rows.size).toBe(0)
     expect(transferRepo.rows.size).toBe(0)
     expect(messenger.sent).toEqual([])
-    expect(service.availability()).toEqual({ available: false, port: 17879 })
-    expect(blocked).toHaveBeenCalledWith({ available: false, port: 17879 })
+    expect(service.availability()).toEqual({ available: false, port: 0 })
+    expect(blocked).toHaveBeenCalledWith({ available: false, port: 0 })
     expect(service.transferView(incoming())?.status).toBe('offering')
+    vi.restoreAllMocks()
+    await service.start()
+    expect(service.availability().available).toBe(true)
+    expect(service.availability().port).toBeGreaterThan(0)
   })
 
   it('真实 TCP 端口占用时，所有发送入口在建记录/发 offer 前阻止并上报端口', async () => {
@@ -341,9 +345,6 @@ describe('issue #48 传输结果与监听失败', () => {
     } finally {
       await new Promise<void>((resolve) => occupied.close(() => resolve()))
     }
-    // 释放端口后可重试启动，不需要重建服务。
-    await service.start()
-    expect(service.availability()).toEqual({ available: true, port })
   })
 
   it('offer ACK 只持久化已通知；正确接收人的 delivered 回执才确认完成', async () => {
@@ -519,7 +520,8 @@ describe('issue #48 传输结果与监听失败', () => {
   it.each([false, true])('真实回环拉取、磁盘保存不可用=%s 时，发送端收到最终结果', async (unwritable) => {
     const sender = setup()
     await sender.service.start()
-    const port = ((sender.server as unknown as { server: ReturnType<typeof createServer> }).server.address() as AddressInfo).port
+    const port = sender.service.availability().port
+    expect(port).toBeGreaterThan(0)
     const receiver = setup(undefined, { selfId: 'node-bob',
       registry: new FakeRegistry(['node-self'], [CAPS.transferAck, CAPS.transferWait], port) as unknown as PeerRegistry })
     vi.spyOn(sender.messenger, 'sendReliable').mockImplementation(async (_id, env) => {

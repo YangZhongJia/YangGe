@@ -83,8 +83,6 @@ class ClosedQueue implements QueueStore {
   }
 }
 
-let nextPort = 43000 + Math.floor(Math.random() * 1000)
-
 const FAST: Partial<Timings> = {
   presenceInterval: 100,
   offlineAfter: 400,
@@ -94,7 +92,7 @@ const FAST: Partial<Timings> = {
   ackRetrySchedule: [60, 120, 180]
 }
 
-function makeProfile(name: string, port: number): Profile {
+function makeProfile(name: string, tcpPort = 1): Profile {
   return {
     nodeId: `node-${name}`,
     nick: name,
@@ -105,7 +103,7 @@ function makeProfile(name: string, port: number): Profile {
     profileRev: 1,
     host: `${name}-host`,
     platform: 'linux',
-    tcpPort: port + 1,
+    tcpPort,
     ver: '0.0.0-test',
     caps: []
   }
@@ -125,14 +123,21 @@ interface Stack {
 
 const stacks: Stack[] = []
 const tcpServers: TransferServer[] = []
+const silentChannels: UdpChannel[] = []
+
+async function silentUdp(): Promise<UdpChannel> {
+  const udp = new UdpChannel({ port: 0, bindAddress: '127.0.0.1', broadcastTargets: [] })
+  silentChannels.push(udp)
+  await udp.start()
+  return udp
+}
 
 async function makeStack(
   name: string,
-  port: number,
   manualPeers: Array<{ host: string; port: number }> = []
 ): Promise<Stack> {
-  const profile = makeProfile(name, port)
-  const udp = new UdpChannel({ port, bindAddress: '127.0.0.1', broadcastTargets: [] })
+  const profile = makeProfile(name)
+  const udp = new UdpChannel({ port: 0, bindAddress: '127.0.0.1', broadcastTargets: [] })
   const registry = new PeerRegistry(profile.nodeId)
   const discovery = new Discovery({ udp, registry, profile, manualPeers, timings: FAST })
   const queue = new MemQueue()
@@ -148,6 +153,7 @@ async function makeStack(
   const incoming: Envelope[] = []
   messenger.on('incoming', (env: Envelope) => incoming.push(env))
   await udp.start()
+  const port = udp.port
   const stack: Stack = { udp, registry, discovery, messenger, queue, dedup, profile, port, incoming }
   stacks.push(stack)
   return stack
@@ -167,6 +173,7 @@ async function waitFor(cond: () => boolean, timeout = 3000): Promise<void> {
 }
 
 afterEach(async () => {
+  for (const udp of silentChannels.splice(0)) await udp.stop()
   for (const server of tcpServers.splice(0)) await server.stop()
   for (const stack of stacks.splice(0)) {
     stack.discovery.stop()
@@ -176,7 +183,7 @@ afterEach(async () => {
 
 async function startTcpReceiver(stack: Stack): Promise<void> {
   const server = new TransferServer(
-    stack.profile.tcpPort,
+    0,
     {
       resolve: () => null,
       receiveMessage: (env, ip) => stack.messenger.acceptTcpEnvelope(env, ip)
@@ -185,6 +192,7 @@ async function startTcpReceiver(stack: Stack): Promise<void> {
   )
   tcpServers.push(server)
   await server.start()
+  stack.profile.tcpPort = server.port
 }
 
 function textEnv(from: string, text: string): Envelope<MsgPayload> {
@@ -213,9 +221,8 @@ const emptyGroups = {
 
 describe('messenger 回环集成', () => {
   it('屏幕控制跨 UDP/TCP 仅内存去重，错误来源不能抢占消息 ID 或修改联系人地址', async () => {
-    nextPort += 20
-    const a = await makeStack('alice', nextPort)
-    const b = await makeStack('bob', nextPort + 5)
+    const a = await makeStack('alice')
+    const b = await makeStack('bob')
     a.registry.touch(b.profile.nodeId, '127.0.0.1', b.port, b.profile)
     b.registry.touch(a.profile.nodeId, '127.0.0.1', a.port, a.profile)
     const env = makeEnvelope(MSG_TYPES.screen, a.profile.nodeId, { op: 'request', sessionId: randomUUID() })
@@ -236,9 +243,8 @@ describe('messenger 回环集成', () => {
   })
 
   it('取消屏幕邀请立即清除重试且不把在线联系人标成离线', async () => {
-    nextPort += 20
-    const a = await makeStack('alice', nextPort)
-    const b = await makeStack('bob', nextPort + 5)
+    const a = await makeStack('alice')
+    const b = await makeStack('bob')
     a.registry.touch(b.profile.nodeId, '127.0.0.1', b.port, b.profile)
     const send = vi.spyOn(a.udp, 'sendBuffer')
     const abort = new AbortController()
@@ -256,9 +262,8 @@ describe('messenger 回环集成', () => {
   })
 
   it('在线直达：ACK 确认，sendUserMessage 返回 sent', async () => {
-    nextPort += 2
-    const a = await makeStack('alice', nextPort)
-    const b = await makeStack('bob', nextPort + 1, [{ host: '127.0.0.1', port: a.port }])
+    const a = await makeStack('alice')
+    const b = await makeStack('bob', [{ host: '127.0.0.1', port: a.port }])
     a.discovery.start()
     b.discovery.start()
     await waitFor(() => a.registry.get(b.profile.nodeId)?.online === true)
@@ -276,11 +281,14 @@ describe('messenger 回环集成', () => {
   })
 
   it('UDP ACK 必须来自本轮发送目标地址', async () => {
-    nextPort += 20
-    const a = await makeStack('alice', nextPort)
-    const evil = await makeStack('evil', nextPort + 5)
-    const peer = makeProfile('bob', nextPort + 9)
-    a.registry.touch(peer.nodeId, '127.0.0.1', nextPort + 9, peer)
+    const a = await makeStack('alice')
+    const evil = await makeStack('evil')
+    const rejecting = new TransferServer(0, { resolve: () => null }, '127.0.0.1')
+    tcpServers.push(rejecting)
+    await rejecting.start()
+    const peer = makeProfile('bob', rejecting.port)
+    const silent = await silentUdp()
+    a.registry.touch(peer.nodeId, '127.0.0.1', silent.port, peer)
 
     const env = textEnv(a.profile.nodeId, '需要真实 ACK')
     const sending = a.messenger.sendReliable(peer.nodeId, env)
@@ -295,9 +303,8 @@ describe('messenger 回环集成', () => {
   })
 
   it('超长文本通过 TCP 控制帧直达', async () => {
-    nextPort += 20
-    const a = await makeStack('alice', nextPort)
-    const b = await makeStack('bob', nextPort + 5, [{ host: '127.0.0.1', port: a.port }])
+    const a = await makeStack('alice')
+    const b = await makeStack('bob', [{ host: '127.0.0.1', port: a.port }])
     await startTcpReceiver(b)
     a.discovery.start()
     b.discovery.start()
@@ -317,9 +324,8 @@ describe('messenger 回环集成', () => {
   })
 
   it('共享文件柜列表超过 UDP 上限时经 TCP 控制帧直达（§8.2）', async () => {
-    nextPort += 20
-    const a = await makeStack('alice', nextPort)
-    const b = await makeStack('bob', nextPort + 5, [{ host: '127.0.0.1', port: a.port }])
+    const a = await makeStack('alice')
+    const b = await makeStack('bob', [{ host: '127.0.0.1', port: a.port }])
     await startTcpReceiver(b)
     a.discovery.start()
     b.discovery.start()
@@ -361,12 +367,12 @@ describe('messenger 回环集成', () => {
   })
 
   it('短文本 UDP 无 ACK 时自动降级为 TCP 控制帧', async () => {
-    nextPort += 20
-    const a = await makeStack('alice', nextPort)
-    const peer = makeProfile('bob', nextPort + 8)
+    const a = await makeStack('alice')
+    const peer = makeProfile('bob')
+    const silent = await silentUdp()
     const incoming: Envelope[] = []
     const server = new TransferServer(
-      peer.tcpPort,
+      0,
       {
         resolve: () => null,
         receiveMessage: (env) => {
@@ -378,7 +384,8 @@ describe('messenger 回环集成', () => {
     )
     tcpServers.push(server)
     await server.start()
-    a.registry.touch(peer.nodeId, '127.0.0.1', nextPort + 8, peer)
+    peer.tcpPort = server.port
+    a.registry.touch(peer.nodeId, '127.0.0.1', silent.port, peer)
 
     const outcome = await a.messenger.sendUserMessage(
       peer.nodeId,
@@ -394,9 +401,8 @@ describe('messenger 回环集成', () => {
   })
 
   it('重复消息：只入账一次，但每次都回 ACK', async () => {
-    nextPort += 2
-    const a = await makeStack('alice', nextPort)
-    const b = await makeStack('bob', nextPort + 1, [{ host: '127.0.0.1', port: a.port }])
+    const a = await makeStack('alice')
+    const b = await makeStack('bob', [{ host: '127.0.0.1', port: a.port }])
     a.discovery.start()
     b.discovery.start()
     await waitFor(() => a.registry.get(b.profile.nodeId)?.online === true)
@@ -411,10 +417,9 @@ describe('messenger 回环集成', () => {
   })
 
   it('群扇出：同一信封并发发给两个成员，互不串线（等待表复合键）', async () => {
-    nextPort += 4
-    const a = await makeStack('alice', nextPort)
-    const b = await makeStack('bob', nextPort + 1, [{ host: '127.0.0.1', port: a.port }])
-    const c = await makeStack('carol', nextPort + 2, [{ host: '127.0.0.1', port: a.port }])
+    const a = await makeStack('alice')
+    const b = await makeStack('bob', [{ host: '127.0.0.1', port: a.port }])
+    const c = await makeStack('carol', [{ host: '127.0.0.1', port: a.port }])
     a.discovery.start()
     b.discovery.start()
     c.discovery.start()
@@ -442,9 +447,8 @@ describe('messenger 回环集成', () => {
   })
 
   it('update 请求走可靠控制报文 ACK 并投递', async () => {
-    nextPort += 2
-    const a = await makeStack('alice', nextPort)
-    const b = await makeStack('bob', nextPort + 1, [{ host: '127.0.0.1', port: a.port }])
+    const a = await makeStack('alice')
+    const b = await makeStack('bob', [{ host: '127.0.0.1', port: a.port }])
     a.discovery.start()
     b.discovery.start()
     await waitFor(() => a.registry.get(b.profile.nodeId)?.online === true)
@@ -466,12 +470,11 @@ describe('messenger 回环集成', () => {
   })
 
   it('联系人头像通过 127.0.0.1 可靠请求并以 TCP 数据响应落入对端缓存', async () => {
-    nextPort += 20
     const sourceRoot = await mkdtemp(join(tmpdir(), 'pantry-avatar-loop-source-'))
     const targetRoot = await mkdtemp(join(tmpdir(), 'pantry-avatar-loop-target-'))
     try {
-      const a = await makeStack('avatar-source', nextPort)
-      const b = await makeStack('avatar-target', nextPort + 5, [
+      const a = await makeStack('avatar-source')
+      const b = await makeStack('avatar-target', [
         { host: '127.0.0.1', port: a.port }
       ])
       const bytes = avatarWebp()
@@ -515,12 +518,11 @@ describe('messenger 回环集成', () => {
   })
 
   it('来源缓存缺失时经 UDP 单发 miss 提示，请求方完整收到（决议 #249）', async () => {
-    nextPort += 30
     const sourceRoot = await mkdtemp(join(tmpdir(), 'pantry-avatar-miss-source-'))
     const targetRoot = await mkdtemp(join(tmpdir(), 'pantry-avatar-miss-target-'))
     try {
-      const a = await makeStack('miss-source', nextPort)
-      const b = await makeStack('miss-target', nextPort + 5, [
+      const a = await makeStack('miss-source')
+      const b = await makeStack('miss-target', [
         { host: '127.0.0.1', port: a.port }
       ])
       const bytes = avatarWebp()
@@ -566,9 +568,8 @@ describe('messenger 回环集成', () => {
   })
 
   it('离线入队 → 对方上线自动补发（含跨"重启"）', async () => {
-    nextPort += 4
-    const a = await makeStack('alice', nextPort)
-    const b = await makeStack('bob', nextPort + 1, [{ host: '127.0.0.1', port: a.port }])
+    const a = await makeStack('alice')
+    const b = await makeStack('bob', [{ host: '127.0.0.1', port: a.port }])
     a.discovery.start()
     b.discovery.start()
     await waitFor(() => a.registry.get(b.profile.nodeId)?.online === true)
@@ -585,13 +586,14 @@ describe('messenger 回环集成', () => {
     expect(outcome).toBe('queued')
     expect(a.queue.items).toHaveLength(1)
 
-    // B "重启"：同身份新栈、同端口
-    const b2 = await makeStack('bob', b.port, [{ host: '127.0.0.1', port: a.port }])
+    // B "重启"：同身份新栈，由内核重新分配端口。
+    const b2 = await makeStack('bob', [{ host: '127.0.0.1', port: a.port }])
     const sentStatuses: string[] = []
     a.messenger.on('status', (_id: string, status: string) => sentStatuses.push(status))
     b2.discovery.start() // entry → A 的 registry 翻在线 → 补发发车
 
     await waitFor(() => b2.incoming.length === 1)
+    expect(a.registry.get(b2.profile.nodeId)?.udpPort).toBe(b2.port)
     const payload = b2.incoming[0].payload as MsgPayload
     expect(payload.kind).toBe('text')
     if (payload.kind === 'text') expect(payload.text).toBe('你不在的时候发的')
@@ -601,8 +603,7 @@ describe('messenger 回环集成', () => {
   })
 
   it('撤回发送中的消息会取消后续入队，避免原文离线补发', async () => {
-    nextPort += 2
-    const a = await makeStack('alice', nextPort)
+    const a = await makeStack('alice')
     const env = textEnv(a.profile.nodeId, '这条会立刻撤回')
 
     const sending = a.messenger.sendUserMessage('node-missing', env)
@@ -613,8 +614,7 @@ describe('messenger 回环集成', () => {
   })
 
   it('未知收件人快速入队，不等待 ACK 重试窗口', async () => {
-    nextPort += 2
-    const a = await makeStack('alice', nextPort)
+    const a = await makeStack('alice')
     const env = textEnv(a.profile.nodeId, '从未见过的群成员')
 
     const outcome = await Promise.race([
@@ -627,8 +627,7 @@ describe('messenger 回环集成', () => {
   })
 
   it('撤回非发送或补发中的消息不留下取消键', () => {
-    nextPort += 2
-    const udp = new UdpChannel({ port: nextPort, bindAddress: '127.0.0.1', broadcastTargets: [] })
+    const udp = new UdpChannel({ port: 0, bindAddress: '127.0.0.1', broadcastTargets: [] })
     const messenger = new Messenger({
       udp,
       registry: new PeerRegistry('node-alice'),
@@ -645,8 +644,7 @@ describe('messenger 回环集成', () => {
   })
 
   it('退出期数据库已关闭时忽略晚到的补发触发', async () => {
-    nextPort += 2
-    const udp = new UdpChannel({ port: nextPort, bindAddress: '127.0.0.1', broadcastTargets: [] })
+    const udp = new UdpChannel({ port: 0, bindAddress: '127.0.0.1', broadcastTargets: [] })
     const registry = new PeerRegistry('node-alice')
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     new Messenger({
@@ -658,7 +656,7 @@ describe('messenger 回环集成', () => {
       timings: FAST
     })
 
-    registry.touch('node-bob', '127.0.0.1', nextPort + 1, makeProfile('bob', nextPort + 1))
+    registry.touch('node-bob', '127.0.0.1', 1, makeProfile('bob'))
     await sleep(0)
 
     expect(warn).not.toHaveBeenCalled()
