@@ -134,7 +134,6 @@ class HeldReadable extends Readable {
 
 class SlowFileWritable extends Writable {
   readonly inner: ReturnType<typeof createWriteStream>
-  private readonly innerClosed: Promise<void>
   maxBuffered = 0
 
   constructor(
@@ -145,7 +144,6 @@ class SlowFileWritable extends Writable {
   ) {
     super({ highWaterMark })
     this.inner = createWriteStream(path, { flags, highWaterMark: 16 * 1024 })
-    this.innerClosed = new Promise(resolve => this.inner.once('close', resolve))
     this.inner.on('error', (err) => this.destroy(err))
   }
 
@@ -187,9 +185,8 @@ class SlowFileWritable extends Writable {
   }
 
   _destroy(error: Error | null, callback: (error?: Error | null) => void): void {
-    // 外层 close 必须代表真实文件已关闭，destroy() 本身不会同步关闭 fd。
     this.inner.destroy()
-    void this.innerClosed.then(() => callback(error))
+    callback(error)
   }
 }
 
@@ -198,50 +195,32 @@ afterEach(async () => {
   for (const dir of tmpDirs.splice(0)) await removeTmpWithRetry(dir)
 })
 
-// 由实际监听器占住内核分配的端口，不能先探测空闲端口再关闭重绑。
-async function listenServer(server: TransferServer): Promise<number> {
-  servers.push(server)
-  await server.start()
-  return server.port
-}
+let nextPort = 45000 + Math.floor(Math.random() * 1000)
 
 async function startServer(
   files: Map<string, Map<string, OutgoingFile>>,
   openReadStream?: ReadStreamFactory
 ): Promise<number> {
+  nextPort += 1
   const server = new TransferServer(
-    0,
+    nextPort,
     {
       resolve: (transferId, fileId) => files.get(transferId)?.get(fileId) ?? null
     },
     '127.0.0.1',
     openReadStream
   )
-  return listenServer(server)
+  await server.start()
+  servers.push(server)
+  return nextPort
 }
 
 describe('transfer 数据面回环', () => {
-  it('并行监听端口 0 时分配独立端口，停止后可重新分配', async () => {
-    const listeners = Array.from({ length: 3 }, () =>
-      new TransferServer(0, { resolve: () => null }, '127.0.0.1')
-    )
-    const ports = await Promise.all(listeners.map(listenServer))
-    expect(ports.every(port => port > 0)).toBe(true)
-    expect(new Set(ports).size).toBe(listeners.length)
-    for (const port of ports) (await connectSocket(port)).destroy()
-    const server = listeners[0]
-    await server.stop()
-    expect(server.port).toBe(0)
-    await server.start()
-    expect(server.port).toBeGreaterThan(0)
-    const socket = await connectSocket(server.port)
-    socket.destroy()
-  })
-
   it('记录已通过 pull 授权的活动 transfer，并在连接断开时清除', async () => {
+    nextPort += 1
     const held = new HeldReadable()
     const server = new TransferServer(
-      0,
+      nextPort,
       {
         resolve: (transferId, fileId) =>
           transferId === 't-active' && fileId === 'f-active'
@@ -253,9 +232,10 @@ describe('transfer 数据面回环', () => {
     )
     const disconnected: string[] = []
     server.on('disconnected', (transferId) => disconnected.push(transferId as string))
-    const port = await listenServer(server)
+    await server.start()
+    servers.push(server)
 
-    const socket = await connectSocket(port)
+    const socket = await connectSocket(nextPort)
     expect(server.isTransferActive('t-active')).toBe(false)
     socket.write(
       encodeFrame({
@@ -273,6 +253,7 @@ describe('transfer 数据面回环', () => {
   })
 
   it('发送端最多同时打开 3 条数据读流，第四条授权拉取按 FIFO 等待', async () => {
+    nextPort += 1
     const held: HeldReadable[] = []
     const opened: string[] = []
     const files = new Map<string, OutgoingFile>()
@@ -280,7 +261,7 @@ describe('transfer 数据面回环', () => {
       files.set(`t${i}`, { fileId: `f${i}`, absPath: `/virtual/t${i}`, size: 1 })
     }
     const server = new TransferServer(
-      0,
+      nextPort,
       {
         resolve: (transferId, fileId) => {
           const file = files.get(transferId)
@@ -295,11 +276,12 @@ describe('transfer 数据面回环', () => {
         return stream as unknown as ReturnType<ReadStreamFactory>
       }
     )
-    const port = await listenServer(server)
+    await server.start()
+    servers.push(server)
 
     const sockets: Socket[] = []
     for (let i = 1; i <= 4; i++) {
-      const socket = await connectSocket(port)
+      const socket = await connectSocket(nextPort)
       sockets.push(socket)
       socket.write(
         encodeFrame({ type: 'pull', from: 'receiver', transferId: `t${i}`, fileId: `f${i}`, offset: 0 })
@@ -319,12 +301,14 @@ describe('transfer 数据面回环', () => {
   })
 
   it('连接总数达到上限时立即关闭新连接', async () => {
+    nextPort += 1
     const limits: Partial<TransferServerLimits> = { maxConnections: 1, handshakeTimeoutMs: 1_000 }
-    const server = new TransferServer(0, { resolve: () => null }, '127.0.0.1', undefined, limits)
-    const port = await listenServer(server)
+    const server = new TransferServer(nextPort, { resolve: () => null }, '127.0.0.1', undefined, limits)
+    await server.start()
+    servers.push(server)
 
-    const first = await connectSocket(port)
-    const second = await connectSocket(port)
+    const first = await connectSocket(nextPort)
+    const second = await connectSocket(nextPort)
 
     await expect(closesWithin(second)).resolves.toBe(true)
     expect(first.destroyed).toBe(false)
@@ -332,17 +316,19 @@ describe('transfer 数据面回环', () => {
   })
 
   it('握手阶段和有效控制阶段分别应用可注入空闲超时', async () => {
+    nextPort += 1
     const limits: Partial<TransferServerLimits> = {
       handshakeTimeoutMs: 30,
       idleTimeoutMs: 45
     }
-    const server = new TransferServer(0, { resolve: () => null }, '127.0.0.1', undefined, limits)
-    const port = await listenServer(server)
+    const server = new TransferServer(nextPort, { resolve: () => null }, '127.0.0.1', undefined, limits)
+    await server.start()
+    servers.push(server)
 
-    const silent = await connectSocket(port)
+    const silent = await connectSocket(nextPort)
     await expect(closesWithin(silent)).resolves.toBe(true)
 
-    const active = await connectSocket(port)
+    const active = await connectSocket(nextPort)
     active.write(encodeFrame({ type: 'finish', transferId: 't-finished' }))
     await delay(35)
     expect(active.destroyed).toBe(false)
@@ -353,26 +339,28 @@ describe('transfer 数据面回环', () => {
     const dir = makeTmp()
     const path = join(dir, 'valid.txt')
     writeFileSync(path, 'hello')
+    nextPort += 1
     const server = new TransferServer(
-      0,
+      nextPort,
       { resolve: (id) => id === 'valid-transfer' ? { fileId: 'f1', absPath: path, size: 5 } : null },
       '127.0.0.1'
     )
     const served: string[] = []
     server.on('served', (transferId) => served.push(transferId as string))
-    const port = await listenServer(server)
+    await server.start()
+    servers.push(server)
 
-    const badSocket = await connectSocket(port)
+    const badSocket = await connectSocket(nextPort)
     const badClosed = waitForClose(badSocket)
     badSocket.write(encodeUnknownFrame({ type: 'finish', transferId: {} }))
     await badClosed
 
-    const goodSocket = await connectSocket(port)
+    const goodSocket = await connectSocket(nextPort)
     goodSocket.write(encodeFrame({ type: 'finish', transferId: 'valid-transfer' }))
     await delay(20)
     expect(served).toEqual([]) // 未授权拉取过的 finish 不能伪造送达。
     goodSocket.destroy()
-    await pullTransfer({ host: '127.0.0.1', port, selfId: 'receiver',
+    await pullTransfer({ host: '127.0.0.1', port: nextPort, selfId: 'receiver',
       transferId: 'valid-transfer', files: [{ fileId: 'f1', relPath: 'copy.txt', size: 5 }],
       saveDir: dir, cancelRef: { canceled: false, socket: null }, onProgress: () => undefined })
     await waitFor(() => served.length > 0)
@@ -723,11 +711,12 @@ describe('transfer 数据面回环', () => {
   }, 15_000)
 
   it('排队时向声明 tw1 的接收端发 wait 帧，槽位释放后正常完成（决议 #211）', async () => {
+    nextPort += 1
     const dst = makeTmp()
     const held = new HeldReadable()
     const body = Buffer.alloc(2048, 0x42)
     const server = new TransferServer(
-      0,
+      nextPort,
       {
         resolve: (transferId, fileId) => {
           if (transferId === 't-hold' && fileId === 'fh') {
@@ -747,10 +736,11 @@ describe('transfer 数据面回环', () => {
       },
       { maxConcurrentStreams: 1, waitHeartbeatMs: 30 }
     )
-    const port = await listenServer(server)
+    await server.start()
+    servers.push(server)
 
     // 第一条连接占住唯一数据流槽位
-    const holder = await connectSocket(port)
+    const holder = await connectSocket(nextPort)
     holder.write(
       encodeFrame({ type: 'pull', from: 'node-old', transferId: 't-hold', fileId: 'fh', offset: 0 })
     )
@@ -759,7 +749,7 @@ describe('transfer 数据面回环', () => {
     const queuedStates: boolean[] = []
     const pull = pullTransfer({
       host: '127.0.0.1',
-      port,
+      port: nextPort,
       selfId: 'node-new',
       transferId: 't-queued',
       files: [{ fileId: 'fq', relPath: 'queued.bin', size: body.length }],
@@ -781,9 +771,10 @@ describe('transfer 数据面回环', () => {
   }, 15_000)
 
   it('对端未声明 tw1 时排队不发 wait 帧（旧端遇未知帧型会断链）', async () => {
+    nextPort += 1
     const held = new HeldReadable()
     const server = new TransferServer(
-      0,
+      nextPort,
       {
         resolve: (transferId) =>
           transferId === 't-hold' || transferId === 't-old'
@@ -795,15 +786,16 @@ describe('transfer 数据面回环', () => {
       () => held as unknown as ReturnType<ReadStreamFactory>,
       { maxConcurrentStreams: 1, waitHeartbeatMs: 20 }
     )
-    const port = await listenServer(server)
+    await server.start()
+    servers.push(server)
 
-    const holder = await connectSocket(port)
+    const holder = await connectSocket(nextPort)
     holder.write(
       encodeFrame({ type: 'pull', from: 'node-a', transferId: 't-hold', fileId: 'f', offset: 0 })
     )
     await delay(20)
 
-    const queuedSocket = await connectSocket(port)
+    const queuedSocket = await connectSocket(nextPort)
     const received: string[] = []
     const reader = new FrameReader(
       (frame) => received.push(frame.type),

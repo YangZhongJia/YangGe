@@ -38,7 +38,7 @@ export class UdpChannel extends EventEmitter {
   }
 
   get port(): number {
-    return this.socket?.address().port ?? this.opts.port
+    return this.opts.port
   }
 
   start(): Promise<void> {
@@ -87,7 +87,7 @@ export class UdpChannel extends EventEmitter {
   /** 向所有目标地址广播（同端口） */
   broadcast(env: Envelope): void {
     for (const addr of this.broadcastAddrs()) {
-      this.send(env, addr, this.port)
+      this.send(env, addr, this.opts.port)
     }
   }
 

@@ -4,28 +4,6 @@ import { MSG_TYPES } from '../../shared/protocol'
 import { encode, makeEnvelope } from './codec'
 import { UdpChannel } from './udp'
 
-it('端口 0 返回实际绑定端口，并用于回环广播', async () => {
-  const channels = Array.from({ length: 2 }, () =>
-    new UdpChannel({ port: 0, bindAddress: '127.0.0.1', broadcastTargets: ['127.0.0.1'] })
-  )
-  try {
-    await Promise.all(channels.map(channel => channel.start()))
-    expect(channels.every(channel => channel.port > 0)).toBe(true)
-    expect(new Set(channels.map(channel => channel.port)).size).toBe(channels.length)
-    const udp = channels[0]
-    const received = vi.fn()
-    udp.on('envelope', received)
-    const env = makeEnvelope(MSG_TYPES.presence, 'loopback', { seq: 1, profileRev: 1 })
-    udp.broadcast(env)
-    await expect.poll(() => received.mock.calls.length).toBe(1)
-    expect(received.mock.calls[0][0]).toEqual(env)
-    expect(received.mock.calls[0][2].port).toBe(udp.port)
-  } finally {
-    await Promise.all(channels.map(channel => channel.stop()))
-  }
-  expect(channels.every(channel => channel.port === 0)).toBe(true)
-})
-
 interface Bucket {
   tokens: number
   last: number

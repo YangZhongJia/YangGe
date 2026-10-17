@@ -88,7 +88,7 @@ export class TransferServer extends EventEmitter {
   private pumpingStreamStarts = false
 
   constructor(
-    private readonly requestedPort: number,
+    private readonly port: number,
     private readonly lookup: OutgoingLookup,
     private readonly bindAddress?: string,
     private readonly openReadStream: ReadStreamFactory = createReadStream,
@@ -123,7 +123,7 @@ export class TransferServer extends EventEmitter {
         this.serve(socket)
       })
       server.once('error', reject)
-      server.listen(this.requestedPort, this.bindAddress, () => {
+      server.listen(this.port, this.bindAddress, () => {
         server.removeListener('error', reject)
         server.on('error', error => this.emit('diagnostic-error', error)) // 运行期错误不致命
         this.server = server
@@ -134,12 +134,6 @@ export class TransferServer extends EventEmitter {
 
   get listening(): boolean {
     return this.server?.listening === true
-  }
-
-  /** 监听后返回实际端口（支持传入 0）；停止时返回配置的端口。 */
-  get port(): number {
-    const address = this.server?.address()
-    return address && typeof address !== 'string' ? address.port : this.requestedPort
   }
 
   isTransferActive(transferId: string): boolean {
@@ -468,15 +462,8 @@ export interface PullOptions {
   /** 测试注入：预哈希保活间隔与读取流。 */
   waitHeartbeatMs?: number
   openReadStream?: ReadStreamFactory
-  /** 测试注入：默认写入真实文件系统；替身也须在底层句柄关闭后发出 close。 */
+  /** 测试注入：默认写入真实文件系统 */
   openWriteStream?: WriteStreamFactory
-}
-
-function streamClosePromise(stream: ReturnType<ReadStreamFactory> | ReturnType<WriteStreamFactory>): Promise<void> {
-  // Node 16 没有通用的 closed 属性：创建流后立即监听，保存 Promise 以免错过 close。
-  // destroyed 只表示开始销毁，此时真实文件的 fd 仍可能打开，不能跳过等待。
-  if ((stream as typeof stream & { closed?: boolean }).closed) return Promise.resolve()
-  return new Promise(resolve => stream.once('close', resolve))
 }
 
 /** 接收侧：连接发送方逐文件拉取；保留 .part 时可从 offset 断点续传。 */
@@ -496,7 +483,6 @@ export function pullTransfer(opts: PullOptions): Promise<void> {
       partPath: string
       finalPath: string
       stream: ReturnType<WriteStreamFactory>
-      closed: Promise<void>
       hash: ReturnType<typeof createHash>
       left: number
       /** pull-ok 已到达：之后的 wait 帧只是哈希收尾保活，不再是排队状态 */
@@ -507,14 +493,12 @@ export function pullTransfer(opts: PullOptions): Promise<void> {
     /** 写盘背压 pause 后，文件切换时 end() 可能吞掉 drain，须显式 resume */
     let socketPaused = false
     let preparingStream: ReturnType<ReadStreamFactory> | null = null
-    let preparingClosed = Promise.resolve()
     let prepareHeartbeat: ReturnType<typeof setInterval> | null = null
-    const stopPreparing = (): Promise<void> => {
+    const stopPreparing = (): void => {
       if (prepareHeartbeat) clearInterval(prepareHeartbeat)
       prepareHeartbeat = null
       preparingStream?.destroy()
       preparingStream = null
-      return preparingClosed
     }
     const removePart = (path: string): void => {
       try {
@@ -529,31 +513,25 @@ export function pullTransfer(opts: PullOptions): Promise<void> {
       if (!settled && !socket.destroyed) socket.resume()
     }
 
-    const fail = (reason: string, error?: unknown, partToRemove?: string): void => {
+    const fail = (reason: string, error?: unknown): void => {
       if (settled) return
       settled = true
-      const prepared = stopPreparing()
+      stopPreparing()
       resumeSocket()
-      const item = current
-      if (item) item.stream.destroy()
-      socket.destroy()
-      const failure = Object.assign(new Error(reason), { stage, code: (error as { code?: unknown } | undefined)?.code })
-      void Promise.all([prepared, item?.closed]).then(() => {
+      if (current) {
+        current.stream.destroy()
         // 取消不再清 .part（决议 #211）：留给「重新下载」断点续传
-        if (partToRemove) {
-          removePart(partToRemove)
-        } else if (
-          item && (
-            reason === 'hash-mismatch' ||
-            reason === 'size-mismatch' ||
-            reason === 'path-escape' ||
-            reason === 'part-read-error'
-          )
+        if (
+          reason === 'hash-mismatch' ||
+          reason === 'size-mismatch' ||
+          reason === 'path-escape' ||
+          reason === 'part-read-error'
         ) {
-          removePart(item.partPath)
+          removePart(current.partPath)
         }
-        reject(failure)
-      })
+      }
+      socket.destroy()
+      reject(Object.assign(new Error(reason), { stage, code: (error as { code?: unknown } | undefined)?.code }))
     }
 
     const succeed = (): void => {
@@ -631,7 +609,6 @@ export function pullTransfer(opts: PullOptions): Promise<void> {
           partPath,
           finalPath,
           stream,
-          closed: streamClosePromise(stream),
           hash,
           left: plan.size - offset,
           started: false,
@@ -671,18 +648,17 @@ export function pullTransfer(opts: PullOptions): Promise<void> {
       try {
         const existing = (opts.openReadStream ?? createReadStream)(partPath, { start: 0, end: offset - 1 })
         preparingStream = existing
-        preparingClosed = streamClosePromise(existing)
         existing.on('data', (chunk) => { if (canContinue()) hash.update(chunk) })
         existing.on('error', error => {
           if (!canContinue()) return
-          fail('part-read-error', error, partPath)
+          removePart(partPath)
+          fail('part-read-error', error)
         })
         existing.on('end', () => {
-          void stopPreparing().then(() => {
-            if (!canContinue()) return
-            if (opts.supportsWait) startPull()
-            else connect(startPull)
-          })
+          stopPreparing()
+          if (!canContinue()) return
+          if (opts.supportsWait) startPull()
+          else connect(startPull)
         })
       } catch (error) {
         fail('part-read-error', error)
@@ -722,26 +698,25 @@ export function pullTransfer(opts: PullOptions): Promise<void> {
             resumeSocket()
             item.stream.end((error?: Error | null) => {
               if (error) { fail('write-error', error); return }
-              // end 回调只保证 finish；Windows 必须等 fd 关闭才能改名、删除或报告完成。
-              void item.closed.then(() => {
+              if (!canContinue()) return
+              const got = item.hash.digest('hex')
+              if (got !== frame.sha256) {
+                removePart(item.partPath)
+                fail('hash-mismatch')
+                return
+              }
+              // 重名避让（F-FILE-3 不覆盖）：根级避让在服务层，此处兜底逐文件避让
+              try {
+                phase('write')
                 if (!canContinue()) return
-                const got = item.hash.digest('hex')
-                if (got !== frame.sha256) {
-                  fail('hash-mismatch')
-                  return
-                }
-                // 重名避让（F-FILE-3 不覆盖）：根级避让在服务层，此处兜底逐文件避让
-                try {
-                  phase('write')
-                  if (!canContinue()) return
-                  renameSync(item.partPath, dedupeTargetPath(item.finalPath))
-                } catch (error) {
-                  fail('write-error', error, item.partPath)
-                  return
-                }
-                current = null
-                next()
-              })
+                renameSync(item.partPath, dedupeTargetPath(item.finalPath))
+              } catch (error) {
+                removePart(item.partPath)
+                fail('write-error', error)
+                return
+              }
+              current = null
+              next()
             })
           }
         },
