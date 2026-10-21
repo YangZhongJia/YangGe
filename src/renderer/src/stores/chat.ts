@@ -12,6 +12,7 @@ import type {
 } from '../../../shared/ipc'
 import type { PkGame } from '../../../shared/pk'
 import { isWindowAttended } from '../utils/window-attention'
+import type { PendingAttachment } from '../utils/pending-attachments'
 
 // 主进程聊天数据的投影 + 乐观更新（tech-design §7 状态流）
 let nudgeClearTimer: ReturnType<typeof setTimeout> | null = null
@@ -73,10 +74,21 @@ interface ConversationScrollPosition {
   atBottom: boolean
 }
 
+interface ConversationDraft {
+  text: string
+  mentionIds: string[]
+  replyToId: string | null
+  attachments: Pick<PendingAttachment, 'file' | 'name' | 'path'>[]
+}
+
 export const useChatStore = defineStore('chat', {
   state: () => ({
     convs: [] as ConversationView[],
     activeConvId: null as string | null,
+    /** 主动收起后保持空白，远端抖一抖不能代替用户重新打开。 */
+    hiddenConvId: null as string | null,
+    /** 仅驻留当前进程；收起/切换不丢草稿，不写入磁盘。 */
+    drafts: {} as Record<string, ConversationDraft>,
     /** 本次打开会话后消息区应如何定位（纯渲染层状态，决议 #111） */
     openScrollMode: 'latest' as ConversationOpenScrollMode,
     openScrollRun: 0,
@@ -160,6 +172,7 @@ export const useChatStore = defineStore('chat', {
         this.updateConversationMessageStatus(event.convId, event.id, event.status)
       })
       window.pantry.onNudgeReceived((event) => {
+        if (this.hiddenConvId) return
         const run = ++nudgeOpenRun
         void this.openConv(event.convId, { scroll: 'latest' }).then(() => {
           if (run !== nudgeOpenRun) return
@@ -183,12 +196,30 @@ export const useChatStore = defineStore('chat', {
       })
     },
 
+    /** 仅会话列表具有再次点击收起语义；通知、搜索等入口始终打开。 */
+    async toggleConv(convId: string): Promise<void> {
+      if (this.activeConvId !== convId) {
+        await this.openConv(convId)
+        return
+      }
+      ++navigationRun
+      ++nudgeOpenRun
+      this.hiddenConvId = convId
+      this.activeConvId = null
+      this.highlightId = null
+      this.viewingHistory = false
+      this.lastNudge = null
+      if (nudgeClearTimer) clearTimeout(nudgeClearTimer)
+      nudgeClearTimer = null
+    },
+
     /** 从通讯录或会话列表进入会话 */
     async openPeer(
       peerNodeId: string,
       options: OpenConversationOptions = { scroll: 'latest' },
       run = ++navigationRun
     ): Promise<void> {
+      this.hiddenConvId = null
       const scroll = options.scroll ?? 'latest'
       const conv = await window.pantry.openConversation(peerNodeId)
       if (!conv || run !== navigationRun) return
@@ -209,6 +240,7 @@ export const useChatStore = defineStore('chat', {
     /** 按会话 id 打开（会话列表 / 群会话 / 通知跳转通用）：用户主动进入默认看最新（决议 #192）。 */
     async openConv(convId: string, options: OpenConversationOptions = { scroll: 'latest' }): Promise<void> {
       const run = ++navigationRun
+      this.hiddenConvId = null
       const scroll = options.scroll ?? 'latest'
       if (convId.startsWith('single:')) {
         await this.openPeer(convId.slice(7), { scroll }, run)
@@ -230,6 +262,7 @@ export const useChatStore = defineStore('chat', {
     /** 搜索结果跳转：载入目标前后窗口并短暂高亮（ui-design §6） */
     async jumpToMessage(convId: string, seq: number, msgId: string): Promise<void> {
       const run = ++navigationRun
+      this.hiddenConvId = null
       if (convId.startsWith('single:')) {
         const conv = await window.pantry.openConversation(convId.slice(7))
         if (!conv || run !== navigationRun) return
@@ -267,9 +300,10 @@ export const useChatStore = defineStore('chat', {
       return list ? messageCacheFor(convId, list).byId.get(msgId) : undefined
     },
     async jumpToMessageById(msgId: string): Promise<void> {
-      const info = await this.getMessageById(msgId)
-      if (!info) return
       const run = ++navigationRun
+      this.hiddenConvId = null
+      const info = await this.getMessageById(msgId)
+      if (!info || run !== navigationRun) return
       if (info.convId.startsWith('single:')) {
         const conv = await window.pantry.openConversation(info.convId.slice(7))
         if (!conv || run !== navigationRun) return
@@ -431,6 +465,7 @@ export const useChatStore = defineStore('chat', {
       delete this.messages[pending.convId]
       dropMessageCache(pending.convId)
       delete this.scrollPositions[pending.convId]
+      delete this.drafts[pending.convId]
     },
 
     clearRemovalTimers(): void {

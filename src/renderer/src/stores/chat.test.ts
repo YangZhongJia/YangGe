@@ -450,6 +450,37 @@ describe('未读置读需窗口可见且聚焦（决议 #220）', () => {
     expect(markRead).toHaveBeenCalledWith('single:node-bob')
   })
 
+  it('主动收起后，新消息和重新聚焦均不置读或打开聊天', async () => {
+    const { markRead } = stubEnv({ visibilityState: 'visible', focused: true })
+    const store = useChatStore()
+    await store.init()
+    store.activeConvId = 'single:node-bob'
+    store.convs = [{ ...conv(), unread: 2 }]
+    store.setConversationMessages('single:node-bob', [])
+    await store.toggleConv('single:node-bob')
+    msgNewHandler?.(msg('hidden-new'))
+    focusHandler?.()
+    expect(store.activeConv).toBeNull()
+    expect(store.messages['single:node-bob']).toHaveLength(1)
+    expect(store.totalUnread).toBe(2)
+    expect(markRead).not.toHaveBeenCalled()
+  })
+
+  it('隐藏时忽略远端抖一抖，但主动点击通知仍可重新打开', async () => {
+    stubEnv({ visibilityState: 'visible', focused: true })
+    const store = useChatStore()
+    await store.init()
+    store.activeConvId = 'single:node-bob'
+    await store.toggleConv('single:node-bob')
+    const open = vi.spyOn(store, 'openConv').mockResolvedValue(undefined)
+    const nudgeHandler = vi.mocked(window.pantry.onNudgeReceived).mock.calls[0][0]
+    nudgeHandler({ convId: 'single:node-bob', peerId: 'node-bob', ts: Date.now() })
+    expect(open).not.toHaveBeenCalled()
+    const notificationHandler = vi.mocked(window.pantry.onOpenConv).mock.calls[0][0]
+    notificationHandler('single:node-bob')
+    expect(open).toHaveBeenCalledWith('single:node-bob', { scroll: 'latest' })
+  })
+
   it('窗口最小化 / 隐藏到托盘时，当前会话新消息保留未读', async () => {
     const { markRead } = stubEnv({ visibilityState: 'hidden', focused: false })
     const store = useChatStore()
@@ -508,5 +539,90 @@ describe('未读置读需窗口可见且聚焦（决议 #220）', () => {
     focusHandler?.()
 
     expect(markRead).not.toHaveBeenCalled()
+  })
+})
+
+describe('再次点击会话隐藏内容（#59）', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.stubGlobal('window', { pantry: {
+      openConversation: vi.fn(async (id: string) => conv(`single:${id}`)),
+      pageMessages: vi.fn(async (id: string) => [msg('latest', id)]),
+      markRead: vi.fn().mockResolvedValue(undefined),
+      removeConversation: vi.fn()
+    } })
+  })
+  afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks() })
+
+  it.each(['single:node-bob', 'group:team'])('%s 打开、收起、重新打开，记录与会话条目不删除', async (id) => {
+    const store = useChatStore()
+    store.convs = [conv(id)]
+    await store.toggleConv(id)
+    expect(store.activeConvId).toBe(id)
+    const messages = store.messages[id]
+    const scroll = store.openScrollRun
+    await store.toggleConv(id)
+    expect(store.activeConvId).toBeNull()
+    expect(store.hiddenConvId).toBe(id)
+    expect(store.activeMessages).toEqual([])
+    expect(store.messages[id]).toBe(messages)
+    expect(store.visibleConvs).toHaveLength(1)
+    expect(store.openScrollRun).toBe(scroll)
+    expect(window.pantry.removeConversation).not.toHaveBeenCalled()
+    await store.toggleConv(id)
+    expect(store.activeConvId).toBe(id)
+    expect(store.hiddenConvId).toBeNull()
+    expect(store.activeMessages).toHaveLength(1)
+  })
+
+  it('收起使正在读取的最新页失效，不恢复高亮或滚动', async () => {
+    const pending = deferred<MessageView[]>()
+    vi.mocked(window.pantry.pageMessages).mockReturnValueOnce(pending.promise)
+    const store = useChatStore()
+    const opening = store.openConv('group:a')
+    await store.toggleConv('group:a')
+    pending.resolve([msg('late', 'group:a')])
+    await opening
+    expect(store.activeConvId).toBeNull()
+    expect(store.messages['group:a']).toBeUndefined()
+    expect(store.openScrollRun).toBe(0)
+    expect(window.pantry.markRead).not.toHaveBeenCalled()
+  })
+
+  it('收起当前会话后，迟到的单聊打开结果不能恢复界面', async () => {
+    const pending = deferred<ConversationView | null>()
+    vi.mocked(window.pantry.openConversation).mockReturnValueOnce(pending.promise)
+    const store = useChatStore()
+    store.activeConvId = 'group:a'
+    const opening = store.openConv('single:node-bob')
+    await store.toggleConv('group:a')
+    pending.resolve(conv())
+    await opening
+    expect(store.activeConvId).toBeNull()
+    expect(window.pantry.pageMessages).not.toHaveBeenCalled()
+  })
+
+  it('引用定位首阶段迟到时，也不能覆盖用户收起操作', async () => {
+    const pending = deferred<MessageView | null>()
+    window.pantry.getMessageById = vi.fn(() => pending.promise)
+    const store = useChatStore()
+    store.activeConvId = 'group:a'
+    const jumping = store.jumpToMessageById('source')
+    await store.toggleConv('group:a')
+    pending.resolve(msg('source'))
+    await jumping
+    expect(store.activeConvId).toBeNull()
+    expect(window.pantry.openConversation).not.toHaveBeenCalled()
+  })
+
+  it('程序化打开同一个会话始终保持可见，不套用列表的切换语义', async () => {
+    const store = useChatStore()
+    store.activeConvId = 'single:node-bob'
+    await store.openConv('single:node-bob')
+    expect(store.activeConvId).toBe('single:node-bob')
+    await store.toggleConv('single:node-bob')
+    await store.openConv('single:node-bob')
+    expect(store.activeConvId).toBe('single:node-bob')
+    expect(store.hiddenConvId).toBeNull()
   })
 })

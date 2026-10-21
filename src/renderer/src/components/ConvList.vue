@@ -119,9 +119,11 @@ function confirmRemove(): void {
           type="button"
           class="conv"
           :class="{ active: conv.id === chatStore.activeConvId, pinned: conv.pinned }"
-          @click="chatStore.openConv(conv.id)"
+          @click="chatStore.toggleConv(conv.id)"
           @contextmenu.prevent.stop="openMenu($event, conv)"
           :aria-current="conv.id === chatStore.activeConvId ? 'true' : undefined"
+          :aria-expanded="conv.id === chatStore.activeConvId"
+          :title="conv.id === chatStore.activeConvId ? tr('再次点击隐藏聊天内容') : undefined"
         >
           <GroupAvatar
             v-if="conv.type === 'group'"

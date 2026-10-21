@@ -645,7 +645,7 @@ onUnmounted(() => {
         <div class="brand-title">{{ tr('茶话间') }}</div>
         <p class="quote">{{ tr(quote.text) }}</p>
         <p class="quote-author">{{ tr(quote.author) }}</p>
-        <p class="hint">{{ tr('在「通讯录」里选个人，开始第一句话') }}</p>
+        <p class="hint">{{ chatStore.hiddenConvId ? tr('聊天内容已隐藏，点击会话可重新打开') : tr('在「通讯录」里选个人，开始第一句话') }}</p>
       </div>
     </main>
   </div>

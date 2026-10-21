@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { tr } from '../utils/i18n'
 import type { ScreenState, ScreenAvailability } from '../../../shared/remote-view'
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, onUnmounted, ref, watch } from 'vue'
 import { usePeersStore } from '../stores/peers'
 import { useChatStore } from '../stores/chat'
 import { useGroupsStore } from '../stores/groups'
@@ -84,7 +84,6 @@ const sendDisabled = computed(() => attachmentsSending.value || overLimit.value 
   (!draft.value.trim() && !pendingAttachments.value.length) ||
   (pendingAttachments.value.length > 0 && !canSendMedia.value))
 function cancelAttachments(): void { attachments.clear(); markClipboardPasteHandled(); focusInput() }
-watch(() => chatStore.activeConvId, () => { attachments.clear(); markClipboardPasteHandled() }, { flush: 'sync' })
 const screenState = ref<ScreenState | null>(null)
 const screenAvailability = ref<ScreenAvailability | null>(null)
 const screenFeedback = ref('')
@@ -551,15 +550,42 @@ watch(
     closeMentionPicker()
     showHistorySearch.value = false
     closePeerProfile()
-    mentionIds.value = []
     nudgeFeedback.value = null
     clearTablePasteHint()
     resetHistorySearch()
-    replyToId.value = null
     if (isGroup.value && id) void groupsStore.ensure(id)
   },
   { immediate: true }
 )
+
+let draftConvId: string | null = null
+function saveConversationDraft(): void {
+  if (!draftConvId) return
+  if (!draft.value && !pendingAttachments.value.length && !replyToId.value) {
+    delete chatStore.drafts[draftConvId]
+    return
+  }
+  chatStore.drafts[draftConvId] = {
+    text: draft.value,
+    mentionIds: [...mentionIds.value],
+    replyToId: replyToId.value,
+    // 预览 URL 随组件释放，恢复时重新创建；Blob 保持在内存中。
+    attachments: pendingAttachments.value.map(({ file, name, path }) => ({ file, name, path }))
+  }
+}
+watch(() => chatStore.activeConvId, (convId) => {
+  saveConversationDraft()
+  attachments.clear()
+  markClipboardPasteHandled()
+  draftConvId = convId
+  const saved = convId ? chatStore.drafts[convId] : undefined
+  draft.value = saved?.text ?? ''
+  mentionIds.value = [...(saved?.mentionIds ?? [])]
+  replyToId.value = saved?.replyToId ?? null
+  for (const item of saved?.attachments ?? []) attachments.add(item.file, item.name, item.path)
+  if (convId) delete chatStore.drafts[convId]
+}, { immediate: true, flush: 'sync' })
+onBeforeUnmount(saveConversationDraft)
 
 watch([historyQuery, historyKind, historyFrom, historyTo], () => scheduleHistorySearch())
 
