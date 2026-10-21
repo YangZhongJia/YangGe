@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events'
-import { mkdtempSync, rmSync, truncateSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, truncateSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -16,7 +16,7 @@ import {
   type FileCtlPayload,
   type GroupMeta
 } from '../../shared/protocol'
-import type { ConversationView, MessageView } from '../../shared/ipc'
+import type { ConversationView, MessageView, TransferView } from '../../shared/ipc'
 import type { Messenger } from '../net/messenger'
 import type { PeerRegistry } from '../net/peer-registry'
 import type { ConvRepo } from '../store/conv-repo'
@@ -294,6 +294,77 @@ describe('issue #48 传输结果与监听失败', () => {
     }
     return { service, deps, dir, path, messenger, msgRepo, transferRepo, server, ctl, incoming }
   }
+
+  it('#54：真实续传包含已有字节，重复 pull 不重复累加，新一轮接收重置测速', async () => {
+    const { service, path, messenger, ctl } = setup()
+    const body = Buffer.from('abcdefghijklmnop')
+    writeFileSync(path, body)
+    await service.start()
+    const message = await service.offerPaths('node-bob', [path])
+    const transferId = message!.fileRef!.transferId
+    const offer = messenger.sent.find(item => item.env.payload.op === 'offer')!.env.payload as FileCtlOffer
+    const views: TransferView[] = []
+    service.on('transfer', view => views.push({ ...view }))
+    ctl({ op: 'accept', transferId })
+
+    for (const [attempt, offset] of [8, 4, body.length].entries()) {
+      if (attempt === 2) ctl({ op: 'accept', transferId }, 'node-bob', Date.now() + 1)
+      const dst = mkdtempSync(join(tmpdir(), 'teahouse-progress-'))
+      tmpDirs.push(dst)
+      writeFileSync(join(dst, 'resume.part'), body.subarray(0, offset))
+      const start = views.length
+      let received = 0
+      let transferred = 0
+      await transferNet.pullTransfer({
+        host: '127.0.0.1', port: service.availability().port, selfId: 'node-bob',
+        transferId, saveDir: dst, supportsWait: true,
+        files: [{ fileId: offer.files[0].fileId, relPath: 'resume', size: body.length }],
+        cancelRef: { canceled: false, socket: null },
+        onProgress: (delta, networkDelta = delta) => { received += delta; transferred += networkDelta }
+      })
+      await waitFor(() => service.transferView(transferId)?.bytesDone === body.length)
+      const wireBefore = attempt === 1 ? 8 : 0
+      expect(views.slice(start)).toEqual(expect.arrayContaining([
+        expect.objectContaining({ bytesDone: offset, bytesTransferred: wireBefore })
+      ]))
+      expect(service.transferView(transferId)).toMatchObject({
+        bytesDone: body.length, bytesTransferred: wireBefore + body.length - offset
+      })
+      expect(views.slice(start).every(view => view.bytesDone <= body.length)).toBe(true)
+      expect(received).toBe(body.length)
+      expect(transferred).toBe(body.length - offset)
+      expect(readFileSync(join(dst, 'resume'))).toEqual(body)
+    }
+  })
+
+  it('#54：多文件各自的断点合计成总进度，速率计数只含本轮数据', async () => {
+    const { service, dir, path, messenger, ctl } = setup()
+    const second = join(dir, 'second.txt')
+    writeFileSync(second, '1234567')
+    await service.start()
+    const message = await service.offerPaths('node-bob', [path, second])
+    const transferId = message!.fileRef!.transferId
+    const offer = messenger.sent.find(item => item.env.payload.op === 'offer')!.env.payload as FileCtlOffer
+    const dst = mkdtempSync(join(tmpdir(), 'teahouse-multi-progress-'))
+    tmpDirs.push(dst)
+    writeFileSync(join(dst, 'first.part'), 'he')
+    writeFileSync(join(dst, 'second.part'), '123')
+    const views: TransferView[] = []
+    service.on('transfer', view => views.push({ ...view }))
+    ctl({ op: 'accept', transferId })
+    await transferNet.pullTransfer({
+      host: '127.0.0.1', port: service.availability().port, selfId: 'node-bob',
+      transferId, saveDir: dst, supportsWait: true,
+      files: offer.files.map((file, i) => ({ fileId: file.fileId, relPath: i ? 'second' : 'first', size: file.size })),
+      cancelRef: { canceled: false, socket: null }, onProgress: () => undefined
+    })
+    await waitFor(() => service.transferView(transferId)?.bytesDone === 12)
+    expect(views).toEqual(expect.arrayContaining([
+      expect.objectContaining({ bytesDone: 2, bytesTransferred: 0 }),
+      expect.objectContaining({ bytesDone: 8, bytesTransferred: 3 })
+    ]))
+    expect(service.transferView(transferId)).toMatchObject({ bytesDone: 12, bytesTransferred: 7 })
+  })
 
   it('监听异常可控注入：阻止发送并保留接收控制通道，同一服务可重新启动', async () => {
     vi.restoreAllMocks()

@@ -245,6 +245,8 @@ Every frame type has an exact field allowlist. IDs are bounded non-empty strings
 
 Files stream without base64. The sender and receiver calculate SHA-256 while reading/writing. Resume uses the `.part` size as the next `pull.offset`. The receiver constrains every path to its approved destination and adds a suffix for collisions.
 
+Resume progress and speed (issue #54): both sides include existing `.part` bytes in total progress. The sender aggregates absolute positions per file, so repeated pulls do not add the same offset again. Speed uses only bytes transferred in the current receive attempt; prehashing adds no artificial throughput, and a new acceptance resets the counters. The local IPC projection adds `bytesTransferred`; wire frames, capability flags and database storage are unchanged.
+
 Resource budgets:
 
 - Three active sender data streams; excess authorized pulls queue FIFO.

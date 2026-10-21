@@ -321,6 +321,8 @@ export class TransferServer extends EventEmitter {
           const len = currentFile.size - offset
           let sentBytes = 0
           send({ type: 'pull-ok', fileId: currentFile.fileId, len } satisfies PullOkFrame)
+          // 总进度包含已有断点；delta 只记本轮供流，不能把 offset 当作网络速度。
+          this.emit('progress', pull.transferId, 0, currentFile.fileId, offset)
           const hash = createHash('sha256')
           const asBuffer = (chunk: Buffer | string): Buffer =>
             Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
@@ -330,7 +332,7 @@ export class TransferServer extends EventEmitter {
           ): void => {
             const data = asBuffer(chunk)
             sentBytes += data.length
-            this.emit('progress', pull.transferId, data.length)
+            this.emit('progress', pull.transferId, data.length, currentFile.fileId, offset + sentBytes)
             if (!socket.write(data) && !waitingDrain) {
               waitingDrain = true
               stream.pause()
@@ -456,7 +458,7 @@ export interface PullOptions {
   transferId: string
   files: IncomingFilePlan[]
   saveDir: string
-  onProgress: (bytesDelta: number) => void
+  onProgress: (bytesDelta: number, transferredDelta?: number) => void
   /** 由服务侧设置以支持取消：destroy 当前 socket */
   cancelRef: { canceled: boolean; socket: Socket | null }
   /** 排队状态回调（决议 #211）：收到 wait 帧且尚未开始供流时 true，pull-ok 到达后 false */
@@ -612,7 +614,7 @@ export function pullTransfer(opts: PullOptions): Promise<void> {
       } catch {
         offset = 0
       }
-      if (offset > 0) opts.onProgress(offset)
+      if (offset > 0) opts.onProgress(offset, 0)
       const hash = createHash('sha256')
       const startPull = (): void => {
         stopPreparing()
