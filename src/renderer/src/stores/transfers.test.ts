@@ -78,6 +78,32 @@ describe('传输懒读取去重与实时状态优先', () => {
     return { store, push: (view: TransferView) => onUpdate(view) }
   }
 
+  it('续传已有字节不制造高速，实际新字节计速，重试归零不产生负速率', () => {
+    const clock = vi.spyOn(Date, 'now')
+    try {
+      const { store, push } = liveStore()
+      clock.mockReturnValue(1000)
+      push({ ...transfer, status: 'accepted', bytesDone: 0, bytesTransferred: 0 })
+      clock.mockReturnValue(2000)
+      push({ ...transfer, status: 'accepted', bytesDone: 60, bytesTransferred: 0 })
+      expect(store.speed.t1).toBe(0)
+      clock.mockReturnValue(3000)
+      push({ ...transfer, status: 'accepted', bytesDone: 80, bytesTransferred: 20 })
+      expect(store.speed.t1).toBe(20)
+      clock.mockReturnValue(4000)
+      push({ ...transfer, status: 'accepted', bytesDone: 0, bytesTransferred: 0 })
+      expect(store.speed.t1).toBe(0)
+      clock.mockReturnValue(5000)
+      push({ ...transfer, status: 'accepted', bytesDone: 80, bytesTransferred: 0 })
+      expect(store.speed.t1).toBe(0)
+      clock.mockReturnValue(6000)
+      push({ ...transfer, status: 'accepted', bytesDone: 90, bytesTransferred: 10 })
+      expect(store.speed.t1).toBe(10)
+    } finally {
+      clock.mockRestore()
+    }
+  })
+
   it('终态仅保留最近 200 条且释放测速，活动传输和共享卡片不被淘汰', () => {
     const { store, push } = liveStore()
     push({ ...transfer, transferId: 'active', status: 'accepted', bytesDone: 25 })

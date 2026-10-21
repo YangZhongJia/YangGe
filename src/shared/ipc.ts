@@ -337,6 +337,8 @@ export interface TransferView {
   direction: 'in' | 'out'
   status: 'offering' | 'accepted' | 'done' | 'declined' | 'canceled' | 'failed' | 'expired'
   bytesDone: number
+  /** 当前接收尝试实际传输的字节，排除已有断点；仅本地测速，不进入线上协议或数据库。 */
+  bytesTransferred?: number
   totalSize: number
   fileCount: number
   name: string

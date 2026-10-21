@@ -56,6 +56,9 @@ interface OutgoingState {
   files: Map<string, OutgoingFile>
   totalSize: number
   bytesDone: number
+  /** 当前接收尝试中各文件的绝对位置；重复 pull 替换位置，避免重复计入断点。 */
+  fileProgress?: Map<string, number>
+  bytesTransferred?: number
   accepted: boolean
   /** 普通文件本机截止时间；自动媒体/更新包为 0。 */
   expiresAt: number
@@ -88,6 +91,7 @@ interface IncomingState {
   msgId: string
   plans: IncomingFilePlan[]
   bytesDone: number
+  bytesTransferred?: number
   /** 普通文件本机截止时间；自动媒体/更新包为 0。 */
   expiresAt: number
   /** 发送端并发预算满、本传输在对端 FIFO 排队中（决议 #211，wait 帧驱动） */
@@ -193,11 +197,19 @@ export class FilesService extends EventEmitter {
       deps.bindAddress
     )
     this.server.on('diagnostic-error', error => deps.diagnostic?.('network.listen', { kind: 'tcp', port: deps.tcpPort, status: 'failed' }, error))
-    this.server.on('progress', (transferId: string, delta: number) => {
+    this.server.on('progress', (transferId: string, delta: number, fileId: string, position: number) => {
       const out = this.outgoing.get(transferId)
-      if (!out) return
-      out.bytesDone += delta
-      this.emitTransfer(transferId, false)
+      const file = out?.files.get(fileId)
+      if (!out || !file) return
+      if (!out.fileProgress) {
+        out.fileProgress = new Map()
+        out.bytesDone = 0
+      }
+      const bytes = Math.min(file.size, position)
+      out.bytesDone += bytes - (out.fileProgress.get(fileId) ?? 0)
+      out.fileProgress.set(fileId, bytes)
+      out.bytesTransferred = (out.bytesTransferred ?? 0) + delta
+      this.emitTransfer(transferId, delta === 0)
     })
     this.server.on('file-served', (transferId: string, fileId: string) => {
       const out = this.outgoing.get(transferId)
@@ -752,6 +764,7 @@ export class FilesService extends EventEmitter {
 
     this.deps.transferRepo.updateStatus(transferId, 'accepted')
     inc.bytesDone = 0
+    inc.bytesTransferred = 0
     inc.queued = false
     inc.cancelRef = { canceled: false, socket: null }
     const cancelRef = inc.cancelRef
@@ -784,8 +797,9 @@ export class FilesService extends EventEmitter {
       saveDir: base,
       cancelRef,
       supportsWait: this.peerSupportsTransferWait(inc.peerId),
-      onProgress: (delta) => {
+      onProgress: (delta, transferredDelta = delta) => {
         inc.bytesDone += delta
+        inc.bytesTransferred = (inc.bytesTransferred ?? 0) + transferredDelta
         this.emitTransfer(transferId, false)
       },
       onQueued: (queued) => {
@@ -878,7 +892,8 @@ export class FilesService extends EventEmitter {
     if (blob.purpose === 'update') return null
     const msg = this.deps.msgRepo.get(row.msg_id)
     const inc = this.incoming.get(transferId)
-    const live = this.outgoing.get(transferId)?.bytesDone ?? inc?.bytesDone
+    const out = this.outgoing.get(transferId)
+    const live = out?.bytesDone ?? inc?.bytesDone
     // 失败可无条件「继续」；取消后重新下载要求对端支持 tw1（旧端已作废供流授权）
     const retryable =
       row.direction === 'in' &&
@@ -902,6 +917,7 @@ export class FilesService extends EventEmitter {
       direction: row.direction === 'out' ? 'out' : 'in',
       status: row.status as TransferView['status'],
       bytesDone: live ?? row.bytes_done,
+      bytesTransferred: out?.bytesTransferred ?? inc?.bytesTransferred ?? 0,
       totalSize: row.total,
       fileCount: fileRefCount,
       name: blob.name,
@@ -1020,6 +1036,9 @@ export class FilesService extends EventEmitter {
         out.accepted = true
         out.acceptedAt = Date.now()
         out.servedFiles = new Set()
+        out.fileProgress = new Map()
+        out.bytesDone = 0
+        out.bytesTransferred = 0
         this.clearDeliveryTimer(ctl.transferId)
         this.updateBlob(ctl.transferId, { notified: true, failureReason: undefined, servedAt: undefined,
           deliveryConfirmed: undefined, receiverControlTs: env.ts })
@@ -1659,7 +1678,8 @@ export class FilesService extends EventEmitter {
     if (blob.failureReason) return
     this.deps.diagnostic?.('transfer.phase', { transferId, direction: 'out', stage: 'served' })
     const out = this.outgoing.get(transferId)
-    if (out) out.bytesDone = row.total
+    // 有逐文件进度时不覆写：上一连接的迟到 finish 不能污染正在重拉的累计位置。
+    if (out && !out.fileProgress) out.bytesDone = row.total
     this.deps.transferRepo.updateProgress(transferId, row.total)
     this.updateBlob(transferId, { notified: true, servedAt: blob.servedAt ?? Date.now() })
     this.applyMsgStatus(row.msg_id, 'sent')
