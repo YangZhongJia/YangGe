@@ -17,12 +17,22 @@ const chatStore = useChatStore()
 const picked = ref(new Set<string>())
 const sending = ref(false)
 const result = ref('')
+const query = ref('')
+const searchInput = ref<HTMLInputElement | null>(null)
 const dialogRef = ref<HTMLElement | null>(null)
 let previousFocus: HTMLElement | null = null
 
 const allowGroup = computed(() => props.msg.kind === 'text')
 const groups = computed(() => Object.values(groupsStore.byId).filter((g) => g.amMember))
-const forwardGroups = computed(() => (allowGroup.value ? groups.value : []))
+const keyword = computed(() => query.value.trim().toLowerCase())
+const forwardPeers = computed(() => peersStore.peers.filter((peer) =>
+  !keyword.value || [peer.nick, peer.remark].some((name) => name.toLowerCase().includes(keyword.value))
+))
+const forwardGroups = computed(() => allowGroup.value
+  ? groups.value.filter((group) => group.name.toLowerCase().includes(keyword.value))
+  : []
+)
+const hasTargets = computed(() => peersStore.peers.length > 0 || (allowGroup.value && groups.value.length > 0))
 const canSend = computed(() => picked.value.size > 0 && !sending.value)
 const summary = computed(() => {
   if (props.msg.kind === 'text') return props.msg.text.slice(0, 50)
@@ -57,7 +67,7 @@ async function forward(): Promise<void> {
 }
 
 function onWindowKeydown(event: KeyboardEvent): void {
-  if (event.key !== 'Escape') return
+  if (event.key !== 'Escape' || event.isComposing) return
   event.preventDefault()
   emit('close')
 }
@@ -65,7 +75,7 @@ function onWindowKeydown(event: KeyboardEvent): void {
 onMounted(() => {
   previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
   window.addEventListener('keydown', onWindowKeydown)
-  void nextTick(() => dialogRef.value?.focus())
+  void nextTick(() => searchInput.value?.focus())
 })
 
 onBeforeUnmount(() => {
@@ -88,8 +98,16 @@ onBeforeUnmount(() => {
       >
         <h3 id="forward-dialog-title">{{ tr('转发') }}</h3>
         <div class="summary">{{ summary }}</div>
+        <input
+          ref="searchInput"
+          v-model="query"
+          type="search"
+          class="search"
+          :aria-label="tr('搜索转发目标')"
+          :placeholder="allowGroup ? tr('搜索昵称、备注或讨论组') : tr('搜索昵称或备注')"
+        />
         <div class="pick-list">
-          <label v-for="p in peersStore.peers" :key="p.nodeId" class="pick">
+          <label v-for="p in forwardPeers" :key="p.nodeId" class="pick">
             <input
               type="checkbox"
               :checked="picked.has(`single:${p.nodeId}`)"
@@ -109,9 +127,10 @@ onBeforeUnmount(() => {
             <span class="nm">{{ g.name }}</span>
           </label>
           <p
-            v-if="peersStore.peers.length === 0 && (!allowGroup || groups.length === 0)"
+            v-if="forwardPeers.length === 0 && forwardGroups.length === 0"
             class="empty"
-          >{{ tr('没有可选目标') }}</p>
+            aria-live="polite"
+          >{{ hasTargets ? tr('没有匹配的转发目标') : tr('没有可选目标') }}</p>
         </div>
         <div class="foot">
           <span class="count">{{ tr('已选 {0} 个目标', { 0: picked.size }) }}</span>
@@ -138,6 +157,8 @@ onBeforeUnmount(() => {
   animation: forward-mask-in 140ms ease-out;
 }
 .dialog {
+  display: flex;
+  flex-direction: column;
   width: min(380px, calc(100vw - 48px));
   max-height: calc(100vh - 48px);
   overflow: hidden;
@@ -153,10 +174,12 @@ onBeforeUnmount(() => {
   outline: none;
 }
 h3 {
+  flex-shrink: 0;
   font-size: 15px;
   margin-bottom: 10px;
 }
 .summary {
+  flex-shrink: 0;
   max-height: 62px;
   overflow: hidden;
   border: 1px solid var(--line);
@@ -168,7 +191,29 @@ h3 {
   margin-bottom: 10px;
   white-space: pre-wrap;
 }
+.search {
+  flex-shrink: 0;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-window);
+  color: var(--text-1);
+  font: inherit;
+  font-size: 13px;
+}
+.search:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+.search::placeholder {
+  color: var(--text-placeholder);
+}
 .pick-list {
+  min-height: 0;
   max-height: 240px;
   overflow-y: auto;
   border: 1px solid var(--line);
@@ -226,6 +271,7 @@ h3 {
   padding: 16px 0;
 }
 .foot {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 8px;
