@@ -298,7 +298,7 @@ const cabinetDisabledReason = computed(() => {
   const p = peer.value
   if (!p) return tr('对方资料还没同步到')
   if (!p.online) return tr('对方离线')
-  if (!(p.caps ?? []).includes(CAPS.fileCabinet)) return tr('对方版本不支持文件柜')
+  if (!p.caps.includes(CAPS.fileCabinet)) return tr('对方版本不支持文件柜')
   return ''
 })
 const cabinetTitle = computed(() => cabinetDisabledReason.value || tr('文件柜'))

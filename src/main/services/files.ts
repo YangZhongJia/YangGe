@@ -39,6 +39,7 @@ import {
   type OutgoingFile
 } from '../net/transfer'
 import { sanitizeRelPath, sanitizeWindowsName } from '../util/sanitize'
+import { truncateUtf8 } from '../util/utf8'
 import { convRowToView, type ConvRepo } from '../store/conv-repo'
 import { MsgRepo, msgRowToView, type MsgRow } from '../store/msg-repo'
 import type { TransferRepo, TransferRow } from '../store/transfer-repo'
@@ -1254,6 +1255,40 @@ export class FilesService extends EventEmitter {
     if (asImage) void this.accept(offer.transferId, this.deps.getImagesDir())
   }
 
+  /** 授权通过后的非聊天传输：统一登记并自动接收。 */
+  private acceptAuxiliaryOffer(
+    peerId: string,
+    transferId: string,
+    name: string,
+    plans: IncomingFilePlan[],
+    total: number,
+    purpose: 'update' | 'share-get' | 'share-put',
+    saveDir: string
+  ): void {
+    const msgId = `${purpose === 'update' ? 'update' : 'share'}:${transferId}`
+    this.deps.transferRepo.insert({
+      transferId,
+      msgId,
+      peerId,
+      direction: 'in',
+      files: JSON.stringify({ name, purpose } satisfies FilesBlob),
+      status: 'offering',
+      total,
+      ts: Date.now(),
+      expiresAt: 0
+    })
+    this.incoming.set(transferId, {
+      peerId,
+      msgId,
+      plans,
+      bytesDone: 0,
+      expiresAt: 0,
+      queued: false,
+      cancelRef: { canceled: false, socket: null }
+    })
+    void this.accept(transferId, saveDir)
+  }
+
   private onUpdateOffer(
     peerId: string,
     offer: FileCtlOffer,
@@ -1277,28 +1312,15 @@ export class FilesService extends EventEmitter {
       void this.declineUnknown(peerId, offer.transferId)
       return
     }
-    const msgId = `update:${offer.transferId}`
-    this.deps.transferRepo.insert({
-      transferId: offer.transferId,
-      msgId,
+    this.acceptAuxiliaryOffer(
       peerId,
-      direction: 'in',
-      files: JSON.stringify({ name: asm.rootName, purpose: 'update' } satisfies FilesBlob),
-      status: 'offering',
-      total: trustedTotalSize,
-      ts: Date.now(),
-      expiresAt: 0
-    })
-    this.incoming.set(offer.transferId, {
-      peerId,
-      msgId,
+      offer.transferId,
+      asm.rootName,
       plans,
-      bytesDone: 0,
-      expiresAt: 0,
-      queued: false,
-      cancelRef: { canceled: false, socket: null }
-    })
-    void this.accept(offer.transferId, this.updateDir())
+      trustedTotalSize,
+      'update',
+      this.updateDir()
+    )
   }
 
   /**
@@ -1317,28 +1339,15 @@ export class FilesService extends EventEmitter {
       void this.declineUnknown(peerId, offer.transferId)
       return
     }
-    const msgId = `share:${offer.transferId}`
-    this.deps.transferRepo.insert({
-      transferId: offer.transferId,
-      msgId,
+    this.acceptAuxiliaryOffer(
       peerId,
-      direction: 'in',
-      files: JSON.stringify({ name: asm.rootName, purpose: 'share-get' } satisfies FilesBlob),
-      status: 'offering',
-      total: trustedTotalSize,
-      ts: Date.now(),
-      expiresAt: 0
-    })
-    this.incoming.set(offer.transferId, {
-      peerId,
-      msgId,
+      offer.transferId,
+      asm.rootName,
       plans,
-      bytesDone: 0,
-      expiresAt: 0,
-      queued: false,
-      cancelRef: { canceled: false, socket: null }
-    })
-    void this.accept(offer.transferId, saveDir)
+      trustedTotalSize,
+      'share-get',
+      saveDir
+    )
   }
 
   /**
@@ -1360,28 +1369,15 @@ export class FilesService extends EventEmitter {
       void this.declineUnknown(peerId, offer.transferId)
       return
     }
-    const msgId = `share:${offer.transferId}`
-    this.deps.transferRepo.insert({
-      transferId: offer.transferId,
-      msgId,
+    this.acceptAuxiliaryOffer(
       peerId,
-      direction: 'in',
-      files: JSON.stringify({ name: asm.rootName, purpose: 'share-put' } satisfies FilesBlob),
-      status: 'offering',
-      total: trustedTotalSize,
-      ts: Date.now(),
-      expiresAt: 0
-    })
-    this.incoming.set(offer.transferId, {
-      peerId,
-      msgId,
+      offer.transferId,
+      asm.rootName,
       plans,
-      bytesDone: 0,
-      expiresAt: 0,
-      queued: false,
-      cancelRef: { canceled: false, socket: null }
-    })
-    void this.accept(offer.transferId, dir)
+      trustedTotalSize,
+      'share-put',
+      dir
+    )
   }
 
   /**
@@ -1956,19 +1952,6 @@ function normalizeTableTextMeta(
     tableText: truncated.text,
     ...(meta.tableTextTruncated || truncated.truncated ? { tableTextTruncated: true } : {})
   }
-}
-
-function truncateUtf8(text: string, maxBytes: number): { text: string; truncated: boolean } {
-  if (Buffer.byteLength(text, 'utf8') <= maxBytes) return { text, truncated: false }
-  let out = ''
-  let used = 0
-  for (const char of text) {
-    const size = Buffer.byteLength(char, 'utf8')
-    if (used + size > maxBytes) break
-    out += char
-    used += size
-  }
-  return { text: out, truncated: true }
 }
 
 function mediaTransferIds(row: MsgRow): string[] {

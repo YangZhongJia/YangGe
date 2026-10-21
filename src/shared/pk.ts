@@ -47,10 +47,6 @@ export function pkPreview(game: PkGame): string {
   return `[PK] ${pkLabel(game)}`
 }
 
-export function pkTitle(game: PkGame): string {
-  return `PK · ${pkLabel(game)}`
-}
-
 export function pkResultText(ref: PkRefView): string {
   if (ref.game === 'dice') return `掷出 ${ref.result} 点`
   return `出了${RPS_TEXT[ref.result as PkRpsResult]}`

@@ -23,8 +23,3 @@ export function compareSemver(a: string, b: string): number {
   }
   return 0
 }
-
-/** candidate 是否严格新于 base。 */
-export function isNewer(candidate: string, base: string): boolean {
-  return compareSemver(candidate, base) > 0
-}

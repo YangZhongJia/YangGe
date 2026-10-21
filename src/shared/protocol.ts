@@ -25,8 +25,6 @@ export const AVATAR_OUTPUT_SIZE = 192
 export const AVATAR_MAX_BYTES = 32 * 1024
 /** 旧版昵称首字头像；背景颜色继续按昵称散列。 */
 export const AVATAR_LEGACY_INITIAL_VALUE = -1
-/** 动物表情头像编号上限：10 种背景色 * 20 个表情。 */
-export const AVATAR_ANIMAL_MAX_VALUE = 199
 /** 昵称首字显式背景颜色编号起点（决议 #245）。 */
 export const AVATAR_INITIAL_COLOR_BASE = 200
 export const AVATAR_INITIAL_COLOR_MAX = 209
@@ -561,7 +559,6 @@ export interface TcpMsgAckFrame {
   ackFor: string
 }
 /** 桌面查看（protocol §8.3）：所有画面及授权只在内存，逐次同意。 */
-export const SCREEN_SESSION_MAX = 1
 export const SCREEN_REQUEST_TIMEOUT_MS = 60_000
 export const SCREEN_CONNECT_TIMEOUT_MS = 15_000
 export const SCREEN_FRAME_TIMEOUT_MS = 5_000

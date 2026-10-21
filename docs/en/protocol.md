@@ -340,9 +340,9 @@ Sample only on demand, with one encode/write at a time and bounded backpressure.
 
 #### 8.3.4 Budgets and validation
 
-| Constant | Value | Purpose |
+| Limit | Value | Purpose |
 |---|---|---|
-| SCREEN_SESSION_MAX | 1 per node | Pending + active, either role |
+| Concurrent sessions | 1 per node | Pending + active, either role; enforced by the single-session state |
 | SCREEN_REQUEST_TIMEOUT_MS | 60,000 | From local request creation/receipt; includes picker/system permission time |
 | SCREEN_CONNECT_TIMEOUT_MS | 15,000 | Grant deadline after sending accept; viewer connect/ready deadline after receiving it |
 | SCREEN_FRAME_TIMEOUT_MS | 5,000 | From next to complete consumption; fragments cannot extend it |

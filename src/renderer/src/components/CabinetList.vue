@@ -4,7 +4,6 @@ import { computed, onMounted, ref } from 'vue'
 import { NInput } from 'naive-ui'
 import { cabinetPeerName, useCabinetStore } from '../stores/cabinet'
 import type { PeerView } from '../../../shared/ipc'
-import { CAPS } from '../../../shared/protocol'
 import AvatarMark from './AvatarMark.vue'
 import PantryIcon from './PantryIcon.vue'
 
@@ -18,7 +17,7 @@ const visiblePeers = computed(() => {
   const q = query.value.trim().toLowerCase()
   if (!q) return cabinet.cabinetPeers
   return cabinet.cabinetPeers.filter((p) =>
-    [p.remark, p.nick, p.dept, p.ip].some((f) => (f ?? '').toLowerCase().includes(q))
+    [p.remark, p.nick, p.dept, p.ip].some((f) => f.toLowerCase().includes(q))
   )
 })
 
@@ -26,11 +25,10 @@ const modeLabel = computed(() =>
   cabinet.shareMode === 'write' ? tr('可读可传') : cabinet.shareMode === 'read' ? tr('只读') : tr('不共享')
 )
 
-/** 离线与旧版本条目仍可点，进去再给确定原因；这里只提供副标题文案 */
+/** 列表只含支持文件柜的联系人；离线条目仍可点，进入后显示具体原因。 */
 function peerSubtitle(p: PeerView): string {
-  if (!Array.isArray(p.caps) || !p.caps.includes(CAPS.fileCabinet)) return tr('版本较旧，不支持文件柜')
   if (!p.online) return p.lastSeen ? tr('离线 · 最后在线 {0}', { 0: formatSeen(p.lastSeen) }) : tr('离线')
-  return [p.dept, p.ip].filter((s) => (s ?? '').length > 0).join(' · ') || tr('在线')
+  return [p.dept, p.ip].filter((s) => s.length > 0).join(' · ') || tr('在线')
 }
 
 function formatSeen(ms: number): string {

@@ -52,26 +52,6 @@ export function offsetForAnchoredZoom(params: {
   }
 }
 
-export function imageRectForState(params: {
-  naturalWidth: number
-  naturalHeight: number
-  zoom: number
-  offset: ImagePoint
-  viewportWidth: number
-  viewportHeight: number
-}): ImageRect {
-  const width = params.naturalWidth * params.zoom
-  const height = params.naturalHeight * params.zoom
-  const left = params.viewportWidth / 2 + params.offset.x - width / 2
-  const top = params.viewportHeight / 2 + params.offset.y - height / 2
-  return {
-    left,
-    top,
-    right: left + width,
-    bottom: top + height
-  }
-}
-
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
 }
