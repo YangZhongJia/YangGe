@@ -1,5 +1,6 @@
 import { initialLanguage, isLanguage } from '../../i18n'
 import type { Language } from '../../shared/i18n'
+import { previewCidrImport, type ScanRangeImportOutcome } from '../../shared/cidr'
 import { readFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import { hostname, userInfo } from 'node:os'
@@ -294,6 +295,15 @@ export function saveAppSettings(
   if (patch.captureShortcut !== undefined) state.config.captureShortcut = patch.captureShortcut
   if (patch.showHideShortcut !== undefined) state.config.showHideShortcut = patch.showHideShortcut
   atomicWriteJson(state.configPath, state.config)
+}
+
+/** 批量添加使用保存瞬间的当前列表；不替换并发同步来的网段，也不发起扫描。 */
+export function importScanRanges(state: AppState, input: unknown): ScanRangeImportOutcome {
+  if (typeof input !== 'string') return { ok: false, reason: 'invalid' }
+  const plan = previewCidrImport(input, state.config.scanRanges)
+  if (plan.error) return { ok: false, reason: plan.error }
+  saveAppSettings(state, { scanRanges: plan.ranges })
+  return { ok: true, added: plan.additions.length }
 }
 
 export function addSharedScanRanges(

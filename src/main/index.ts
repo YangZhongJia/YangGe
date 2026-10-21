@@ -58,6 +58,7 @@ import {
   type PeerView,
   type ProfileSubmit,
   type ScanProgressView,
+  type ScanRangeImportResult,
   type SettingsView,
   type ShareBrowseFailReason,
   type ShareBrowseResult,
@@ -104,6 +105,7 @@ import {
   addSharedScanRanges,
   loadAppState,
   saveAppSettings,
+  importScanRanges,
   saveProfile,
   saveProfileCaps,
   type AppState
@@ -2594,6 +2596,16 @@ if (!gotLock) {
       return broadcastSettings()
     }
     return settingsView()
+  })
+
+  ipcMain.handle(IpcChannels.netImportRanges, (_event, input: unknown): ScanRangeImportResult => {
+    if (!appState) return { ok: false, reason: 'unavailable', view: settingsView() }
+    const result = importScanRanges(appState, input)
+    if (result.ok) {
+      rangeScanner?.sync()
+      rangeSync?.scheduleShareSoon()
+    }
+    return { ...result, view: result.ok ? broadcastSettings() : settingsView() }
   })
 
   const ADDR_RE = /^(\d{1,3}(?:\.\d{1,3}){3})(?::(\d{1,5}))?$/

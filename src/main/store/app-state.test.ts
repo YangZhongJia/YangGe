@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { loadAppState, saveProfile, saveProfileCaps, type ProfilePatch } from './app-state'
+import { addSharedScanRanges, importScanRanges, loadAppState, saveAppSettings, saveProfile, saveProfileCaps, type ProfilePatch } from './app-state'
 
 const directories: string[] = []
 
@@ -14,6 +14,41 @@ function makeState() {
 
 afterEach(() => {
   for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true })
+})
+
+describe('批量添加扫描网段', () => {
+  it('按当前状态合并，保留预览后同步到的网段和来源，重启后仍存在', () => {
+    const state = makeState()
+    saveAppSettings(state, { scanRanges: ['10.1.0.0/24'] })
+    addSharedScanRanges(state, [{ cidr: '10.2.0.0/24', addedAt: Date.now() }], { nodeId: 'peer', name: '同事' })
+    const source = { ...state.config.scanRangeSources['10.2.0.0/24'] }
+    expect(importScanRanges(state, '10.1.0.88/24\n10.3.0.88/24')).toEqual({ ok: true, added: 1 })
+    expect(state.config.scanRanges).toEqual(['10.1.0.0/24', '10.2.0.0/24', '10.3.0.0/24'])
+    expect(state.config.scanRangeSources['10.2.0.0/24']).toEqual(source)
+    expect(state.config.scanRangeSources['10.3.0.0/24'].source).toBe('self')
+    expect(loadAppState(directories[0], '0.0.0-test').config.scanRanges).toEqual(state.config.scanRanges)
+  })
+
+  it('发现非法输入或总额度已被同期同步占用时整批拒绝，不改变内存或磁盘', () => {
+    const state = makeState()
+    saveAppSettings(state, { scanRanges: Array.from({ length: 20 }, (_, i) => `10.${i}.0.0/24`) })
+    const before = JSON.stringify(state.config)
+    const saved = readFileSync(state.configPath, 'utf8')
+    expect(importScanRanges(state, '10.40.0.0/24')).toEqual({ ok: false, reason: 'too-many' })
+    expect(importScanRanges(state, '10.40.0.0/24\ninvalid')).toEqual({ ok: false, reason: 'invalid' })
+    expect(importScanRanges(state, ['10.40.0.0/24'])).toEqual({ ok: false, reason: 'invalid' })
+    expect(JSON.stringify(state.config)).toBe(before)
+    expect(readFileSync(state.configPath, 'utf8')).toBe(saved)
+  })
+
+  it('重新手动导入会清除移除忽略标记，不改变已有来源', () => {
+    const state = makeState()
+    saveAppSettings(state, { scanRanges: ['10.1.0.0/24'] })
+    saveAppSettings(state, { scanRanges: [] })
+    expect(state.config.ignoredScanRanges['10.1.0.0/24']).toBeGreaterThan(0)
+    expect(importScanRanges(state, '10.1.0.1/24')).toEqual({ ok: true, added: 1 })
+    expect(state.config.ignoredScanRanges['10.1.0.0/24']).toBeUndefined()
+  })
 })
 
 describe('资料版本与持久化', () => {
