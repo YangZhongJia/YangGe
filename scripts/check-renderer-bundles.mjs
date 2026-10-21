@@ -10,7 +10,8 @@ const DEFAULT_ROOT_BUDGETS = {
   // 不改用动态 import——App 内再套动态 import 会让 Rollup 把 App 的 facade 并进匿名共享块，
   // manifest 里就没有 src/App.vue 这个动态入口了，四入口契约（决议 #210）随之失效。
   // 决议 #319：输入区附件预览新增约 3 KiB CSS，保持静态入口契约。
-  'App.vue': { js: 800 * 1024, css: 119 * 1024 },
+  // Issue #62：长文件名即时浮层与自适应文件卡新增约 0.6 KiB CSS。
+  'App.vue': { js: 800 * 1024, css: 120 * 1024 },
   'SettingsApp.vue': { js: 704 * 1024, css: 40 * 1024 },
   'CaptureApp.vue': { js: 112 * 1024, css: 12 * 1024 },
   'ImageViewerApp.vue': { js: 160 * 1024, css: 20 * 1024 }

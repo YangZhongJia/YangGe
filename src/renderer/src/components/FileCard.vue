@@ -7,6 +7,7 @@ import { formatBytes } from '../utils/format'
 import { sentTransferText, sentTransferTitle, transferFailureText } from '../utils/transfer-status'
 import { usePeersStore } from '../stores/peers'
 import FileTypeIcon from './FileTypeIcon.vue'
+import FileName from './FileName.vue'
 import PantryIcon from './PantryIcon.vue'
 
 // 文件消息卡片（ui-design §5，决议 #89「左信息 · 右状态」）：
@@ -239,7 +240,7 @@ function requestDirect(): void {
     </div>
     <div class="info">
       <div class="name-line">
-        <div class="name" :title="ref_.name">{{ ref_.name }}</div>
+        <FileName class="name" :name="ref_.name" />
         <span v-if="directFile" class="direct-chip">{{ tr('直接') }}</span>
         <span v-if="stateChipText" class="state-chip" :class="{ direct: directFile }">
           {{ stateChipText }}
@@ -322,7 +323,8 @@ function requestDirect(): void {
   white-space: nowrap;
 }
 .card {
-  width: 276px;
+  width: 360px;
+  max-width: 100%;
   min-height: 58px;
   background: var(--bg-window);
   border: 1px solid var(--line);
@@ -357,9 +359,6 @@ function requestDirect(): void {
   min-width: 0;
   flex: 1;
   font-size: 13px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 .direct-chip {
   flex: 0 0 auto;

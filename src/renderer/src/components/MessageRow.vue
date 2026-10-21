@@ -138,7 +138,7 @@ const replyMeta = computed((): ReplyMeta => {
       :avatar-hash="props.senderAvatarHash"
       :name="props.senderName"
     />
-    <span class="message-stack">
+    <span class="message-stack" :class="{ 'file-stack': props.msg.kind === 'file' }">
       <span v-if="showGroupSender" class="sender">{{ props.senderName }}</span>
       <ScreenHistoryCard v-if="props.msg.screenRef" :record="props.msg.screenRef" />
       <FileCard
@@ -300,6 +300,11 @@ const replyMeta = computed((): ReplyMeta => {
 }
 .row.mine .message-stack {
   align-items: flex-end;
+}
+.message-stack.file-stack {
+  max-width: 100%;
+  min-width: 0;
+  flex-shrink: 1;
 }
 .sender {
   font-size: 11px;
