@@ -386,7 +386,6 @@ const english: Record<string, string> = {
   "可读可传": "Read & upload",
   "只读": "Read only",
   "不共享": "Private",
-  "版本较旧，不支持文件柜": "This version does not support file cabinets",
   "离线 · 最后在线 {0}": "Offline · Last seen {0}",
   "离线": "Offline",
   "今天 {0}:{1}": "Today {0}:{1}",

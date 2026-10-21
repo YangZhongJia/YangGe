@@ -240,23 +240,28 @@ class FakeGroupRepo {
   }
 }
 
+function createFilesService(dir: string, overrides: Partial<FilesDeps> = {}): FilesService {
+  return new FilesService({
+    selfId: 'node-self',
+    messenger: new FakeMessenger() as unknown as Messenger,
+    registry: new FakeRegistry(['node-bob']) as unknown as PeerRegistry,
+    convRepo: new FakeConvRepo() as unknown as ConvRepo,
+    msgRepo: new FakeMsgRepo() as unknown as MsgRepo,
+    transferRepo: new FakeTransferRepo() as unknown as TransferRepo,
+    tcpPort: 0,
+    getSaveDir: () => dir,
+    getImagesDir: () => dir,
+    bindAddress: '127.0.0.1',
+    ...overrides
+  })
+}
+
 function waitTick(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0))
 }
 
-function waitFor(predicate: () => boolean, timeoutMs = 1_000): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const start = Date.now()
-    const timer = setInterval(() => {
-      if (predicate()) {
-        clearInterval(timer)
-        resolve()
-      } else if (Date.now() - start > timeoutMs) {
-        clearInterval(timer)
-        reject(new Error('timeout'))
-      }
-    }, 10)
-  })
+function waitFor(predicate: () => boolean, timeout = 1000) {
+  return vi.waitUntil(predicate, { timeout, interval: 10 })
 }
 
 describe('issue #48 传输结果与监听失败', () => {
@@ -552,19 +557,7 @@ describe('FilesService 群聊媒体', () => {
     writeFileSync(firstPath, 'one')
     writeFileSync(secondPath, 'two')
 
-    const service = new FilesService({
-      selfId: 'node-self',
-      messenger: new FakeMessenger() as unknown as Messenger,
-      registry: new FakeRegistry(['node-bob']) as unknown as PeerRegistry,
-      convRepo: new FakeConvRepo() as unknown as ConvRepo,
-      msgRepo: new FakeMsgRepo() as unknown as MsgRepo,
-      transferRepo: new FakeTransferRepo() as unknown as TransferRepo,
-      groupRepo: undefined,
-      tcpPort: 0,
-      getSaveDir: () => dir,
-      getImagesDir: () => dir,
-      bindAddress: '127.0.0.1'
-    })
+    const service = createFilesService(dir)
     const events: ConversationView[][] = []
     service.on('convs', (convs: ConversationView[]) => events.push(convs))
 
@@ -587,19 +580,12 @@ describe('FilesService 群聊媒体', () => {
     const msgRepo = new FakeMsgRepo()
     const transferRepo = new FakeTransferRepo()
     const convRepo = new FakeConvRepo()
-    const svc = new FilesService({
-      selfId: 'node-self',
+    const svc = createFilesService(dir, {
       messenger: messenger as unknown as Messenger,
-      registry: new FakeRegistry(['node-bob']) as unknown as PeerRegistry,
       convRepo: convRepo as unknown as ConvRepo,
       msgRepo: msgRepo as unknown as MsgRepo,
       transferRepo: transferRepo as unknown as TransferRepo,
-      groupRepo: undefined,
-      tcpPort: 0,
-      getSaveDir: () => dir,
-      getImagesDir: () => dir,
-      getUpdateDir: () => dir,
-      bindAddress: '127.0.0.1'
+      getUpdateDir: () => dir
     })
 
     await expect(svc.offerUpdatePackage('node-bob', pkgPath)).resolves.toBe(true)
@@ -644,20 +630,13 @@ describe('FilesService 群聊媒体', () => {
     const msgRepo = new FakeMsgRepo()
     const transferRepo = new FakeTransferRepo()
     const convRepo = new FakeConvRepo()
-    new FilesService({
-      selfId: 'node-self',
+    createFilesService(dir, {
       messenger: messenger as unknown as Messenger,
-      registry: new FakeRegistry(['node-bob']) as unknown as PeerRegistry,
       convRepo: convRepo as unknown as ConvRepo,
       msgRepo: msgRepo as unknown as MsgRepo,
       transferRepo: transferRepo as unknown as TransferRepo,
-      groupRepo: undefined,
-      tcpPort: 0,
-      getSaveDir: () => dir,
-      getImagesDir: () => dir,
       getUpdateDir: () => updateDir,
-      authorizeUpdateOffer: () => true,
-      bindAddress: '127.0.0.1'
+      authorizeUpdateOffer: () => true
     })
 
     messenger.emit(
@@ -701,20 +680,12 @@ describe('FilesService 群聊媒体', () => {
     const messenger = new FakeMessenger()
     const msgRepo = new FakeMsgRepo()
     const transferRepo = new FakeTransferRepo()
-    new FilesService({
-      selfId: 'node-self',
+    createFilesService(dir, {
       messenger: messenger as unknown as Messenger,
-      registry: new FakeRegistry(['node-bob']) as unknown as PeerRegistry,
-      convRepo: new FakeConvRepo() as unknown as ConvRepo,
       msgRepo: msgRepo as unknown as MsgRepo,
       transferRepo: transferRepo as unknown as TransferRepo,
-      groupRepo: undefined,
-      tcpPort: 0,
-      getSaveDir: () => dir,
-      getImagesDir: () => dir,
       getUpdateDir: () => updateDir,
-      authorizeUpdateOffer: () => false,
-      bindAddress: '127.0.0.1'
+      authorizeUpdateOffer: () => false
     })
 
     messenger.emit(
@@ -748,18 +719,11 @@ describe('FilesService 群聊媒体', () => {
     const messenger = new FakeMessenger()
     const msgRepo = new FakeMsgRepo()
     const transferRepo = new FakeTransferRepo()
-    new FilesService({
-      selfId: 'node-self',
+    createFilesService(dir, {
       messenger: messenger as unknown as Messenger,
       registry: new FakeRegistry(['node-bob'], [CAPS.mediaRecall]) as unknown as PeerRegistry,
-      convRepo: new FakeConvRepo() as unknown as ConvRepo,
       msgRepo: msgRepo as unknown as MsgRepo,
-      transferRepo: transferRepo as unknown as TransferRepo,
-      groupRepo: undefined,
-      tcpPort: 0,
-      getSaveDir: () => dir,
-      getImagesDir: () => dir,
-      bindAddress: '127.0.0.1'
+      transferRepo: transferRepo as unknown as TransferRepo
     })
 
     messenger.emit(
@@ -812,18 +776,12 @@ describe('FilesService 群聊媒体', () => {
       description: '',
       announce: ''
     }
-    const service = new FilesService({
-      selfId: 'node-self',
+    const service = createFilesService(dir, {
       messenger: messenger as unknown as Messenger,
       registry: new FakeRegistry(['node-bob', 'node-dan']) as unknown as PeerRegistry,
-      convRepo: new FakeConvRepo() as unknown as ConvRepo,
       msgRepo: msgRepo as unknown as MsgRepo,
       transferRepo: transferRepo as unknown as TransferRepo,
-      groupRepo: new FakeGroupRepo(group) as unknown as GroupRepo,
-      tcpPort: 0,
-      getSaveDir: () => dir,
-      getImagesDir: () => dir,
-      bindAddress: '127.0.0.1'
+      groupRepo: new FakeGroupRepo(group) as unknown as GroupRepo
     })
 
     const view = await service.offerGroupPaths('group-1', [filePath])
@@ -879,18 +837,12 @@ describe('FilesService 群聊媒体', () => {
       description: '',
       announce: ''
     }
-    const service = new FilesService({
-      selfId: 'node-self',
+    const service = createFilesService(dir, {
       messenger: messenger as unknown as Messenger,
       registry: new FakeRegistry(['node-bob'], [CAPS.mediaRecall]) as unknown as PeerRegistry,
-      convRepo: new FakeConvRepo() as unknown as ConvRepo,
       msgRepo: msgRepo as unknown as MsgRepo,
       transferRepo: transferRepo as unknown as TransferRepo,
-      groupRepo: new FakeGroupRepo(group) as unknown as GroupRepo,
-      tcpPort: 0,
-      getSaveDir: () => dir,
-      getImagesDir: () => dir,
-      bindAddress: '127.0.0.1'
+      groupRepo: new FakeGroupRepo(group) as unknown as GroupRepo
     })
 
     const view = await service.offerGroupPaths('group-1', [filePath], want)
@@ -932,21 +884,15 @@ describe('FilesService 群聊媒体', () => {
       description: '',
       announce: ''
     }
-    const service = new FilesService({
-      selfId: 'node-self',
+    const service = createFilesService(dir, {
       messenger: messenger as unknown as Messenger,
       registry: new FakeRegistry(['node-bob', 'node-carol'], {
         'node-bob': [CAPS.tableText],
         'node-carol': []
       }) as unknown as PeerRegistry,
-      convRepo: new FakeConvRepo() as unknown as ConvRepo,
       msgRepo: msgRepo as unknown as MsgRepo,
       transferRepo: transferRepo as unknown as TransferRepo,
-      groupRepo: new FakeGroupRepo(group) as unknown as GroupRepo,
-      tcpPort: 0,
-      getSaveDir: () => dir,
-      getImagesDir: () => dir,
-      bindAddress: '127.0.0.1'
+      groupRepo: new FakeGroupRepo(group) as unknown as GroupRepo
     })
 
     const view = await service.offerGroupPaths('group-1', [filePath], 'image', {
@@ -986,18 +932,11 @@ describe('FilesService 群聊媒体', () => {
       description: '',
       announce: ''
     }
-    const service = new FilesService({
-      selfId: 'node-self',
+    const service = createFilesService(dir, {
       messenger: messenger as unknown as Messenger,
-      registry: new FakeRegistry(['node-bob']) as unknown as PeerRegistry,
-      convRepo: new FakeConvRepo() as unknown as ConvRepo,
       msgRepo: msgRepo as unknown as MsgRepo,
       transferRepo: transferRepo as unknown as TransferRepo,
-      groupRepo: new FakeGroupRepo(group) as unknown as GroupRepo,
-      tcpPort: 0,
-      getSaveDir: () => dir,
-      getImagesDir: () => dir,
-      bindAddress: '127.0.0.1'
+      groupRepo: new FakeGroupRepo(group) as unknown as GroupRepo
     })
 
     const view = await service.offerGroupPaths('group-1', [filePath], 'image')
@@ -1028,19 +967,11 @@ describe('FilesService 默认接收目录', () => {
     }
     const msgRepo = new FakeMsgRepo()
     const transferRepo = new FakeTransferRepo()
-    const service = new FilesService({
-      selfId: 'node-self',
+    const service = createFilesService(dir, {
       messenger: messenger as unknown as Messenger,
-      registry: new FakeRegistry(['node-bob']) as unknown as PeerRegistry,
-      convRepo: new FakeConvRepo() as unknown as ConvRepo,
       msgRepo: msgRepo as unknown as MsgRepo,
       transferRepo: transferRepo as unknown as TransferRepo,
-      groupRepo: undefined,
-      tcpPort: 0,
-      getSaveDir: () => dir,
-      getImagesDir: () => dir,
-      peerDisplayName: () => '李四/研发',
-      bindAddress: '127.0.0.1'
+      peerDisplayName: () => '李四/研发'
     })
     const offer = (transferId: string, name: string): void => {
       messenger.emit(
@@ -1088,17 +1019,10 @@ describe('FilesService 私聊直接发送', () => {
     const messenger = new FakeMessenger()
     const msgRepo = new FakeMsgRepo()
     const transferRepo = new FakeTransferRepo()
-    const service = new FilesService({
-      selfId: 'node-self',
+    const service = createFilesService(dir, {
       messenger: messenger as unknown as Messenger,
-      registry: new FakeRegistry(['node-bob']) as unknown as PeerRegistry,
-      convRepo: new FakeConvRepo() as unknown as ConvRepo,
       msgRepo: msgRepo as unknown as MsgRepo,
-      transferRepo: transferRepo as unknown as TransferRepo,
-      tcpPort: 0,
-      getSaveDir: () => dir,
-      getImagesDir: () => dir,
-      bindAddress: '127.0.0.1'
+      transferRepo: transferRepo as unknown as TransferRepo
     })
 
     const view = await service.offerPaths('node-bob', [filePath], 'image')
@@ -1121,17 +1045,11 @@ describe('FilesService 私聊直接发送', () => {
     const messenger = new FakeMessenger()
     const msgRepo = new FakeMsgRepo()
     const transferRepo = new FakeTransferRepo()
-    const service = new FilesService({
-      selfId: 'node-self',
+    const service = createFilesService(dir, {
       messenger: messenger as unknown as Messenger,
       registry: new FakeRegistry(['node-bob'], [CAPS.tableText]) as unknown as PeerRegistry,
-      convRepo: new FakeConvRepo() as unknown as ConvRepo,
       msgRepo: msgRepo as unknown as MsgRepo,
-      transferRepo: transferRepo as unknown as TransferRepo,
-      tcpPort: 0,
-      getSaveDir: () => dir,
-      getImagesDir: () => dir,
-      bindAddress: '127.0.0.1'
+      transferRepo: transferRepo as unknown as TransferRepo
     })
 
     const view = await service.offerPaths('node-bob', [filePath], 'image', {
@@ -1158,17 +1076,8 @@ describe('FilesService 私聊直接发送', () => {
     writeFileSync(filePath, 'image')
 
     const messenger = new FakeMessenger()
-    const service = new FilesService({
-      selfId: 'node-self',
-      messenger: messenger as unknown as Messenger,
-      registry: new FakeRegistry(['node-bob']) as unknown as PeerRegistry,
-      convRepo: new FakeConvRepo() as unknown as ConvRepo,
-      msgRepo: new FakeMsgRepo() as unknown as MsgRepo,
-      transferRepo: new FakeTransferRepo() as unknown as TransferRepo,
-      tcpPort: 0,
-      getSaveDir: () => dir,
-      getImagesDir: () => dir,
-      bindAddress: '127.0.0.1'
+    const service = createFilesService(dir, {
+      messenger: messenger as unknown as Messenger
     })
 
     const view = await service.offerPaths('node-bob', [filePath], 'image', {
@@ -1187,17 +1096,9 @@ describe('FilesService 私聊直接发送', () => {
 
     const messenger = new FakeMessenger()
     const msgRepo = new FakeMsgRepo()
-    new FilesService({
-      selfId: 'node-self',
+    createFilesService(dir, {
       messenger: messenger as unknown as Messenger,
-      registry: new FakeRegistry(['node-bob']) as unknown as PeerRegistry,
-      convRepo: new FakeConvRepo() as unknown as ConvRepo,
-      msgRepo: msgRepo as unknown as MsgRepo,
-      transferRepo: new FakeTransferRepo() as unknown as TransferRepo,
-      tcpPort: 0,
-      getSaveDir: () => dir,
-      getImagesDir: () => dir,
-      bindAddress: '127.0.0.1'
+      msgRepo: msgRepo as unknown as MsgRepo
     })
 
     messenger.emit(
@@ -1234,17 +1135,10 @@ describe('FilesService 私聊直接发送', () => {
     const messenger = new FakeMessenger()
     const msgRepo = new FakeMsgRepo()
     const transferRepo = new FakeTransferRepo()
-    new FilesService({
-      selfId: 'node-self',
+    createFilesService(dir, {
       messenger: messenger as unknown as Messenger,
-      registry: new FakeRegistry(['node-bob']) as unknown as PeerRegistry,
-      convRepo: new FakeConvRepo() as unknown as ConvRepo,
       msgRepo: msgRepo as unknown as MsgRepo,
-      transferRepo: transferRepo as unknown as TransferRepo,
-      tcpPort: 0,
-      getSaveDir: () => dir,
-      getImagesDir: () => dir,
-      bindAddress: '127.0.0.1'
+      transferRepo: transferRepo as unknown as TransferRepo
     })
 
     messenger.emit(
@@ -1280,17 +1174,11 @@ describe('FilesService 私聊直接发送', () => {
     const messenger = new FakeMessenger()
     const msgRepo = new FakeMsgRepo()
     const transferRepo = new FakeTransferRepo()
-    const service = new FilesService({
-      selfId: 'node-self',
+    const service = createFilesService(dir, {
       messenger: messenger as unknown as Messenger,
       registry: new FakeRegistry(['node-bob'], [CAPS.mediaRecall]) as unknown as PeerRegistry,
-      convRepo: new FakeConvRepo() as unknown as ConvRepo,
       msgRepo: msgRepo as unknown as MsgRepo,
-      transferRepo: transferRepo as unknown as TransferRepo,
-      tcpPort: 0,
-      getSaveDir: () => dir,
-      getImagesDir: () => dir,
-      bindAddress: '127.0.0.1'
+      transferRepo: transferRepo as unknown as TransferRepo
     })
 
     const view = await service.offerPaths('node-bob', [filePath])
@@ -1308,18 +1196,7 @@ describe('FilesService 私聊直接发送', () => {
     const filePath = join(dir, '资料.txt')
     writeFileSync(filePath, 'hello')
 
-    const service = new FilesService({
-      selfId: 'node-self',
-      messenger: new FakeMessenger() as unknown as Messenger,
-      registry: new FakeRegistry(['node-bob']) as unknown as PeerRegistry,
-      convRepo: new FakeConvRepo() as unknown as ConvRepo,
-      msgRepo: new FakeMsgRepo() as unknown as MsgRepo,
-      transferRepo: new FakeTransferRepo() as unknown as TransferRepo,
-      tcpPort: 0,
-      getSaveDir: () => dir,
-      getImagesDir: () => dir,
-      bindAddress: '127.0.0.1'
-    })
+    const service = createFilesService(dir)
 
     const view = await service.offerPaths('node-bob', [filePath])
     const mediaRecall = service as unknown as { canRecallMessage(msgId: string): boolean }
@@ -1336,18 +1213,11 @@ describe('FilesService 私聊直接发送', () => {
     const messenger = new FakeMessenger()
     const msgRepo = new FakeMsgRepo()
     const transferRepo = new FakeTransferRepo()
-    const service = new FilesService({
-      selfId: 'node-self',
+    const service = createFilesService(dir, {
       messenger: messenger as unknown as Messenger,
       registry: new FakeRegistry(['node-bob'], [CAPS.fileDirect]) as unknown as PeerRegistry,
-      convRepo: new FakeConvRepo() as unknown as ConvRepo,
       msgRepo: msgRepo as unknown as MsgRepo,
-      transferRepo: transferRepo as unknown as TransferRepo,
-      groupRepo: undefined,
-      tcpPort: 0,
-      getSaveDir: () => dir,
-      getImagesDir: () => dir,
-      bindAddress: '127.0.0.1'
+      transferRepo: transferRepo as unknown as TransferRepo
     })
 
     const view = await service.offerPaths('node-bob', [filePath])
@@ -1390,20 +1260,12 @@ describe('FilesService 私聊直接发送', () => {
     }
     const msgRepo = new FakeMsgRepo()
     const transferRepo = new FakeTransferRepo()
-    new FilesService({
-      selfId: 'node-self',
+    createFilesService(dir, {
       messenger: messenger as unknown as Messenger,
-      registry: new FakeRegistry(['node-bob']) as unknown as PeerRegistry,
-      convRepo: new FakeConvRepo() as unknown as ConvRepo,
       msgRepo: msgRepo as unknown as MsgRepo,
       transferRepo: transferRepo as unknown as TransferRepo,
-      groupRepo: undefined,
-      tcpPort: 0,
-      getSaveDir: () => dir,
-      getImagesDir: () => dir,
       allowDirectFileSend: () => true,
-      peerDisplayName: () => '张三/设计',
-      bindAddress: '127.0.0.1'
+      peerDisplayName: () => '张三/设计'
     })
 
     messenger.emit(
@@ -1455,20 +1317,12 @@ describe('FilesService 私聊直接发送', () => {
     const messenger = new FakeMessenger()
     const msgRepo = new FakeMsgRepo()
     const transferRepo = new FakeTransferRepo()
-    new FilesService({
-      selfId: 'node-self',
+    createFilesService(dir, {
       messenger: messenger as unknown as Messenger,
-      registry: new FakeRegistry(['node-bob']) as unknown as PeerRegistry,
-      convRepo: new FakeConvRepo() as unknown as ConvRepo,
       msgRepo: msgRepo as unknown as MsgRepo,
       transferRepo: transferRepo as unknown as TransferRepo,
-      groupRepo: undefined,
-      tcpPort: 0,
-      getSaveDir: () => dir,
-      getImagesDir: () => dir,
       allowDirectFileSend: () => false,
-      peerDisplayName: () => '张三',
-      bindAddress: '127.0.0.1'
+      peerDisplayName: () => '张三'
     })
 
     messenger.emit(
@@ -1510,20 +1364,12 @@ describe('FilesService 私聊直接发送', () => {
     const messenger = new FakeMessenger()
     const msgRepo = new FakeMsgRepo()
     const transferRepo = new FakeTransferRepo()
-    new FilesService({
-      selfId: 'node-self',
+    createFilesService(dir, {
       messenger: messenger as unknown as Messenger,
-      registry: new FakeRegistry(['node-bob']) as unknown as PeerRegistry,
-      convRepo: new FakeConvRepo() as unknown as ConvRepo,
       msgRepo: msgRepo as unknown as MsgRepo,
       transferRepo: transferRepo as unknown as TransferRepo,
-      groupRepo: undefined,
-      tcpPort: 0,
-      getSaveDir: () => dir,
-      getImagesDir: () => dir,
       allowDirectFileSend: () => true,
-      peerDisplayName: () => '张三',
-      bindAddress: '127.0.0.1'
+      peerDisplayName: () => '张三'
     })
 
     messenger.emit(
@@ -1578,18 +1424,10 @@ describe('FilesService 发送状态以数据面为准（issue #3）', () => {
 
     const msgRepo = new FakeMsgRepo()
     const transferRepo = new FakeTransferRepo()
-    const service = new FilesService({
-      selfId: 'node-self',
+    const service = createFilesService(dir, {
       messenger: messenger as unknown as Messenger,
-      registry: new FakeRegistry(['node-bob']) as unknown as PeerRegistry,
-      convRepo: new FakeConvRepo() as unknown as ConvRepo,
       msgRepo: msgRepo as unknown as MsgRepo,
-      transferRepo: transferRepo as unknown as TransferRepo,
-      groupRepo: undefined,
-      tcpPort: 0,
-      getSaveDir: () => dir,
-      getImagesDir: () => dir,
-      bindAddress: '127.0.0.1'
+      transferRepo: transferRepo as unknown as TransferRepo
     })
     return { service, messenger, msgRepo, transferRepo, imgPath }
   }
@@ -1694,21 +1532,6 @@ describe('FilesService 发送状态以数据面为准（issue #3）', () => {
 })
 
 describe('FilesService 取消可恢复（决议 #211）', () => {
-  function waitUntil(predicate: () => boolean, timeoutMs = 1_000): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const start = Date.now()
-      const timer = setInterval(() => {
-        if (predicate()) {
-          clearInterval(timer)
-          resolve()
-        } else if (Date.now() - start > timeoutMs) {
-          clearInterval(timer)
-          reject(new Error('timeout'))
-        }
-      }, 10)
-    })
-  }
-
   function makeIncomingService(peerCaps: string[]): {
     service: FilesService
     messenger: FakeMessenger
@@ -1718,18 +1541,10 @@ describe('FilesService 取消可恢复（决议 #211）', () => {
     tmpDirs.push(dir)
     const messenger = new FakeMessenger()
     const transferRepo = new FakeTransferRepo()
-    const service = new FilesService({
-      selfId: 'node-self',
+    const service = createFilesService(dir, {
       messenger: messenger as unknown as Messenger,
       registry: new FakeRegistry(['node-bob'], peerCaps) as unknown as PeerRegistry,
-      convRepo: new FakeConvRepo() as unknown as ConvRepo,
-      msgRepo: new FakeMsgRepo() as unknown as MsgRepo,
-      transferRepo: transferRepo as unknown as TransferRepo,
-      groupRepo: undefined,
-      tcpPort: 0,
-      getSaveDir: () => dir,
-      getImagesDir: () => dir,
-      bindAddress: '127.0.0.1'
+      transferRepo: transferRepo as unknown as TransferRepo
     })
     messenger.emit(
       'incoming',
@@ -1766,7 +1581,7 @@ describe('FilesService 取消可恢复（决议 #211）', () => {
       messenger.sent.some((item) => item.env.payload.op === 'accept')
     ).toBe(true)
     // 无真实供流端口，重拉很快失败 → 回到 failed 且上下文仍在，可继续重试
-    await waitUntil(() => transferRepo.get('t-retry')?.status === 'failed')
+    await waitFor(() => transferRepo.get('t-retry')?.status === 'failed')
     expect(service.transferView('t-retry')?.retryable).toBe(true)
   })
 
@@ -1836,12 +1651,9 @@ describe('FilesService 取消可恢复（决议 #211）', () => {
 
     const messenger = new FakeMessenger()
     const transferRepo = new FakeTransferRepo()
-    const service = new FilesService({
-      selfId: 'node-self',
+    const service = createFilesService(dir, {
       messenger: messenger as unknown as Messenger,
       registry: new FakeRegistry(['node-bob'], [CAPS.transferWait], port) as unknown as PeerRegistry,
-      convRepo: new FakeConvRepo() as unknown as ConvRepo,
-      msgRepo: new FakeMsgRepo() as unknown as MsgRepo,
       transferRepo: transferRepo as unknown as TransferRepo,
       groupRepo: new FakeGroupRepo({
         groupId: 'g-1',
@@ -1858,11 +1670,7 @@ describe('FilesService 取消可恢复（决议 #211）', () => {
         adminHint: '',
         description: '',
         announce: ''
-      }) as unknown as GroupRepo,
-      tcpPort: 0,
-      getSaveDir: () => dir,
-      getImagesDir: () => dir,
-      bindAddress: '127.0.0.1'
+      }) as unknown as GroupRepo
     })
     // 完整对齐用户场景：群聊文件 offer（带 groupId/groupRev/msgId）
     messenger.emit(
@@ -1887,7 +1695,7 @@ describe('FilesService 取消可恢复（决议 #211）', () => {
       // 用户点「接收」：进入传输中，拉取悬挂在静默供流端
       await expect(service.accept('t-midpull')).resolves.toBe(true)
       expect(transferRepo.get('t-midpull')?.status).toBe('accepted')
-      await waitUntil(
+      await waitFor(
         () =>
           (service as unknown as { incoming: Map<string, { cancelRef: { socket: unknown } }> })
             .incoming.get('t-midpull')?.cancelRef.socket !== null
@@ -1918,18 +1726,10 @@ describe('FilesService 取消可恢复（决议 #211）', () => {
 
     const messenger = new FakeMessenger()
     const transferRepo = new FakeTransferRepo()
-    const service = new FilesService({
-      selfId: 'node-self',
+    const service = createFilesService(dir, {
       messenger: messenger as unknown as Messenger,
       registry: new FakeRegistry(['node-bob'], [CAPS.transferWait]) as unknown as PeerRegistry,
-      convRepo: new FakeConvRepo() as unknown as ConvRepo,
-      msgRepo: new FakeMsgRepo() as unknown as MsgRepo,
-      transferRepo: transferRepo as unknown as TransferRepo,
-      groupRepo: undefined,
-      tcpPort: 0,
-      getSaveDir: () => dir,
-      getImagesDir: () => dir,
-      bindAddress: '127.0.0.1'
+      transferRepo: transferRepo as unknown as TransferRepo
     })
     await service.offerPaths('node-bob', [filePath])
     await waitTick()
@@ -1980,18 +1780,10 @@ describe('FilesService 普通文件 24 小时领取期限（决议 #263）', () 
     }
     const msgRepo = new FakeMsgRepo()
     const transferRepo = new FakeTransferRepo()
-    const service = new FilesService({
-      selfId: 'node-self',
+    const service = createFilesService(dir, {
       messenger: messenger as unknown as Messenger,
-      registry: new FakeRegistry(['node-bob']) as unknown as PeerRegistry,
-      convRepo: new FakeConvRepo() as unknown as ConvRepo,
       msgRepo: msgRepo as unknown as MsgRepo,
-      transferRepo: transferRepo as unknown as TransferRepo,
-      groupRepo: undefined,
-      tcpPort: 0,
-      getSaveDir: () => dir,
-      getImagesDir: () => dir,
-      bindAddress: '127.0.0.1'
+      transferRepo: transferRepo as unknown as TransferRepo
     })
 
     const view = await service.offerPaths('node-bob', [filePath])
@@ -2022,18 +1814,10 @@ describe('FilesService 普通文件 24 小时领取期限（决议 #263）', () 
     writeFileSync(filePath, 'deadline')
     const messenger = new FakeMessenger()
     const transferRepo = new FakeTransferRepo()
-    const service = new FilesService({
-      selfId: 'node-self',
+    const service = createFilesService(dir, {
       messenger: messenger as unknown as Messenger,
       registry: new FakeRegistry(['node-bob'], [CAPS.fileDirect]) as unknown as PeerRegistry,
-      convRepo: new FakeConvRepo() as unknown as ConvRepo,
-      msgRepo: new FakeMsgRepo() as unknown as MsgRepo,
-      transferRepo: transferRepo as unknown as TransferRepo,
-      groupRepo: undefined,
-      tcpPort: 0,
-      getSaveDir: () => dir,
-      getImagesDir: () => dir,
-      bindAddress: '127.0.0.1'
+      transferRepo: transferRepo as unknown as TransferRepo
     })
 
     const view = await service.offerPaths('node-bob', [filePath])
@@ -2069,18 +1853,9 @@ describe('FilesService 普通文件 24 小时领取期限（决议 #263）', () 
     tmpDirs.push(dir)
     const messenger = new FakeMessenger()
     const transferRepo = new FakeTransferRepo()
-    const service = new FilesService({
-      selfId: 'node-self',
+    const service = createFilesService(dir, {
       messenger: messenger as unknown as Messenger,
-      registry: new FakeRegistry(['node-bob']) as unknown as PeerRegistry,
-      convRepo: new FakeConvRepo() as unknown as ConvRepo,
-      msgRepo: new FakeMsgRepo() as unknown as MsgRepo,
-      transferRepo: transferRepo as unknown as TransferRepo,
-      groupRepo: undefined,
-      tcpPort: 0,
-      getSaveDir: () => dir,
-      getImagesDir: () => dir,
-      bindAddress: '127.0.0.1'
+      transferRepo: transferRepo as unknown as TransferRepo
     })
     const env = makeEnvelope<FileCtlPayload>(MSG_TYPES.fileCtl, 'node-bob', {
       op: 'offer',
@@ -2113,18 +1888,9 @@ describe('FilesService 普通文件 24 小时领取期限（决议 #263）', () 
     tmpDirs.push(dir)
     const messenger = new FakeMessenger()
     const transferRepo = new FakeTransferRepo()
-    const service = new FilesService({
-      selfId: 'node-self',
+    const service = createFilesService(dir, {
       messenger: messenger as unknown as Messenger,
-      registry: new FakeRegistry(['node-bob']) as unknown as PeerRegistry,
-      convRepo: new FakeConvRepo() as unknown as ConvRepo,
-      msgRepo: new FakeMsgRepo() as unknown as MsgRepo,
-      transferRepo: transferRepo as unknown as TransferRepo,
-      groupRepo: undefined,
-      tcpPort: 0,
-      getSaveDir: () => dir,
-      getImagesDir: () => dir,
-      bindAddress: '127.0.0.1'
+      transferRepo: transferRepo as unknown as TransferRepo
     })
     const before = Date.now()
     messenger.emit(
@@ -2249,18 +2015,10 @@ describe('FilesService 普通文件 24 小时领取期限（决议 #263）', () 
     const port = (silent.address() as { port: number }).port
     const messenger = new FakeMessenger()
     const transferRepo = new FakeTransferRepo()
-    const service = new FilesService({
-      selfId: 'node-self',
+    const service = createFilesService(dir, {
       messenger: messenger as unknown as Messenger,
       registry: new FakeRegistry(['node-bob'], [CAPS.transferWait], port) as unknown as PeerRegistry,
-      convRepo: new FakeConvRepo() as unknown as ConvRepo,
-      msgRepo: new FakeMsgRepo() as unknown as MsgRepo,
-      transferRepo: transferRepo as unknown as TransferRepo,
-      groupRepo: undefined,
-      tcpPort: 0,
-      getSaveDir: () => dir,
-      getImagesDir: () => dir,
-      bindAddress: '127.0.0.1'
+      transferRepo: transferRepo as unknown as TransferRepo
     })
     const env = makeEnvelope<FileCtlPayload>(MSG_TYPES.fileCtl, 'node-bob', {
       op: 'offer',
@@ -2298,17 +2056,11 @@ describe('FilesService 共享文件柜下载（决议 #275）', () => {
     const msgRepo = new FakeMsgRepo()
     const transferRepo = new FakeTransferRepo()
     const convRepo = new FakeConvRepo()
-    const svc = new FilesService({
-      selfId: 'node-self',
+    const svc = createFilesService(dir, {
       messenger: messenger as unknown as Messenger,
-      registry: new FakeRegistry(['node-bob']) as unknown as PeerRegistry,
       convRepo: convRepo as unknown as ConvRepo,
       msgRepo: msgRepo as unknown as MsgRepo,
-      transferRepo: transferRepo as unknown as TransferRepo,
-      tcpPort: 0,
-      getSaveDir: () => dir,
-      getImagesDir: () => dir,
-      bindAddress: '127.0.0.1'
+      transferRepo: transferRepo as unknown as TransferRepo
     })
 
     await expect(svc.offerSharePaths('node-bob', [join(dir, '资料.txt')])).resolves.toBe(true)
@@ -2332,17 +2084,9 @@ describe('FilesService 共享文件柜下载（决议 #275）', () => {
     tmpDirs.push(dir)
     writeFileSync(join(dir, 'a.txt'), 'x')
     const messenger = new FakeMessenger()
-    const svc = new FilesService({
-      selfId: 'node-self',
+    const svc = createFilesService(dir, {
       messenger: messenger as unknown as Messenger,
-      registry: new FakeRegistry([]) as unknown as PeerRegistry,
-      convRepo: new FakeConvRepo() as unknown as ConvRepo,
-      msgRepo: new FakeMsgRepo() as unknown as MsgRepo,
-      transferRepo: new FakeTransferRepo() as unknown as TransferRepo,
-      tcpPort: 0,
-      getSaveDir: () => dir,
-      getImagesDir: () => dir,
-      bindAddress: '127.0.0.1'
+      registry: new FakeRegistry([]) as unknown as PeerRegistry
     })
     await expect(svc.offerSharePaths('node-bob', [join(dir, 'a.txt')])).resolves.toBe(false)
     expect(messenger.sent).toHaveLength(0)
@@ -2355,18 +2099,11 @@ describe('FilesService 共享文件柜下载（决议 #275）', () => {
     const messenger = new FakeMessenger()
     const msgRepo = new FakeMsgRepo()
     const transferRepo = new FakeTransferRepo()
-    const svc = new FilesService({
-      selfId: 'node-self',
+    const svc = createFilesService(dir, {
       messenger: messenger as unknown as Messenger,
-      registry: new FakeRegistry(['node-bob']) as unknown as PeerRegistry,
-      convRepo: new FakeConvRepo() as unknown as ConvRepo,
       msgRepo: msgRepo as unknown as MsgRepo,
       transferRepo: transferRepo as unknown as TransferRepo,
-      tcpPort: 0,
-      getSaveDir: () => dir,
-      getImagesDir: () => dir,
-      authorizeShareDownload: () => null, // 本机没请求过
-      bindAddress: '127.0.0.1'
+      authorizeShareDownload: () => null
     })
 
     messenger.emit('incoming', shareGetOffer('node-bob', 'transfer-unauth'))
@@ -2388,21 +2125,15 @@ describe('FilesService 共享文件柜下载（决议 #275）', () => {
     const transferRepo = new FakeTransferRepo()
     const convRepo = new FakeConvRepo()
     let consumed = 0
-    const svc = new FilesService({
-      selfId: 'node-self',
+    const svc = createFilesService(dir, {
       messenger: messenger as unknown as Messenger,
-      registry: new FakeRegistry(['node-bob']) as unknown as PeerRegistry,
       convRepo: convRepo as unknown as ConvRepo,
       msgRepo: msgRepo as unknown as MsgRepo,
       transferRepo: transferRepo as unknown as TransferRepo,
-      tcpPort: 0,
-      getSaveDir: () => dir,
-      getImagesDir: () => dir,
       authorizeShareDownload: () => {
         consumed += 1
         return consumed === 1 ? downloadDir : null // 一次性
-      },
-      bindAddress: '127.0.0.1'
+      }
     })
 
     messenger.emit('incoming', shareGetOffer('node-bob', 'transfer-auth'))
@@ -2438,8 +2169,7 @@ describe('FilesService 共享文件柜上传（决议 #272/#274）', () => {
     const msgRepo = new FakeMsgRepo()
     const transferRepo = new FakeTransferRepo()
     const convRepo = new FakeConvRepo()
-    const svc = new FilesService({
-      selfId: 'node-self',
+    const svc = createFilesService(options.dir, {
       messenger: messenger as unknown as Messenger,
       registry: new FakeRegistry(
         ['node-bob'],
@@ -2448,12 +2178,8 @@ describe('FilesService 共享文件柜上传（决议 #272/#274）', () => {
       convRepo: convRepo as unknown as ConvRepo,
       msgRepo: msgRepo as unknown as MsgRepo,
       transferRepo: transferRepo as unknown as TransferRepo,
-      tcpPort: 0,
-      getSaveDir: () => options.dir,
-      getImagesDir: () => options.dir,
       peerDisplayName: () => '鲍勃',
-      ...(options.authorizeShareUpload ? { authorizeShareUpload: options.authorizeShareUpload } : {}),
-      bindAddress: '127.0.0.1'
+      ...(options.authorizeShareUpload ? { authorizeShareUpload: options.authorizeShareUpload } : {})
     })
     return { svc, messenger, msgRepo, transferRepo, convRepo }
   }
@@ -2568,18 +2294,10 @@ describe('FilesService 共享文件柜上传（决议 #272/#274）', () => {
     tmpDirs.push(dir)
     const messenger = new FakeMessenger()
     const msgRepo = new FakeMsgRepo()
-    const svc = new FilesService({
-      selfId: 'node-self',
+    const svc = createFilesService(dir, {
       messenger: messenger as unknown as Messenger,
-      registry: new FakeRegistry(['node-bob']) as unknown as PeerRegistry,
-      convRepo: new FakeConvRepo() as unknown as ConvRepo,
       msgRepo: msgRepo as unknown as MsgRepo,
-      transferRepo: new FakeTransferRepo() as unknown as TransferRepo,
-      tcpPort: 0,
-      getSaveDir: () => dir,
-      getImagesDir: () => dir,
-      authorizeShareDownload: () => dir,
-      bindAddress: '127.0.0.1'
+      authorizeShareDownload: () => dir
     })
 
     messenger.emit('incoming', shareGetOffer('node-bob', 'transfer-get-note'))
@@ -2603,19 +2321,10 @@ describe('最近有人放进来（决议 #283）', () => {
     tmpDirs.push(dir)
     const msgRepo = new FakeMsgRepo()
     const transferRepo = new FakeTransferRepo()
-    const svc = new FilesService({
-      selfId: 'node-self',
-      messenger: new FakeMessenger() as unknown as Messenger,
-      registry: new FakeRegistry(['node-bob']) as unknown as PeerRegistry,
-      convRepo: new FakeConvRepo() as unknown as ConvRepo,
+    const svc = createFilesService(dir, {
       msgRepo: msgRepo as unknown as MsgRepo,
       transferRepo: transferRepo as unknown as TransferRepo,
-      groupRepo: undefined,
-      tcpPort: 0,
-      getSaveDir: () => dir,
-      getImagesDir: () => dir,
-      getUpdateDir: () => dir,
-      bindAddress: '127.0.0.1'
+      getUpdateDir: () => dir
     })
     return { svc, msgRepo, transferRepo }
   }

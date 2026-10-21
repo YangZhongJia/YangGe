@@ -114,6 +114,23 @@ class FakePkMsgRepo {
   }
 }
 
+function groupMeta(overrides: Pick<GroupMeta, 'groupId' | 'members' | 'ownerId'> & Partial<GroupMeta>): GroupMeta {
+  return {
+    name: '项目组',
+    rev: 1,
+    updatedTs: 1000,
+    updatedBy: overrides.ownerId,
+    creatorId: overrides.ownerId,
+    creatorIp: '10.0.0.1',
+    adminIds: [],
+    adminSecretHash: '',
+    adminHint: '',
+    description: '',
+    announce: '',
+    ...overrides
+  }
+}
+
 function service(opts: {
   selfIp: string
   selfId?: string
@@ -311,22 +328,12 @@ describe('GroupsService 群管理权限', () => {
   it('拒绝夹带其他操作字段的混合变更', () => {
     const repo = new FakeGroupRepo()
     const member = service({ selfId: 'node-member', selfIp: '10.0.0.2', groupRepo: repo })
-    repo.save({
+    repo.save(groupMeta({
       groupId: 'g-mixed',
       name: '原群名',
       members: ['node-owner', 'node-member'],
-      rev: 1,
-      updatedBy: 'node-owner',
-      updatedTs: 1000,
-      creatorIp: '10.0.0.1',
-      creatorId: 'node-owner',
-      ownerId: 'node-owner',
-      adminIds: [],
-      adminSecretHash: '',
-      adminHint: '',
-      description: '',
-      announce: ''
-    })
+      ownerId: 'node-owner'
+    }))
     const mixed = {
       kind: 'invite',
       memberIds: ['node-new'],
@@ -385,22 +392,11 @@ describe('GroupsService 群管理权限', () => {
     const repo = new FakeGroupRepo()
     const messenger = new FakeMessenger()
     service({ selfIp: '10.0.0.8', groupRepo: repo, messenger })
-    const local: GroupMeta = {
+    const local: GroupMeta = groupMeta({
       groupId: 'g-1',
-      name: '项目组',
       members: ['node-self', 'node-bob'],
-      rev: 1,
-      updatedBy: 'node-self',
-      updatedTs: 1000,
-      creatorIp: '10.0.0.1',
-      creatorId: 'node-self',
-      ownerId: 'node-self',
-      adminIds: [],
-      adminSecretHash: '',
-      adminHint: '',
-      description: '',
-      announce: ''
-    }
+      ownerId: 'node-self'
+    })
     repo.save(local)
 
     const unauthorized = makeEnvelope<GroupPayload>(MSG_TYPES.group, 'node-bob', {
@@ -428,22 +424,12 @@ describe('GroupsService 群管理权限', () => {
     const repo = new FakeGroupRepo()
     const messenger = new FakeMessenger()
     service({ selfId: 'node-b', selfIp: '10.0.0.8', groupRepo: repo, messenger })
-    const local: GroupMeta = {
+    const local: GroupMeta = groupMeta({
       groupId: 'g-vm',
-      name: '项目组',
       members: ['node-a', 'node-b'],
-      rev: 1,
-      updatedBy: 'node-a',
-      updatedTs: 1000,
       creatorIp: '192.168.1.10',
-      creatorId: 'node-a',
-      ownerId: 'node-a',
-      adminIds: [],
-      adminSecretHash: '',
-      adminHint: '',
-      description: '',
-      announce: ''
-    }
+      ownerId: 'node-a'
+    })
     repo.save(local)
 
     const rename = makeEnvelope<GroupPayload>(MSG_TYPES.group, 'node-a', {
@@ -458,22 +444,12 @@ describe('GroupsService 群管理权限', () => {
     const repo = new FakeGroupRepo()
     const messenger = new FakeMessenger()
     service({ selfId: 'node-self', selfIp: '10.0.0.8', groupRepo: repo, messenger })
-    const local: GroupMeta = {
+    const local: GroupMeta = groupMeta({
       groupId: 'g-roles',
-      name: '项目组',
       members: ['node-owner', 'node-admin', 'node-member', 'node-self'],
-      rev: 1,
-      updatedBy: 'node-owner',
-      updatedTs: 1000,
-      creatorIp: '10.0.0.1',
-      creatorId: 'node-owner',
       ownerId: 'node-owner',
-      adminIds: ['node-admin'],
-      adminSecretHash: '',
-      adminHint: '',
-      description: '',
-      announce: ''
-    }
+      adminIds: ['node-admin']
+    })
     repo.save(local)
 
     const adminRename = makeEnvelope<GroupPayload>(MSG_TYPES.group, 'node-admin', {
@@ -502,23 +478,14 @@ describe('GroupsService 群管理权限', () => {
     const repo = new FakeGroupRepo()
     const messenger = new FakeMessenger()
     service({ selfId: 'node-self', selfIp: '10.0.0.8', groupRepo: repo, messenger })
-    const local: GroupMeta = {
+    const local: GroupMeta = groupMeta({
       groupId: 'g-avatar',
       name: '头像组',
       members: ['node-owner', 'node-admin', 'node-member', 'node-self'],
-      rev: 1,
-      updatedBy: 'node-owner',
-      updatedTs: 1000,
-      creatorIp: '10.0.0.1',
-      creatorId: 'node-owner',
       ownerId: 'node-owner',
       adminIds: ['node-admin'],
-      avatarHash: '',
-      adminSecretHash: '',
-      adminHint: '',
-      description: '',
-      announce: ''
-    }
+      avatarHash: ''
+    })
     repo.save(local)
 
     messenger.emit(
@@ -576,22 +543,12 @@ describe('GroupsService 群管理权限', () => {
     const repo = new FakeGroupRepo()
     const messenger = new FakeMessenger()
     service({ selfId: 'node-self', selfIp: '10.0.0.8', groupRepo: repo, messenger })
-    const local: GroupMeta = {
+    const local: GroupMeta = groupMeta({
       groupId: 'g-legacy-role',
-      name: '项目组',
       members: ['node-owner', 'node-admin', 'node-member', 'node-self'],
-      rev: 1,
-      updatedBy: 'node-owner',
-      updatedTs: 1000,
-      creatorIp: '10.0.0.1',
-      creatorId: 'node-owner',
       ownerId: 'node-owner',
-      adminIds: ['node-admin'],
-      adminSecretHash: '',
-      adminHint: '',
-      description: '',
-      announce: ''
-    }
+      adminIds: ['node-admin']
+    })
     repo.save(local)
 
     const legacyRenameGroup = {
@@ -634,22 +591,11 @@ describe('GroupsService 群管理权限', () => {
     const repo = new FakeGroupRepo()
     const messenger = new FakeMessenger()
     service({ selfId: 'node-self', selfIp: '10.0.0.8', groupRepo: repo, messenger })
-    const local: GroupMeta = {
+    const local: GroupMeta = groupMeta({
       groupId: 'g-inbound-roles',
-      name: '项目组',
       members: ['node-owner', 'node-a', 'node-b', 'node-self'],
-      rev: 1,
-      updatedBy: 'node-owner',
-      updatedTs: 1000,
-      creatorIp: '10.0.0.1',
-      creatorId: 'node-owner',
-      ownerId: 'node-owner',
-      adminIds: [],
-      adminSecretHash: '',
-      adminHint: '',
-      description: '',
-      announce: ''
-    }
+      ownerId: 'node-owner'
+    })
     repo.save(local)
 
     const unauthorizedAdmin = makeEnvelope<GroupPayload>(MSG_TYPES.group, 'node-b', {
@@ -1265,22 +1211,14 @@ describe('GroupsService 群简介与群公告', () => {
     const repo = new FakeGroupRepo()
     const messenger = new FakeMessenger()
     service({ selfId: 'node-b', selfIp: '10.0.0.2', groupRepo: repo, messenger })
-    const local: GroupMeta = {
+    const local: GroupMeta = groupMeta({
       groupId: 'g-legacy-text',
       name: '同步组',
       members: ['node-a', 'node-b'],
-      rev: 1,
-      updatedBy: 'node-a',
-      updatedTs: 1000,
-      creatorIp: '10.0.0.1',
-      creatorId: 'node-a',
       ownerId: 'node-a',
-      adminIds: [],
-      adminSecretHash: '',
-      adminHint: '',
       description: '本地简介',
       announce: '本地公告'
-    }
+    })
     repo.save(local)
 
     messenger.emit(
@@ -1327,22 +1265,12 @@ describe('GroupsService 群简介与群公告', () => {
     const repo = new FakeGroupRepo()
     const messenger = new FakeMessenger()
     service({ selfId: 'node-b', selfIp: '10.0.0.2', groupRepo: repo, messenger })
-    const local: GroupMeta = {
+    const local: GroupMeta = groupMeta({
       groupId: 'g-sync',
       name: '同步组',
       members: ['node-a', 'node-b'],
-      rev: 1,
-      updatedBy: 'node-a',
-      updatedTs: 1000,
-      creatorIp: '10.0.0.1',
-      creatorId: 'node-a',
-      ownerId: 'node-a',
-      adminIds: [],
-      adminSecretHash: '',
-      adminHint: '',
-      description: '',
-      announce: ''
-    }
+      ownerId: 'node-a'
+    })
     repo.save(local)
 
     const send = (group: GroupMeta): void => {
@@ -1369,22 +1297,13 @@ describe('GroupsService 群简介与群公告', () => {
     const repo = new FakeGroupRepo()
     const messenger = new FakeMessenger()
     service({ selfId: 'node-self', selfIp: '10.0.0.8', groupRepo: repo, messenger })
-    const local: GroupMeta = {
+    const local: GroupMeta = groupMeta({
       groupId: 'g-admin-text',
       name: '管理员组',
       members: ['node-owner', 'node-admin', 'node-self'],
-      rev: 1,
-      updatedBy: 'node-owner',
-      updatedTs: 1000,
-      creatorIp: '10.0.0.1',
-      creatorId: 'node-owner',
       ownerId: 'node-owner',
-      adminIds: ['node-admin'],
-      adminSecretHash: '',
-      adminHint: '',
-      description: '',
-      announce: ''
-    }
+      adminIds: ['node-admin']
+    })
     repo.save(local)
 
     const send = (group: GroupMeta): void => {
@@ -1405,22 +1324,14 @@ describe('GroupsService 群简介与群公告', () => {
     const repo = new FakeGroupRepo()
     const messenger = new FakeMessenger()
     service({ selfId: 'node-self', selfIp: '10.0.0.8', groupRepo: repo, messenger })
-    const local: GroupMeta = {
+    const local: GroupMeta = groupMeta({
       groupId: 'g-text-guard',
-      name: '项目组',
       members: ['node-owner', 'node-admin', 'node-member', 'node-self'],
-      rev: 1,
-      updatedBy: 'node-owner',
-      updatedTs: 1000,
-      creatorIp: '10.0.0.1',
-      creatorId: 'node-owner',
       ownerId: 'node-owner',
       adminIds: ['node-admin'],
-      adminSecretHash: '',
-      adminHint: '',
       description: '本地简介',
       announce: '本地公告'
-    }
+    })
     repo.save(local)
 
     const send = (from: string, group: GroupMeta, address: string): void => {

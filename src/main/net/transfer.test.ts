@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createWriteStream, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createHash, randomBytes } from 'node:crypto'
 import { createConnection, createServer, type Socket } from 'node:net'
@@ -77,12 +77,8 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-async function waitFor(predicate: () => boolean, timeoutMs = 500): Promise<void> {
-  const start = Date.now()
-  while (!predicate()) {
-    if (Date.now() - start > timeoutMs) throw new Error('timeout')
-    await delay(10)
-  }
+function waitFor(predicate: () => boolean, timeout = 500) {
+  return vi.waitUntil(predicate, { timeout, interval: 10 })
 }
 
 class SlowReadable extends Readable {

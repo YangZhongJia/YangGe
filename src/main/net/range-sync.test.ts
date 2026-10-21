@@ -82,13 +82,8 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-async function waitFor(cond: () => boolean, timeout = 1000): Promise<void> {
-  const deadline = Date.now() + timeout
-  while (Date.now() < deadline) {
-    if (cond()) return
-    await sleep(20)
-  }
-  throw new Error('waitFor 超时')
+function waitFor(predicate: () => boolean, timeout = 1000) {
+  return vi.waitUntil(predicate, { timeout, interval: 20 })
 }
 
 afterEach(async () => {

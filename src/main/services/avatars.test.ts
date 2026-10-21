@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   CAPS,
   MSG_TYPES,
@@ -95,13 +95,8 @@ class FakeGroupRepo {
   }
 }
 
-async function waitFor(check: () => boolean, timeout = 1000): Promise<void> {
-  const deadline = Date.now() + timeout
-  while (Date.now() < deadline) {
-    if (check()) return
-    await new Promise((resolve) => setTimeout(resolve, 10))
-  }
-  throw new Error('waitFor 超时')
+function waitFor(predicate: () => boolean, timeout = 1000) {
+  return vi.waitUntil(predicate, { timeout, interval: 10 })
 }
 
 describe('AvatarService', () => {

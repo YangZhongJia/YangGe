@@ -1,4 +1,5 @@
 import { RangeScanScheduler } from './services/range-scan'
+import { truncateUtf8 } from './util/utf8'
 import { DiagnosticsService, diagnosticEnvironment } from './services/diagnostics'
 import { setupDiagnosticsUi } from './services/diagnostics-ui'
 import { isLanguage, setLanguage, tr } from '../i18n'
@@ -357,24 +358,11 @@ if (!gotLock) {
     if (raw.tableTextTruncated !== undefined && typeof raw.tableTextTruncated !== 'boolean') {
       return null
     }
-    const truncated = truncateUtf8Text(raw.tableText, TABLE_TEXT_LIMIT_BYTES)
+    const truncated = truncateUtf8(raw.tableText, TABLE_TEXT_LIMIT_BYTES)
     return {
       tableText: truncated.text,
       ...(raw.tableTextTruncated || truncated.truncated ? { tableTextTruncated: true } : {})
     }
-  }
-
-  function truncateUtf8Text(text: string, maxBytes: number): { text: string; truncated: boolean } {
-    if (Buffer.byteLength(text, 'utf8') <= maxBytes) return { text, truncated: false }
-    let out = ''
-    let used = 0
-    for (const char of text) {
-      const size = Buffer.byteLength(char, 'utf8')
-      if (used + size > maxBytes) break
-      out += char
-      used += size
-    }
-    return { text: out, truncated: true }
   }
 
   /** Linux 窗口图标（决议 #58）：显式设置 _NET_WM_ICON，任务栏不依赖桌面环境的 desktop 关联 */

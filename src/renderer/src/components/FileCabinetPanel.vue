@@ -1,240 +1,47 @@
 <script setup lang="ts">
 import { tr } from '../utils/i18n'
 import { computed, onUnmounted, ref, watch } from 'vue'
-import {
-  SHARE_FAIL_TEXT,
-  SHARE_UPLOAD_FAIL_TEXT,
-  type ShareBrowseFailReason,
-  type TransferView
-} from '../../../shared/ipc'
-import { SHARE_DIR_MAX_ENTRIES, type ShareEntry } from '../../../shared/protocol'
+import { SHARE_DIR_MAX_ENTRIES } from '../../../shared/protocol'
 import { useChatStore } from '../stores/chat'
+import { useShareBrowser } from '../utils/share-browser'
 import { formatBytes } from '../utils/format'
 import PantryIcon from './PantryIcon.vue'
 import FileTypeIcon from './FileTypeIcon.vue'
 
-// 对方的文件柜面板（ui-design §5 / 决议 #273，样式与手感按 #283 与文件柜窗口对齐）：
-// 覆盖聊天右侧一整列，可边聊边浏览；要认真翻时用头部的「在文件柜里打开」换到左侧文件柜页签。
-// 只做展示与请求编排，权限判定全部在对方本机（protocol §8.2）。
-
+// 聊天侧栏保留自己的浏览状态；与主窗文件柜只共享行为。
 const props = defineProps<{ peerId: string; peerName: string }>()
 const emit = defineEmits<{ close: [] }>()
-
-interface Crumb {
-  name: string
-  path: string
-}
-
-const entries = ref<ShareEntry[]>([])
-const path = ref('')
-const perm = ref<'read' | 'write'>('read')
-const snapshotId = ref('')
-const total = ref(0)
-const truncated = ref(false)
-const loading = ref(false)
-const loadingMore = ref(false)
-// 首屏失败（整页替换成错误态）与翻页失败（只在列表底部提示）必须分开，
-// 否则滚动撞上对方 10 秒 5 次的列目录限流时，已经加载好的条目会被整片清掉（决议 #278）
-const failReason = ref<ShareBrowseFailReason | null>(null)
-const moreFailReason = ref<ShareBrowseFailReason | null>(null)
-const picked = ref<Set<string>>(new Set())
-const cursor = ref(-1)
-const downloading = ref(false)
-const downloadNote = ref('')
-const transfer = ref<TransferView | null>(null)
-const uploading = ref(false)
+const browser = useShareBrowser(() => props.peerId)
+const {
+  entries, path, perm, total, truncated, loading, loadingMore, failReason, moreFailReason,
+  picked, downloading, uploading, note: downloadNote, transfer, canUpload, crumbs,
+  failText, moreFailText, pickedCount, allLoadedPicked: allPagePicked,
+  pickAllLabel, progressPercent, load, loadMore, goUp, openRow: onRowOpen,
+  toggleAll, togglePick, download, upload, cancelTransfer: cancelDownload
+} = browser
 const dragActive = ref(false)
 const chatStore = useChatStore()
-
-const canUpload = computed(() => perm.value === 'write')
 const uploadHint = computed(
   () => tr('文件会放进 TA 文件柜的「{0}」文件夹里', { 0: chatStore.selfNick || tr('你的名字') })
 )
 
-const crumbs = computed<Crumb[]>(() => {
-  const list: Crumb[] = [{ name: tr('文件柜'), path: '' }]
-  const segs = path.value ? path.value.split('/') : []
-  let acc = ''
-  for (const seg of segs) {
-    acc = acc ? `${acc}/${seg}` : seg
-    list.push({ name: seg, path: acc })
-  }
-  return list
-})
-
-const hasMore = computed(() => entries.value.length < total.value)
-const failText = computed(() => (failReason.value ? tr(SHARE_FAIL_TEXT[failReason.value]) : ''))
-const moreFailText = computed(() =>
-  moreFailReason.value ? tr(SHARE_FAIL_TEXT[moreFailReason.value]) : ''
-)
-const pickedCount = computed(() => picked.value.size)
-const allPagePicked = computed(
-  () => entries.value.length > 0 && entries.value.every((e) => picked.value.has(e.name))
-)
-// 勾选只覆盖已经取回的条目，还有下一页时说「全选」会让人以为把 total 项都选上了
-const pickAllLabel = computed(() => (hasMore.value ? tr('选择已加载') : tr('全选')))
-const progressPercent = computed(() => {
-  const t = transfer.value
-  if (!t || t.totalSize <= 0) return 0
-  return Math.min(100, Math.round((t.bytesDone / t.totalSize) * 100))
-})
-
-function childPath(name: string): string {
-  return path.value ? `${path.value}/${name}` : name
-}
-
-async function load(target: string, keepPick = false): Promise<void> {
-  loading.value = true
-  failReason.value = null
-  moreFailReason.value = null
-  if (!keepPick) {
-    picked.value = new Set()
-    cursor.value = -1
-  }
-  const result = await window.pantry.browseShare(props.peerId, target, 0)
-  loading.value = false
-  if (!result.ok) {
-    failReason.value = result.reason
-    entries.value = []
-    total.value = 0
-    return
-  }
-  path.value = result.path
-  perm.value = result.perm
-  snapshotId.value = result.snapshotId
-  entries.value = result.entries
-  total.value = result.total
-  truncated.value = result.truncated
-}
-
-// 滚到底继续取下一页；快照失效（gone）时静默从第 0 页重来，用户无感
-async function loadMore(): Promise<void> {
-  if (loadingMore.value || loading.value || !hasMore.value) return
-  loadingMore.value = true
-  moreFailReason.value = null
-  const result = await window.pantry.browseShare(
-    props.peerId,
-    path.value,
-    entries.value.length,
-    snapshotId.value
-  )
-  loadingMore.value = false
-  if (!result.ok) {
-    if (result.reason === 'gone') {
-      await load(path.value, true)
-      return
-    }
-    // 已经取到的条目一律保留，失败只落在列表末尾
-    moreFailReason.value = result.reason
-    return
-  }
-  entries.value = [...entries.value, ...result.entries]
-  total.value = result.total
-  snapshotId.value = result.snapshotId
-}
-
 function onScroll(event: Event): void {
-  // 上一页刚失败（多半是撞了限流）就停下等用户点重试，继续滚不再自动重发
+  // 翻页失败后暂停自动续拉，保留已加载条目供用户重试。
   if (moreFailReason.value) return
   const el = event.target as HTMLElement
   if (el.scrollTop + el.clientHeight >= el.scrollHeight - 120) void loadMore()
 }
 
-function goUp(): void {
-  if (crumbs.value.length < 2) return
-  void load(crumbs.value[crumbs.value.length - 2].path)
-}
-
-// 单击选中、双击进目录（决议 #283）：与文件柜窗口同一套手感，也才谈得上多选
 function onRowClick(index: number, event: MouseEvent): void {
-  const entry = entries.value[index]
-  if (!entry) return
-  if (event.shiftKey && cursor.value >= 0) {
-    const [a, b] = cursor.value <= index ? [cursor.value, index] : [index, cursor.value]
-    const next = new Set(picked.value)
-    for (let i = a; i <= b; i += 1) next.add(entries.value[i].name)
-    picked.value = next
-    cursor.value = index
-    return
-  }
-  if (event.ctrlKey || event.metaKey) {
-    togglePick(entry.name)
-    cursor.value = index
-    return
-  }
-  picked.value = new Set([entry.name])
-  cursor.value = index
-}
-
-function onRowOpen(index: number): void {
-  const entry = entries.value[index]
-  if (!entry) return
-  if (entry.isDir) void load(childPath(entry.name))
-  else void download(false, [childPath(entry.name)])
-}
-
-function togglePick(name: string): void {
-  const next = new Set(picked.value)
-  if (next.has(name)) next.delete(name)
-  else next.add(name)
-  picked.value = next
-}
-
-function toggleAll(): void {
-  picked.value = allPagePicked.value ? new Set() : new Set(entries.value.map((e) => e.name))
-}
-
-async function download(saveAs: boolean, only?: string[]): Promise<void> {
-  const paths = only ?? [...picked.value].map((name) => childPath(name))
-  if (paths.length === 0 || downloading.value) return
-  downloading.value = true
-  downloadNote.value = ''
-  transfer.value = null
-  const result = await window.pantry.downloadShare(props.peerId, paths, saveAs)
-  downloading.value = false
-  if (!result.ok) {
-    downloadNote.value = tr(SHARE_FAIL_TEXT[result.reason])
-    return
-  }
-  if (result.canceled) return
-  if (!only) picked.value = new Set()
-  downloadNote.value = tr('已开始下载')
-}
-
-// 上传永远落到对方共享根下以我命名的子目录，与当前浏览到哪一层无关（决议 #272）
-async function upload(directory: boolean): Promise<void> {
-  if (!canUpload.value || uploading.value) return
-  uploading.value = true
-  downloadNote.value = ''
-  transfer.value = null
-  const result = await window.pantry.uploadShare(props.peerId, undefined, directory)
-  uploading.value = false
-  if (!result.ok) {
-    downloadNote.value = tr(SHARE_UPLOAD_FAIL_TEXT[result.reason])
-    return
-  }
-  if (result.canceled) return
-  downloadNote.value = tr('正在上传 {0} 个文件', { 0: result.fileCount })
+  browser.clickRow(index, { shift: event.shiftKey, mod: event.ctrlKey || event.metaKey })
 }
 
 async function onDrop(event: DragEvent): Promise<void> {
   dragActive.value = false
-  if (!canUpload.value || uploading.value) return
   const paths = [...(event.dataTransfer?.files ?? [])]
     .map((f) => (f as File & { path?: string }).path ?? '')
     .filter((p) => p.length > 0)
-  if (paths.length === 0) return
-  uploading.value = true
-  downloadNote.value = ''
-  transfer.value = null
-  const granted = await window.pantry.grantFilePaths(paths)
-  const result = await window.pantry.uploadShare(props.peerId, granted)
-  uploading.value = false
-  if (!result.ok) {
-    downloadNote.value = tr(SHARE_UPLOAD_FAIL_TEXT[result.reason])
-    return
-  }
-  if (!result.canceled) downloadNote.value = tr('正在上传 {0} 个文件', { 0: result.fileCount })
+  await browser.uploadDropped(paths)
 }
 
 function onDragOver(event: DragEvent): void {
@@ -243,49 +50,34 @@ function onDragOver(event: DragEvent): void {
   dragActive.value = true
 }
 
-// 拖过面板内部的子元素时，根节点上也会收到 dragleave 并让高亮闪一下；
-// 只有真正离开面板边界（relatedTarget 已不在面板内，或拖出窗口为 null）才熄灭
+// 面板内部子元素之间的拖动不取消高亮。
 function onDragLeave(event: DragEvent): void {
   const next = event.relatedTarget as Node | null
   if (next && (event.currentTarget as HTMLElement).contains(next)) return
   dragActive.value = false
 }
 
-/** 换到大视图（决议 #283/#284）：带着当前对端切到文件柜页签，面板随即收起 */
 function openInCabinet(): void {
   void window.pantry.openCabinet(props.peerId)
   emit('close')
 }
 
-// 文件柜传输不进聊天流，进度只在本面板就地显示（决议 #275）
-const stopTransfer = window.pantry.onTransferUpdated((view) => {
-  if (view.peerId !== props.peerId || !view.msgId.startsWith('share:')) return
-  transfer.value = view
-  const up = view.direction === 'out'
-  if (view.status === 'done') downloadNote.value = up ? tr('上传完成') : tr('下载完成')
-  else if (view.status === 'failed') downloadNote.value = up ? tr('上传失败，可重试') : tr('下载失败，可重试')
-  else if (view.status === 'canceled') downloadNote.value = tr('已取消')
-})
+const stopTransfer = window.pantry.onTransferUpdated(browser.updateTransfer)
 
 function revealDone(): void {
-  if (transfer.value?.status === 'done') void window.pantry.revealTransfer(transfer.value.transferId)
-}
-
-function cancelDownload(): void {
-  if (transfer.value) void window.pantry.cancelTransfer(transfer.value.transferId)
+  if (transfer.value?.status === 'done') browser.revealTransfer()
 }
 
 watch(
   () => props.peerId,
   () => {
-    transfer.value = null
-    downloadNote.value = ''
+    browser.resetBrowse()
     void load('')
   },
   { immediate: true }
 )
 
-onUnmounted(() => stopTransfer())
+onUnmounted(stopTransfer)
 </script>
 
 <template>
