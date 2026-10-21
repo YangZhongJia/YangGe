@@ -31,6 +31,7 @@ import {
   type ProfileAvatarChoice,
   type SearchResult,
   type ScanProgressView,
+  type ScanRangeImportResult,
   type SettingsView,
   type ShareBrowseResult,
   type ShareDownloadResult,
@@ -229,6 +230,8 @@ const api: PantryApi = {
   addManualPeer: (addr: string): Promise<boolean> =>
     ipcRenderer.invoke(IpcChannels.netAddPeer, addr),
   scanRange: (cidr: string): Promise<number> => ipcRenderer.invoke(IpcChannels.netScan, cidr),
+  importScanRanges: (input: string): Promise<ScanRangeImportResult> =>
+    ipcRenderer.invoke(IpcChannels.netImportRanges, input),
   scanAllRanges: (): Promise<ScanProgressView> =>
     ipcRenderer.invoke(IpcChannels.netScanAllRanges),
   setPeerRemark: (nodeId: string, remark: string): Promise<void> =>

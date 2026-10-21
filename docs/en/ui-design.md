@@ -228,6 +228,8 @@ Keep tokens, sequence numbers, wire fields, and stack traces out of user flows. 
 
 ## 8. Settings and file cabinet
 
+Bulk subnet entry (issue #10): Below the single-range scan field, an expandable “Add multiple subnets” area accepts one CIDR per line. Preview canonical additions, duplicate counts and the total address count. Identify invalid lines and disable confirmation above 20 saved ranges. “Confirm and add” only saves; per-range refresh and the existing main-window scan confirmation remain the deliberate scan actions.
+
 ### 8.1 Settings
 
 Settings is a 640×480 frameless window with a direct left navigation: Profile, General, Notifications, Chat & Files, Network, Shortcuts, and About. Each row has an 18px project line icon. The sidebar does not repeat avatar/nickname summary content.

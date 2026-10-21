@@ -1,4 +1,5 @@
 import type { Language, SystemMessage } from './i18n'
+import type { ScanRangeImportOutcome } from './cidr'
 // IPC 契约：main 与 renderer 之间唯一的对话词汇表（tech-design §4）。
 // 通道名、请求/响应类型、preload 暴露的 API 形状都只在这里定义。
 
@@ -93,6 +94,7 @@ export const IpcChannels = {
   shareRecentUploads: 'share:recent-uploads',
   netAddPeer: 'net:add-peer',
   netScan: 'net:scan',
+  netImportRanges: 'net:import-ranges',
   netScanAllRanges: 'net:scan-all-ranges',
   peersSetRemark: 'peers:set-remark',
   uiOpenSettings: 'ui:open-settings',
@@ -713,6 +715,8 @@ export type ShareRootPickResult =
   | { ok: true; canceled: true }
   | { ok: false; reason: ShareRootRejectReason }
 
+export type ScanRangeImportResult = ScanRangeImportOutcome & { view: SettingsView }
+
 export interface AppSettingsPatch {
   notifications?: boolean
   manualPeers?: string[]
@@ -938,6 +942,8 @@ export interface PantryApi {
   addManualPeer(addr: string): Promise<boolean>
   /** 扫描一个 CIDR 网段；返回探测地址数，非法网段返回 -1 */
   scanRange(cidr: string): Promise<number>
+  /** 按行校验并添加 CIDR；保留已有列表，不立即扫描。 */
+  importScanRanges(input: string): Promise<ScanRangeImportResult>
   /** 扫描所有已保存 CIDR 网段；运行中重复调用返回当前进度 */
   scanAllRanges(): Promise<ScanProgressView>
   /** 设置联系人本地备注（空串=清除） */

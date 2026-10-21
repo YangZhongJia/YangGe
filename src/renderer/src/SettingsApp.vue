@@ -47,6 +47,7 @@ import PantryBrandLogo from './components/PantryBrandLogo.vue'
 import PantryIcon from './components/PantryIcon.vue'
 import DiagnosticsPanel from './components/DiagnosticsPanel.vue'
 import SettingsNavIcon from './components/SettingsNavIcon.vue'
+import ScanRangeImport from './components/ScanRangeImport.vue'
 import WindowControls from './components/WindowControls.vue'
 import WindowDragStrip from './components/WindowDragStrip.vue'
 import {
@@ -1247,6 +1248,7 @@ async function confirmRemove(cidr: string): Promise<void> {
               />
               <NButton type="primary" @click="addRange">{{ tr('扫描') }}</NButton>
             </div>
+            <ScanRangeImport :ranges="settings.scanRanges" @updated="settings = $event" />
             <div v-if="!hasScanRanges" class="empty-state">{{ tr('尚未保存扫描网段') }}</div>
             <div v-else class="range-table">
               <div class="range-row range-head">
