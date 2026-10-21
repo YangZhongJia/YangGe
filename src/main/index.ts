@@ -108,6 +108,7 @@ import {
   type AppState
 } from './store/app-state'
 import { refreshTrayLanguage, setupTray, stopTrayUnreadFlash, updateTrayUnread } from './windows/tray'
+import { WindowDragController } from './windows/window-drag'
 import { syncSettingsWindowLanguage, openSettingsWindow, syncSettingsWindowZoom } from './windows/settings-window'
 import {
   closeCaptureWindow,
@@ -1736,32 +1737,13 @@ if (!gotLock) {
 
   // Linux JS 拖拽（决议 #52）：CSS 拖拽区在 Linux 命中不可靠（UOS 实测吞点击），
   // 渲染层按住拖拽带时由主进程按光标位置跟随移窗；单鼠标场景同一时刻只有一个拖拽。
-  let dragTimer: NodeJS.Timeout | null = null
-
-  function stopWindowDrag(): void {
-    if (dragTimer) clearInterval(dragTimer)
-    dragTimer = null
-  }
+  const windowDrag = new WindowDragController(() => screen.getCursorScreenPoint())
 
   ipcMain.handle(IpcChannels.winBeginDrag, (event): void => {
-    const win = BrowserWindow.fromWebContents(event.sender)
-    if (!win || win.isMaximized() || win.isFullScreen()) return
-    stopWindowDrag()
-    const cursor = screen.getCursorScreenPoint()
-    const [winX, winY] = win.getPosition()
-    const offsetX = cursor.x - winX
-    const offsetY = cursor.y - winY
-    dragTimer = setInterval(() => {
-      if (win.isDestroyed()) {
-        stopWindowDrag()
-        return
-      }
-      const point = screen.getCursorScreenPoint()
-      win.setPosition(point.x - offsetX, point.y - offsetY)
-    }, 16)
+    windowDrag.start(BrowserWindow.fromWebContents(event.sender))
   })
 
-  ipcMain.handle(IpcChannels.winEndDrag, (): void => stopWindowDrag())
+  ipcMain.handle(IpcChannels.winEndDrag, (): void => windowDrag.stop())
 
   ipcMain.handle(IpcChannels.appOpenUrl, async (_event, raw: unknown): Promise<boolean> => {
     if (typeof raw !== 'string' || raw.length > 2048) return false
