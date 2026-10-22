@@ -124,7 +124,7 @@ function confirmRemove(): void {
           <GroupAvatar
             v-if="conv.type === 'group'"
             class="conv-avatar grp"
-            :icon-size="26"
+            :icon-size="24"
             :avatar-hash="groupsStore.byId[conv.peerId]?.avatarHash"
           />
           <AvatarMark
@@ -217,10 +217,10 @@ function confirmRemove(): void {
   text-align: left;
   display: flex;
   align-items: center;
-  gap: 12px;
-  min-height: 74px;
+  gap: 10px;
+  min-height: 66px;
   margin: 0;
-  padding: 14px;
+  padding: 12px 14px;
   border-radius: 0;
   cursor: pointer;
   transition:
@@ -268,14 +268,14 @@ function confirmRemove(): void {
   transform: scale(0.985);
 }
 .conv-avatar {
-  width: 42px;
-  height: 42px;
+  width: 38px;
+  height: 38px;
   border-radius: 50%;
   background: transparent;
   color: var(--on-primary);
   display: grid;
   place-items: center;
-  font-size: 17px;
+  font-size: 16px;
   flex-shrink: 0;
 }
 .conv-avatar.grp {
@@ -288,7 +288,7 @@ function confirmRemove(): void {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
 }
 .row1,
 .row2 {
@@ -298,7 +298,7 @@ function confirmRemove(): void {
   gap: 8px;
 }
 .conv-name {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;

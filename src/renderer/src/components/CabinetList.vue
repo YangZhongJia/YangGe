@@ -238,7 +238,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 10px;
-  height: 60px;
+  height: 54px;
   padding: 0 10px;
   border: none;
   border-radius: var(--radius-panel);
@@ -263,9 +263,9 @@ onMounted(() => {
 
 .peer-avatar {
   flex: none;
-  width: 38px;
-  height: 38px;
-  font-size: 16px;
+  width: 34px;
+  height: 34px;
+  font-size: 15px;
 }
 
 .peer-txt {

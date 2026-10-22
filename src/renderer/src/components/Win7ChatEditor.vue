@@ -294,7 +294,7 @@ onMounted(() => renderValue(props.modelValue))
   outline: none;
   padding: 6px 8px;
   font-family: 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
-  font-size: 15px;
+  font-size: 14px;
   line-height: 1.5;
   color: var(--text-1);
   background: var(--bg-input);

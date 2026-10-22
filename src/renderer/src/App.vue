@@ -21,7 +21,6 @@ import GroupCreator from './components/GroupCreator.vue'
 // 群发功能已停用（决议 #62）：建讨论组即可满足同样诉求，群发无实际意义；保留代码留痕。
 // import MassSender from './components/MassSender.vue'
 import PantryIcon from './components/PantryIcon.vue'
-import PantryBrandLogo from './components/PantryBrandLogo.vue'
 import WindowControls from './components/WindowControls.vue'
 import WindowDragStrip from './components/WindowDragStrip.vue'
 import { useGroupsStore } from './stores/groups'
@@ -472,7 +471,7 @@ onUnmounted(() => {
         @pointerleave="hideRailHint('chat')"
         @click="activateTab('chat', $event)"
       >
-        <PantryIcon name="chat" :size="32" />
+        <PantryIcon name="chat" :size="28" />
         <span v-if="chatStore.totalUnread > 0" class="rail-badge">{{
           chatStore.totalUnread > 99 ? '99+' : chatStore.totalUnread
         }}</span>
@@ -487,7 +486,7 @@ onUnmounted(() => {
         @pointerleave="hideRailHint('contacts')"
         @click="activateTab('contacts', $event)"
       >
-        <PantryIcon name="contacts" :size="30" />
+        <PantryIcon name="contacts" :size="28" />
       </button>
       <div class="spacer"></div>
       <button
@@ -520,7 +519,7 @@ onUnmounted(() => {
         @pointerleave="hideRailHint('cabinet')"
         @click="openCabinet($event)"
       >
-        <PantryIcon name="cabinet" :size="30" />
+        <PantryIcon name="cabinet" :size="28" />
       </button>
       <button
         type="button"
@@ -543,7 +542,7 @@ onUnmounted(() => {
           :style="{ '--scan-p': scanRingPct }"
           aria-hidden="true"
         ></span>
-        <PantryIcon name="refresh" :size="32" />
+        <PantryIcon name="refresh" :size="28" />
       </button>
       <button
         type="button"
@@ -555,7 +554,7 @@ onUnmounted(() => {
         @pointerleave="hideRailHint('settings')"
         @click="openSettings($event)"
       >
-        <PantryIcon name="settings" :size="32" />
+        <PantryIcon name="settings" :size="28" />
       </button>
     </nav>
 
@@ -593,7 +592,7 @@ onUnmounted(() => {
         <NInput
           v-model:value="searchQuery"
           class="search"
-          size="medium"
+          size="small"
           clearable
           :aria-label="tr('搜索联系人、讨论组和聊天记录')"
           :placeholder="tr('搜索')"
@@ -607,12 +606,12 @@ onUnmounted(() => {
         -->
         <NButton
           class="new-group"
-          size="medium"
+          size="small"
           :title="tr('发起讨论组')"
           :aria-label="tr('发起讨论组')"
           @click="showGroupCreator = true"
         >
-          <PantryIcon name="plus" :size="24" />
+          <PantryIcon name="plus" :size="22" />
         </NButton>
       </div>
       <GroupCreator v-if="showGroupCreator" @close="showGroupCreator = false" />
@@ -639,11 +638,8 @@ onUnmounted(() => {
         :win7-ime-compat="info?.windows7 === true"
       />
       <div v-else class="empty">
-        <PantryBrandLogo variant="color" :size="92" class="empty-logo" />
-        <div class="brand-title">{{ tr('茶话间') }}</div>
         <p class="quote">{{ tr(quote.text) }}</p>
         <p class="quote-author">{{ tr(quote.author) }}</p>
-        <p class="hint">{{ chatStore.hiddenConvId ? tr('聊天内容已隐藏，点击会话可重新打开') : tr('在「通讯录」里选个人，开始第一句话') }}</p>
       </div>
     </main>
   </div>
@@ -740,8 +736,8 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 44px 0 16px; /* 与会话头像对齐，顶部保留拖拽带与 mac 红绿灯。 */
-  gap: 8px;
+  padding: 38px 0 14px; /* 与会话头像对齐，顶部保留拖拽带与 mac 红绿灯。 */
+  gap: 7px;
   position: relative;
   z-index: 3;
 }
@@ -919,8 +915,8 @@ onUnmounted(() => {
 }
 .rail-btn {
   position: relative;
-  width: 44px;
-  height: 44px;
+  width: 40px;
+  height: 40px;
   border: none;
   border-radius: 8px;
   appearance: none;
@@ -1254,8 +1250,8 @@ onUnmounted(() => {
 
 /* 栏② 列表 */
 .list {
-  width: clamp(240px, 28vw, 300px);
-  flex: 0 0 clamp(240px, 28vw, 300px);
+  width: clamp(240px, 28vw, 280px);
+  flex: 0 0 clamp(240px, 28vw, 280px);
   background: var(--material-panel);
   border-right: 1px solid var(--line);
   box-shadow: none;
@@ -1265,10 +1261,10 @@ onUnmounted(() => {
   z-index: 2;
 }
 .search-box {
-  /* 与聊天头部 .head 等高（96px），两栏顶栏分隔线连成一条（决议 #127）；
+  /* 与聊天头部 .head 等高（84px），两栏顶栏分隔线连成一条（决议 #127）；
      padding-top 32px 让出拖拽带与 mac 红绿灯，与 .head 一致 */
-  height: 96px;
-  flex: 0 0 96px;
+  height: 84px;
+  flex: 0 0 84px;
   box-sizing: border-box;
   padding: 32px 14px 0;
   display: flex;
@@ -1281,9 +1277,9 @@ onUnmounted(() => {
   min-width: 0;
 }
 .new-group {
-  width: 34px;
-  height: 34px;
-  flex: 0 0 34px;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
   padding: 0;
   color: var(--text-1);
 }
@@ -1309,18 +1305,6 @@ onUnmounted(() => {
   max-width: 420px;
   padding: 32px;
 }
-.empty-logo {
-  margin: 0 auto 18px;
-  filter: none;
-}
-.brand-title {
-  font-size: 30px;
-  font-weight: 700;
-  line-height: 1.1;
-  letter-spacing: -0.02em;
-  color: var(--primary);
-  margin-bottom: 16px;
-}
 .quote {
   font-size: 14px;
   color: var(--text-2);
@@ -1329,11 +1313,6 @@ onUnmounted(() => {
   margin: 0 auto 8px;
 }
 .quote-author {
-  font-size: 12px;
-  color: var(--text-3);
-  margin-bottom: 18px;
-}
-.hint {
   font-size: 12px;
   color: var(--text-3);
 }

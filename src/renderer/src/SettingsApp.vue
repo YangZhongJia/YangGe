@@ -812,7 +812,7 @@ async function confirmRemove(cidr: string): Promise<void> {
           :class="{ on: section === item.id }"
           @click="section = item.id"
         >
-          <SettingsNavIcon class="nav-icon" :name="item.icon" :size="24" />
+          <SettingsNavIcon class="nav-icon" :name="item.icon" :size="22" />
           <span>{{ item.label }}</span>
         </button>
       </nav>
@@ -1548,9 +1548,9 @@ async function confirmRemove(cidr: string): Promise<void> {
   --r-card: 8px;
   --r-control: 6px;
   --r-pill: 999px;
-  --fs-title: 22px;
+  --fs-title: 20px;
   --fs-section: 15px;
-  --fs-body: 14px;
+  --fs-body: 13px;
   --fs-aux: 12px;
   display: flex;
   position: relative;
@@ -1591,7 +1591,7 @@ async function confirmRemove(cidr: string): Promise<void> {
 }
 .sidebar-heading h2 {
   margin: 0 0 2px;
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 600;
 }
 .sidebar-heading p {
@@ -1605,7 +1605,7 @@ async function confirmRemove(cidr: string): Promise<void> {
 }
 
 .nav button {
-  height: 38px;
+  height: 36px;
   border: none;
   border-radius: var(--r-control);
   background: transparent;

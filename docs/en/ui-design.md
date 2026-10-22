@@ -29,7 +29,7 @@ Naive UI 2.43.2 provides standard form, search, and common action primitives thr
 ```text
 ┌────────┬────────────────────────┬──────────────────────────────────┐
 │ Rail   │ List                   │ Content                          │
-│ 68 px  │ 240–300 px             │ flexible, at least 560 px        │
+│ 68 px  │ 240–280 px             │ flexible, at least 560 px        │
 │        │                        │                                  │
 │ avatar │ search / section       │ chat / contact / cabinet         │
 │ chat   │ conversations/contacts │ header and primary content       │
@@ -46,7 +46,7 @@ The minimum window is 960×640 and restores its previous size and position. The 
 - Fixed 68px neutral surface with a subtle divider.
 - Top identity avatar opens profile editing; main entries switch Chat and Contacts.
 - Bottom tools, top to bottom: File Cabinet, global peer refresh, Settings.
-- Main and lower tool icons are optically matched at 30–32px. Selected/hover state uses blue.
+- Main and lower tool icons are optically matched at 28px. Selected/hover state uses blue.
 - File Cabinet switches the existing main window to its third tab and remains available before a shared directory is configured.
 - Global refresh is enabled only when a scan range exists. Every activation opens a centered confirmation with an amber warning icon, range count/list, Cancel, and Start scan. During scanning, the action is disabled and shows a conic progress ring.
 - Icon tooltips appear only after real pointer movement and a short delay. They do not use native `title`, arrows, or translation motion.
@@ -270,9 +270,11 @@ Desktop file-manager semantics apply: single-click select, double-click enter, C
 
 ## 9. Visual tokens
 
-The approved 2026-10-22 blue design supersedes earlier tea-green material styling; historical decisions remain below. Preserve the 68px rail and current minimum window sizes. Size the list with `clamp(240px, 28vw, 300px)`, reaching 300px at the usual 1080px viewport. Align the search and chat headers at 96px. Conversation rows begin directly below search, with 74px rows, 42px avatars, 15px names and 13px previews. Use full-row selection and a bottom-aligned composer separated by a hairline, retaining its resize handle, seven private-chat tools and right-aligned history search. Groups still omit nudge. Settings use section headings, spacing and separators instead of nested elevated cards. Functionality, permissions and autosave stay unchanged.
+The latest density adjustment makes the interface more compact while retaining the blue palette and simple sections. With no conversation open, the main content shows only a random quotation and its attribution, without a logo, brand heading or action hint. Hiding a conversation shows the same quotation-only view; hiding and reopening behavior is unchanged.
 
-Message text uses 16px / 1.5 line height, 10px 14px bubble padding and 12px message spacing. Delivered status sits below outgoing text; retry controls remain available. The 15px composer uses a short placeholder and a separate footer helper that updates with the send-key preference; its emoji mirror and Win7 editor use the same type size. Completed file cards use a blue text action with a folder icon. Rail targets are 44px with optically matched 30–32px icons; settings icons are 24px. The ten avatar presets use pastel backgrounds and dark lettering, retaining IDs, named hues, animal graphics and custom photos.
+The approved 2026-10-22 blue design supersedes earlier tea-green material styling; historical decisions remain below. Preserve the 68px rail and current minimum window sizes. Size the list with `clamp(240px, 28vw, 280px)`, reaching 280px at the usual 1080px viewport. Align the search and chat headers at 84px. Conversation rows begin directly below search, with 66px rows, 38px avatars, 14px names and 13px previews. Use full-row selection and a bottom-aligned composer separated by a hairline, retaining its resize handle, seven private-chat tools and right-aligned history search. Groups still omit nudge. Settings use section headings, spacing and separators instead of nested elevated cards. Functionality, permissions and autosave stay unchanged.
+
+Message text uses 15px / 1.5 line height, 9px 12px bubble padding and 10px message spacing. Delivered status sits below outgoing text; retry controls remain available. The 14px composer uses a short placeholder and a separate footer helper that updates with the send-key preference; its emoji mirror and Win7 editor use the same type size. Completed file cards use a blue text action with a folder icon. Rail targets are 40px with 28px icons; settings icons are 22px. The ten avatar presets use pastel backgrounds and dark lettering, retaining IDs, named hues, animal graphics and custom photos.
 
 | Token | Light value or role |
 |---|---|

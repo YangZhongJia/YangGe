@@ -2046,7 +2046,7 @@ async function onDrop(event: DragEvent): Promise<void> {
         <GroupAvatar
           class="group-head-avatar"
           :avatar-hash="group?.avatarHash"
-          :icon-size="28"
+          :icon-size="26"
         />
         <span class="title-block">
           <span class="title">{{ peerName }}</span>
@@ -2056,7 +2056,7 @@ async function onDrop(event: DragEvent): Promise<void> {
       <span class="head-spacer"></span>
       <button v-if="!isGroup && peer?.caps.includes(CAPS.remoteView)" class="head-btn"
         :disabled="!!screenDisabledReason" :title="screenDisabledReason || tr('查看屏幕')" :aria-label="screenDisabledReason || tr('查看屏幕')"
-        @click="requestScreen"><PantryIcon name="screen" :size="26" /></button>
+        @click="requestScreen"><PantryIcon name="screen" :size="24" /></button>
       <button
         v-if="!isGroup"
         class="head-btn"
@@ -2065,7 +2065,7 @@ async function onDrop(event: DragEvent): Promise<void> {
         :aria-disabled="!!cabinetDisabledReason"
         @click="toggleCabinet"
       >
-        <PantryIcon name="folder" :size="28" />
+        <PantryIcon name="folder" :size="26" />
       </button>
       <button v-if="isGroup" class="head-btn" :title="tr('成员')" @click="showMembers = !showMembers">
         <PantryIcon name="users" :size="17" />
@@ -2179,7 +2179,7 @@ async function onDrop(event: DragEvent): Promise<void> {
               :disabled="!canSend"
               @click="showEmoji = !showEmoji"
             >
-              <PantryIcon name="smile" :size="28" />
+              <PantryIcon name="smile" :size="26" />
             </button>
           </span>
         </span>
@@ -2214,7 +2214,7 @@ async function onDrop(event: DragEvent): Promise<void> {
               :aria-expanded="showPk ? 'true' : 'false'"
               @click="showPk = !showPk"
             >
-              <PantryIcon name="pk" :size="24" />
+              <PantryIcon name="pk" :size="22" />
             </button>
           </span>
         </span>
@@ -2226,7 +2226,7 @@ async function onDrop(event: DragEvent): Promise<void> {
             :disabled="!canSendNudge"
             @click="sendNudge"
           >
-            <PantryIcon name="nudge" :size="28" />
+            <PantryIcon name="nudge" :size="26" />
           </button>
         </span>
         <span class="tool-wrap" :data-tip="tr('截图')">
@@ -2236,7 +2236,7 @@ async function onDrop(event: DragEvent): Promise<void> {
             :aria-label="tr('截图（Ctrl/Cmd+Alt+A）')"
             @click="window_startCapture"
           >
-            <PantryIcon name="scissors" :size="28" />
+            <PantryIcon name="scissors" :size="26" />
           </button>
         </span>
         <span class="tool-wrap" :data-tip="tr('发送图片')">
@@ -2247,7 +2247,7 @@ async function onDrop(event: DragEvent): Promise<void> {
             :disabled="!canSendMedia"
             @click="sendImage"
           >
-            <PantryIcon name="image" :size="28" />
+            <PantryIcon name="image" :size="26" />
           </button>
         </span>
         <span class="tool-wrap" :data-tip="tr('发送文件')">
@@ -2258,7 +2258,7 @@ async function onDrop(event: DragEvent): Promise<void> {
             :disabled="!canSendMedia"
             @click="sendFiles(false)"
           >
-            <PantryIcon name="file" :size="28" />
+            <PantryIcon name="file" :size="26" />
           </button>
         </span>
         <span class="tool-wrap" :data-tip="tr('发送文件夹')">
@@ -2269,7 +2269,7 @@ async function onDrop(event: DragEvent): Promise<void> {
             :disabled="!canSendMedia"
             @click="sendFiles(true)"
           >
-            <PantryIcon name="folder" :size="28" />
+            <PantryIcon name="folder" :size="26" />
           </button>
         </span>
         <span v-if="isGroup && canSend && onlineGroupRecipientCount === 0" class="tool-hint">{{ tr('群成员离线，无法发送图片/文件') }}</span>
@@ -2288,7 +2288,7 @@ async function onDrop(event: DragEvent): Promise<void> {
               :aria-label="tr('历史搜索')"
               @click="toggleHistorySearch"
             >
-              <PantryIcon name="search" :size="28" />
+              <PantryIcon name="search" :size="26" />
             </button>
           </span>
         </span>
@@ -2456,7 +2456,7 @@ async function onDrop(event: DragEvent): Promise<void> {
 .toolbar {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   padding-bottom: 6px;
   position: relative;
 }
@@ -3237,8 +3237,8 @@ async function onDrop(event: DragEvent): Promise<void> {
   /* 沉浸式（决议 #49）：头部背景直通窗口顶，内容压在 32px 拖拽带下方。
      这里不许设 no-drag —— no-drag 矩形会从系统 drag region 中挖洞，
      把聊天区顶部 32px 的拖拽带挖掉（Win7/mac 实测顶部无法拖窗）。 */
-  height: 96px;
-  flex: 0 0 96px;
+  height: 84px;
+  flex: 0 0 84px;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -3250,7 +3250,7 @@ async function onDrop(event: DragEvent): Promise<void> {
   z-index: 4;
 }
 .title {
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 650;
   letter-spacing: -0.01em;
 }
@@ -3295,17 +3295,17 @@ async function onDrop(event: DragEvent): Promise<void> {
   cursor: pointer;
 }
 .head-avatar {
-  width: 44px;
-  height: 44px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
-  flex: 0 0 44px;
+  flex: 0 0 40px;
   color: #fff;
-  font-size: 18px;
+  font-size: 17px;
 }
 .group-head-avatar {
-  width: 44px;
-  height: 44px;
-  flex: 0 0 44px;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
 }
 .title-text {
   min-width: 0;
@@ -3322,7 +3322,7 @@ async function onDrop(event: DragEvent): Promise<void> {
   outline-offset: 2px;
 }
 .subtitle {
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.4;
   color: var(--text-3);
   min-width: 0;
@@ -3688,7 +3688,7 @@ async function onDrop(event: DragEvent): Promise<void> {
     'Microsoft YaHei',
     'Noto Sans CJK SC',
     sans-serif;
-  font-size: 15px;
+  font-size: 14px;
   line-height: 1.5;
   background: transparent;
   color: var(--text-1);
@@ -3719,7 +3719,7 @@ async function onDrop(event: DragEvent): Promise<void> {
     'Microsoft YaHei',
     'Noto Sans CJK SC',
     sans-serif;
-  font-size: 15px;
+  font-size: 14px;
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
@@ -3774,10 +3774,10 @@ async function onDrop(event: DragEvent): Promise<void> {
   border: none;
   background: var(--primary);
   color: var(--on-primary);
-  font-size: 14px;
-  min-width: 84px;
-  height: 34px;
-  padding: 0 20px;
+  font-size: 13px;
+  min-width: 76px;
+  height: 32px;
+  padding: 0 16px;
   border-radius: var(--radius-control);
   font-weight: 600;
   cursor: pointer;

@@ -17,7 +17,7 @@ const componentOverrides: GlobalThemeOverrides = {
     heightMedium: '34px',
     borderRadius: '6px',
     fontSizeSmall: '13px',
-    fontSizeMedium: '14px',
+    fontSizeMedium: '13px',
     paddingSmall: '0 10px',
     paddingMedium: '0 10px'
   },
@@ -33,7 +33,7 @@ const componentOverrides: GlobalThemeOverrides = {
     peers: {
       InternalSelection: {
         textColor: 'var(--text-1)',
-        fontSizeMedium: '14px'
+        fontSizeMedium: '13px'
       }
     }
   },

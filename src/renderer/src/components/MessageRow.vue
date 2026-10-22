@@ -238,7 +238,7 @@ const replyMeta = computed((): ReplyMeta => {
   text-align: center;
   font-size: 12px;
   color: var(--text-3);
-  margin: 4px 0 18px;
+  margin: 4px 0 14px;
 }
 .system-line {
   text-align: center;
@@ -261,7 +261,7 @@ const replyMeta = computed((): ReplyMeta => {
   display: flex;
   align-items: flex-end;
   gap: 6px;
-  margin: 12px 0;
+  margin: 10px 0;
 }
 .row.mine {
   flex-direction: row-reverse;
@@ -359,10 +359,10 @@ const replyMeta = computed((): ReplyMeta => {
 }
 .bubble {
   max-width: 100%;
-  padding: 10px 14px;
+  padding: 9px 12px;
   border: 1px solid transparent;
   border-radius: var(--radius-panel);
-  font-size: 16px;
+  font-size: 15px;
   line-height: 1.5;
   word-break: break-word;
   white-space: pre-wrap;
