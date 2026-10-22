@@ -22,7 +22,7 @@ describe('Win7 搜狗系统字体原子表情编辑器', () => {
   it('真实编辑控件永久使用系统字体并保持实体输入层', () => {
     expect(editorSource).toContain(':contenteditable="disabled ? \'false\' : \'true\'"')
     expect(editorSource).toContain("font-family: 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;")
-    expect(editorSource).toContain('background: var(--material-strong);')
+    expect(editorSource).toContain('background: var(--bg-input);')
     expect(editorSource).toContain('padding: 6px 8px;')
     expect(editorSource).not.toContain('PantryEmojiBlank')
     expect(editorSource).not.toContain('<textarea')

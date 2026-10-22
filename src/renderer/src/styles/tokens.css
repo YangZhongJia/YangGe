@@ -1,134 +1,109 @@
-/* 视觉 token —— 与 docs/ui-design.md §9 一一对应，深色主题（v0.4）只换这张表 */
+/* 雾蓝主题：结构表面保持纯色，颜色用于导航、选中和主操作。 */
 :root {
-  --primary: #3d8b6b;
-  --primary-weak: rgba(61, 139, 107, 0.12);
-  --text-1: #17211c;
-  --text-2: #58645e;
-  --text-3: #87918c;
-  --text-placeholder: #a9b2ad;
+  color-scheme: light;
+  --primary: #4e79af;
+  --primary-rgb: 78, 121, 175;
+  --primary-hover: #416b9f;
+  --primary-weak: #edf3fb;
+  --primary-border: #b8cce5;
+  --on-primary: #ffffff;
+  --text-1: #293241;
+  --text-2: #657387;
+  --text-3: #7d8795;
+  --text-placeholder: #8b95a3;
   --font-xs: 12px;
   --font-sm: 13px;
   --font-md: 14px;
   --font-lg: 16px;
-  --radius-control: 8px;
-  --radius-panel: 12px;
+  --radius-control: 6px;
+  --radius-panel: 8px;
   --radius-pill: 999px;
-  --bg-window: #f9fbfa;
-  --bg-list: #f1f5f3;
-  --bg-chat: #edf2ef;
-  --bubble-peer: rgba(255, 255, 255, 0.94);
-  --bubble-mine: rgba(61, 139, 107, 0.14);
-  --line: rgba(40, 66, 53, 0.1);
-  --online: #2ba245;
-  --offline: #c2c2c2;
-  --danger: #e5484d;
-  --badge: #fa5151;
-  --rail-bg: rgba(230, 237, 233, 0.9);
-  --bg-pinned: rgba(34, 61, 48, 0.055);
-  /* 结构材质（决议 #216/#219）：只表达层级，不承担品牌色。
-     backdrop-filter 只允许用在真正压住内容的浮层（菜单/popover/遮罩）；
-     并排结构面板背后是纯色，blur 无视觉收益，Win7 禁硬件加速下纯属软渲染开销。 */
-  --material-bar: rgba(249, 251, 250, 0.8);
-  --material-panel: rgba(241, 245, 243, 0.9);
-  --material-strong: rgba(255, 255, 255, 0.9);
-  --surface-hover: rgba(38, 61, 50, 0.055);
-  --surface-selected: rgba(61, 139, 107, 0.14);
-  --surface-pressed: rgba(61, 139, 107, 0.2);
-  --shadow-soft: 0 1px 2px rgba(24, 50, 37, 0.04), 0 10px 28px rgba(24, 50, 37, 0.07);
-  --shadow-float: 0 2px 8px rgba(24, 50, 37, 0.08), 0 18px 46px rgba(24, 50, 37, 0.12);
-  --highlight-edge: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  --bg-window: #ffffff;
+  --bg-list: #f4f8fd;
+  --bg-chat: #ffffff;
+  --bg-input: #ffffff;
+  --bubble-peer: #f0f3f7;
+  --bubble-mine: #e5edf9;
+  --line: #e5e9f0;
+  --online: #34869b;
+  --online-weak: #edf5f8;
+  --offline: #b6bec9;
+  --danger: #d94b55;
+  --badge: #dc5260;
+  --rail-bg: #354f75;
+  --rail-text: #dfe9f7;
+  --rail-hover: #425f86;
+  --rail-active: #527cad;
+  --rail-focus: #b8d4fa;
+  --bg-pinned: #f0f3f8;
+  --material-bar: #ffffff;
+  --material-panel: #f4f8fd;
+  --material-strong: #ffffff;
+  --surface-hover: #eef2f7;
+  --surface-selected: #e5edf9;
+  --surface-pressed: #d8e5f5;
+  --shadow-soft: 0 2px 6px rgba(29, 45, 68, 0.06);
+  --shadow-float: 0 4px 18px rgba(29, 45, 68, 0.12);
+  --highlight-edge: inset 0 0 0 0 transparent;
 }
 
 html[data-theme='dark'] {
-  --primary: #5bbf91;
-  --primary-weak: rgba(91, 191, 145, 0.18);
-  --text-1: #edf2ef;
-  --text-2: #b7c0bb;
-  --text-3: #7f8c85;
-  --text-placeholder: #66716b;
-  --bg-window: #171b19;
-  --bg-list: #1c221f;
-  --bg-chat: #101512;
-  --bubble-peer: rgba(35, 43, 38, 0.95);
-  --bubble-mine: rgba(91, 191, 145, 0.2);
-  --line: rgba(222, 238, 229, 0.09);
-  --online: #5fd48e;
-  --offline: #626a64;
-  --danger: #ff6b72;
-  --badge: #ff5f62;
-  --rail-bg: rgba(22, 28, 25, 0.94);
-  --bg-pinned: rgba(255, 255, 255, 0.035);
-  --material-bar: rgba(23, 27, 25, 0.82);
-  --material-panel: rgba(28, 34, 31, 0.92);
-  --material-strong: rgba(34, 42, 37, 0.92);
-  --surface-hover: rgba(235, 245, 239, 0.06);
-  --surface-selected: rgba(91, 191, 145, 0.18);
-  --surface-pressed: rgba(91, 191, 145, 0.25);
-  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.18), 0 10px 28px rgba(0, 0, 0, 0.2);
-  --shadow-float: 0 2px 8px rgba(0, 0, 0, 0.24), 0 18px 46px rgba(0, 0, 0, 0.34);
-  --highlight-edge: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  color-scheme: dark;
+  --primary: #5d8fd0;
+  --primary-rgb: 93, 143, 208;
+  --primary-hover: #77a3dd;
+  --primary-weak: #253a54;
+  --primary-border: #405f87;
+  --on-primary: #101e31;
+  --text-1: #e6edf6;
+  --text-2: #b2bfd0;
+  --text-3: #9ba9bc;
+  --text-placeholder: #8290a3;
+  --bg-window: #171e29;
+  --bg-list: #202a38;
+  --bg-chat: #171e29;
+  --bg-input: #1d2633;
+  --bubble-peer: #273240;
+  --bubble-mine: #294b74;
+  --line: #334154;
+  --online: #76bdd0;
+  --online-weak: #233c49;
+  --offline: #657285;
+  --danger: #ff7b83;
+  --badge: #e86976;
+  --rail-bg: #192c46;
+  --rail-text: #dce7f6;
+  --rail-hover: #2b4263;
+  --rail-active: #365a87;
+  --rail-focus: #a7caff;
+  --bg-pinned: #243040;
+  --material-bar: #171e29;
+  --material-panel: #202a38;
+  --material-strong: #202a38;
+  --surface-hover: #293647;
+  --surface-selected: #2b4263;
+  --surface-pressed: #365378;
+  --shadow-soft: 0 2px 6px rgba(0, 0, 0, 0.16);
+  --shadow-float: 0 4px 18px rgba(0, 0, 0, 0.3);
 }
 
 /* Chrome 108 的原生 dialog backdrop 不继承根元素变量。 */
-:root, ::backdrop { --scrim: rgba(18, 31, 25, 0.45); }
+:root, ::backdrop { --scrim: rgba(22, 34, 52, 0.36); }
 html[data-theme='dark'], html[data-theme='dark'] ::backdrop { --scrim: rgba(0, 0, 0, 0.58); }
 
-/* Win7 / Linux 默认软渲染画像（决议 #231）：浮层保留层级与边界，关闭逐帧背景重采样并缩短阴影。 */
+/* 浮层为不透明纯色，不需要逐帧背景重采样；保留软渲染平台的短阴影。 */
 html[data-rendering='software'] {
-  --material-strong: #ffffff;
-  --shadow-soft: 0 1px 3px rgba(24, 50, 37, 0.1);
-  --shadow-float: 0 4px 14px rgba(24, 50, 37, 0.16);
+  --shadow-soft: 0 1px 3px rgba(29, 45, 68, 0.08);
+  --shadow-float: 0 4px 14px rgba(29, 45, 68, 0.14);
 }
-
 html[data-rendering='software'][data-theme='dark'] {
-  --material-strong: #222a25;
   --shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.24);
   --shadow-float: 0 4px 14px rgba(0, 0, 0, 0.34);
 }
 
-html[data-rendering='software'] :is(
-  .conv-menu,
-  .confirm-mask,
-  .self-card,
-  .update-pop,
-  .scan-confirm-mask,
-  .undo-toast,
-  .pk-popover,
-  .peer-profile-popover,
-  .msg-menu,
-  .viewer-menu
-) {
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-}
-
-html[data-rendering='software'] .viewer-menu {
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.34);
-}
-
-/* Chrome 118+ 才支持该查询，Chrome 108 基线上不生效——留作浮层材质的前向增强（决议 #219） */
-@media (prefers-reduced-transparency: reduce) {
-  :root {
-    --rail-bg: #e6ede9;
-    --material-bar: #f9fbfa;
-    --material-panel: #f1f5f3;
-    --material-strong: #ffffff;
-  }
-  html[data-theme='dark'] {
-    --rail-bg: #161c19;
-    --material-bar: #171b19;
-    --material-panel: #1c221f;
-    --material-strong: #222a25;
-  }
-}
-
 @media (prefers-contrast: more) {
-  :root {
-    --line: rgba(25, 48, 37, 0.28);
-  }
-  html[data-theme='dark'] {
-    --line: rgba(235, 247, 240, 0.24);
-  }
+  :root { --line: #9aa8bb; }
+  html[data-theme='dark'] { --line: #718198; }
 }
 
 /* 输入框等宽空白字形字体（决议 #56）：仅聊天输入框 textarea 与其镜像层使用——
@@ -173,6 +148,14 @@ html[data-window='capture'],
 html[data-window='capture'] body,
 html[data-window='capture'] #app {
   background: #000;
+}
+
+button, input, textarea, select {
+  font-family: inherit;
+}
+button:focus-visible, select:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 
 input::placeholder,

@@ -150,7 +150,7 @@ onBeforeUnmount(() => {
   position: fixed;
   inset: 0;
   padding: 24px;
-  background: rgba(18, 31, 25, 0.32);
+  background: rgba(22, 34, 52, 0.32);
   display: grid;
   place-items: center;
   z-index: 1200;
@@ -165,7 +165,7 @@ onBeforeUnmount(() => {
   box-sizing: border-box;
   background: var(--material-strong);
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: var(--radius-panel);
   padding: 18px 20px;
   box-shadow: var(--highlight-edge), var(--shadow-float);
   animation: forward-dialog-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
@@ -183,7 +183,7 @@ h3 {
   max-height: 62px;
   overflow: hidden;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-panel);
   padding: 8px;
   color: var(--text-2);
   font-size: 12px;
@@ -217,7 +217,7 @@ h3 {
   max-height: 240px;
   overflow-y: auto;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-panel);
   padding: 4px;
 }
 .pick {
@@ -289,10 +289,10 @@ h3 {
 .primary {
   border: none;
   background: var(--primary);
-  color: #fff;
+  color: var(--on-primary);
   font-size: 13px;
   padding: 6px 18px;
-  border-radius: 9px;
+  border-radius: var(--radius-panel);
   cursor: pointer;
 }
 .primary:disabled {
@@ -301,7 +301,7 @@ h3 {
 .ghost {
   border: 1px solid var(--line);
   background: transparent;
-  border-radius: 9px;
+  border-radius: var(--radius-panel);
   font-size: 13px;
   padding: 6px 14px;
   cursor: pointer;

@@ -387,7 +387,7 @@ let annotationColor = ''
 function accent(): string {
   if (!annotationColor) {
     annotationColor =
-      getComputedStyle(document.documentElement).getPropertyValue('--primary').trim() || '#3d8b6b'
+      getComputedStyle(document.documentElement).getPropertyValue('--primary').trim() || '#4e79af'
   }
   return annotationColor
 }
@@ -698,8 +698,8 @@ function drawMosaic(
 }
 .ann.mosaic {
   background:
-    linear-gradient(45deg, rgba(61, 139, 107, 0.35) 25%, transparent 25%) 0 0 / 12px 12px,
-    linear-gradient(45deg, transparent 75%, rgba(61, 139, 107, 0.35) 75%) 0 0 / 12px 12px,
+    linear-gradient(45deg, rgba(var(--primary-rgb), 0.35) 25%, transparent 25%) 0 0 / 12px 12px,
+    linear-gradient(45deg, transparent 75%, rgba(var(--primary-rgb), 0.35) 75%) 0 0 / 12px 12px,
     rgba(255, 255, 255, 0.2);
 }
 .ann.arrow {
@@ -852,7 +852,7 @@ function drawMosaic(
 }
 .btn.primary {
   background: var(--primary);
-  color: #fff;
+  color: var(--on-primary);
 }
 .btn.primary:hover {
   /* 主色的按下态沿用项目里 ConvList / App 的做法，不再另写一个茶青字面量 */
@@ -860,7 +860,7 @@ function drawMosaic(
 }
 .btn.tool.on {
   /* 主色 85% 作选中底，tokens 里没有等价档位（--primary-weak 仅 12%），保留字面量 */
-  background: rgba(61, 139, 107, 0.85);
+  background: rgba(var(--primary-rgb), 0.85);
   color: #fff;
 }
 .btn.cancel-btn:hover {
@@ -881,7 +881,7 @@ function drawMosaic(
   background: rgba(0, 0, 0, 0.5);
   font-size: 13px;
   padding: 6px 14px;
-  border-radius: 14px;
+  border-radius: var(--radius-panel);
   pointer-events: none;
 }
 </style>

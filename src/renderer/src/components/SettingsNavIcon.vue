@@ -9,7 +9,7 @@ withDefaults(
 </script>
 
 <template>
-  <!-- 设置侧栏专用图标（决议 #239）：同一 24px 网格与 1.6px 圆角线条，保证 18px 显示清晰。 -->
+  <!-- 设置侧栏专用图标（决议 #239）：同一 24px 网格与 1.6px 圆角线条。 -->
   <svg
     class="settings-nav-icon"
     :width="size"

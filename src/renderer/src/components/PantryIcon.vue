@@ -20,7 +20,7 @@ withDefaults(
       <rect x="3" y="4" width="18" height="13" rx="2" />
       <path d="M12 17v4M8 21h8" />
     </g>
-    <g v-else-if="name === 'chat'" class="fill-only">
+    <g v-else-if="name === 'chat'">
       <path d="M12 5.4c4.4 0 8 2.8 8 6.2s-3.6 6.2-8 6.2c-.8 0-1.6-.1-2.4-.3l-3 2c-.5.3-1-.1-.9-.6l.7-3.1C4.9 14.7 4 13.2 4 11.6c0-3.4 3.6-6.2 8-6.2Z" />
     </g>
     <g v-else-if="name === 'contacts'">

@@ -799,14 +799,20 @@ async function confirmRemove(cidr: string): Promise<void> {
     <WindowDragStrip />
     <WindowControls buttons="close" />
     <aside class="sidebar">
+      <header class="sidebar-heading">
+        <h2>{{ tr('设置') }}</h2>
+        <p>{{ tr('茶话间') }}<span v-if="info"> v{{ info.version }}</span></p>
+      </header>
       <nav class="nav" :aria-label="tr('设置分组')">
         <button
           v-for="item in sections"
           :key="item.id"
+          :title="item.label"
+          :aria-label="item.label"
           :class="{ on: section === item.id }"
           @click="section = item.id"
         >
-          <SettingsNavIcon class="nav-icon" :name="item.icon" :size="18" />
+          <SettingsNavIcon class="nav-icon" :name="item.icon" :size="24" />
           <span>{{ item.label }}</span>
         </button>
       </nav>
@@ -1011,7 +1017,7 @@ async function confirmRemove(cidr: string): Promise<void> {
                   :class="{ on: settings.theme === 'light' }"
                   @click="changeTheme('light')"
                 >
-                  <PantryIcon name="sun" :size="16" />
+                  <PantryIcon name="sun" :size="16" /><span>{{ tr('浅色') }}</span>
                 </button>
                 <button
                   type="button"
@@ -1021,7 +1027,7 @@ async function confirmRemove(cidr: string): Promise<void> {
                   :class="{ on: settings.theme === 'dark' }"
                   @click="changeTheme('dark')"
                 >
-                  <PantryIcon name="moon" :size="16" />
+                  <PantryIcon name="moon" :size="16" /><span>{{ tr('深色') }}</span>
                 </button>
               </div>
             </div>
@@ -1539,12 +1545,12 @@ async function confirmRemove(cidr: string): Promise<void> {
   --sp-4: 16px;
   --sp-5: 20px;
   --sp-6: 24px;
-  --r-card: 14px;
-  --r-control: 9px;
+  --r-card: 8px;
+  --r-control: 6px;
   --r-pill: 999px;
   --fs-title: 22px;
   --fs-section: 15px;
-  --fs-body: 13px;
+  --fs-body: 14px;
   --fs-aux: 12px;
   display: flex;
   position: relative;
@@ -1561,7 +1567,7 @@ async function confirmRemove(cidr: string): Promise<void> {
   inset: 0;
   z-index: 1000;
   pointer-events: none;
-  box-shadow: inset 0 0 0 1px rgba(33, 59, 46, 0.26);
+  box-shadow: inset 0 0 0 1px rgba(45, 63, 88, 0.26);
 }
 
 :global(html[data-theme='dark']) .settings::after {
@@ -1571,14 +1577,27 @@ async function confirmRemove(cidr: string): Promise<void> {
 .sidebar {
   width: 188px;
   flex: 0 0 188px;
+  overflow-y: auto;
   border-right: 1px solid var(--line);
-  background: var(--material-panel);
-  box-shadow: var(--highlight-edge), 8px 0 24px rgba(24, 50, 37, 0.035);
-  padding: 38px 12px 14px; /* 顶部让出拖拽带与 mac 红绿灯 */
+  background: var(--primary-weak);
+  box-shadow: none;
+  padding: 32px 8px 14px; /* 顶部让出拖拽带与 mac 红绿灯 */
   display: flex;
   flex-direction: column;
 }
 
+.sidebar-heading {
+  padding: 0 12px 18px;
+}
+.sidebar-heading h2 {
+  margin: 0 0 2px;
+  font-size: 18px;
+  font-weight: 600;
+}
+.sidebar-heading p {
+  color: var(--text-3);
+  font-size: 12px;
+}
 .nav {
   display: flex;
   flex-direction: column;
@@ -1590,7 +1609,7 @@ async function confirmRemove(cidr: string): Promise<void> {
   border: none;
   border-radius: var(--r-control);
   background: transparent;
-  color: var(--text-2);
+  color: var(--text-1);
   font-size: var(--fs-body);
   text-align: left;
   padding: 0 12px;
@@ -1606,8 +1625,16 @@ async function confirmRemove(cidr: string): Promise<void> {
 }
 
 .nav-icon {
-  opacity: 0.78;
+  flex-shrink: 0;
+  opacity: 1;
   transition: opacity 150ms ease;
+}
+
+.nav button span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .nav button:hover {
@@ -1624,7 +1651,7 @@ async function confirmRemove(cidr: string): Promise<void> {
   background: var(--surface-selected);
   color: var(--primary);
   font-weight: 600;
-  box-shadow: inset 3px 0 0 var(--primary), var(--highlight-edge);
+  box-shadow: none;
 }
 
 .nav button:active {
@@ -1636,12 +1663,12 @@ async function confirmRemove(cidr: string): Promise<void> {
   min-width: 0;
   /* 滚动视口从拖拽带下方开始，内容滚动时不会钻进顶部 32px 不可交互区 */
   margin-top: 32px;
-  padding: 12px 24px 32px;
+  padding: 4px 28px 24px;
   overflow-y: auto;
 }
 
 .page-head {
-  min-height: 64px;
+  min-height: 56px;
   display: flex;
   justify-content: space-between;
   gap: var(--sp-4);
@@ -1678,23 +1705,25 @@ async function confirmRemove(cidr: string): Promise<void> {
 .page-section {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-3);
+  gap: var(--sp-6);
 }
 
 .panel,
 .empty-panel {
-  border: 1px solid var(--line);
-  border-radius: var(--r-card);
-  background: var(--material-strong);
-  box-shadow: var(--highlight-edge), var(--shadow-soft);
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .panel {
-  padding: 18px;
+  padding: 0;
 }
 
 .panel-head {
-  margin-bottom: var(--sp-3);
+  margin-bottom: var(--sp-2);
+  padding-bottom: var(--sp-2);
+  border-bottom: 1px solid var(--line);
 }
 
 .panel-head h2 {
@@ -1792,8 +1821,8 @@ async function confirmRemove(cidr: string): Promise<void> {
   left: 2px;
   width: calc(50% - 2px);
   border-radius: 6px;
-  background: var(--bg-window);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+  background: var(--surface-selected);
+  box-shadow: inset 0 0 0 1px var(--primary-border);
   transform: translateX(0);
   transition: transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -1829,7 +1858,7 @@ async function confirmRemove(cidr: string): Promise<void> {
 }
 
 .preference-segment button:focus-visible {
-  outline: 2px solid rgba(61, 139, 107, 0.55);
+  outline: 2px solid rgba(var(--primary-rgb), 0.55);
   outline-offset: -2px;
 }
 
@@ -1838,7 +1867,11 @@ async function confirmRemove(cidr: string): Promise<void> {
 }
 
 .theme-segment {
-  width: 86px;
+  width: 140px;
+}
+
+.theme-segment button {
+  gap: 5px;
 }
 
 .send-key-segment {
@@ -1860,11 +1893,11 @@ async function confirmRemove(cidr: string): Promise<void> {
   border: 1px solid var(--line);
   border-radius: 5px;
   background: var(--material-strong);
-  box-shadow: inset 0 -1px 0 rgba(24, 50, 37, 0.08);
+  box-shadow: inset 0 -1px 0 rgba(29, 45, 68, 0.08);
 }
 
 .preference-segment button.on .keycap {
-  border-color: rgba(61, 139, 107, 0.38);
+  border-color: rgba(var(--primary-rgb), 0.38);
 }
 
 .key-plus {
@@ -2005,6 +2038,7 @@ async function confirmRemove(cidr: string): Promise<void> {
 
 .avatar-mode {
   width: 276px;
+  max-width: 100%;
   margin-bottom: 8px;
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
@@ -2036,7 +2070,7 @@ async function confirmRemove(cidr: string): Promise<void> {
   border-radius: 7px;
   padding: 0 12px;
   background: var(--primary);
-  color: #fff;
+  color: var(--on-primary);
   font: inherit;
   font-size: 12px;
   cursor: pointer;
@@ -2056,7 +2090,7 @@ async function confirmRemove(cidr: string): Promise<void> {
 
 .avatar-grid {
   display: grid;
-  grid-template-columns: repeat(10, 30px);
+  grid-template-columns: repeat(auto-fit, 30px);
   gap: 8px;
   margin-bottom: 12px;
 }
@@ -2155,7 +2189,7 @@ async function confirmRemove(cidr: string): Promise<void> {
 .primary {
   border: none;
   background: var(--primary);
-  color: #fff;
+  color: var(--on-primary);
 }
 
 .primary.subtle {
@@ -2198,10 +2232,10 @@ async function confirmRemove(cidr: string): Promise<void> {
   animation: save-pop 0.34s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-/* 次要保存按钮（茶青弱底）成功时提升为实心茶青 + 白字，让对勾与文案有足够对比 */
+/* 次要保存按钮（蓝色弱底）成功时提升为实心蓝色 + 白字，让对勾与文案有足够对比 */
 .primary.subtle.save-btn.is-saved {
   background: var(--primary);
-  color: #fff;
+  color: var(--on-primary);
 }
 
 .save-check {
@@ -2406,7 +2440,7 @@ async function confirmRemove(cidr: string): Promise<void> {
   gap: var(--sp-1);
 }
 
-/* 操作按钮平时即带淡淡意图色（决议 #160）：刷新淡茶青、删除淡红，hover 加深 */
+/* 操作按钮平时即带淡淡意图色（决议 #160）：刷新淡蓝色、删除淡红，hover 加深 */
 .icon-button.accent {
   color: var(--primary);
   opacity: 0.55;
@@ -2694,11 +2728,11 @@ async function confirmRemove(cidr: string): Promise<void> {
 
 .about-help-trigger:hover,
 .about-help-trigger:focus-visible {
-  border-color: rgba(61, 139, 107, 0.42);
+  border-color: rgba(var(--primary-rgb), 0.42);
   background: var(--primary-weak);
   color: var(--primary);
   outline: none;
-  box-shadow: 0 0 0 2px rgba(61, 139, 107, 0.1);
+  box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.1);
 }
 
 .about-help-pop {
@@ -2711,7 +2745,7 @@ async function confirmRemove(cidr: string): Promise<void> {
   border-radius: 6px;
   background: var(--text-1);
   color: var(--bg-window);
-  box-shadow: 0 8px 24px rgba(34, 49, 42, 0.22);
+  box-shadow: 0 8px 24px rgba(29, 45, 68, 0.22);
   font-size: 12px;
   font-weight: 500;
   line-height: 1.45;
@@ -2735,7 +2769,7 @@ async function confirmRemove(cidr: string): Promise<void> {
   display: grid;
   place-items: center;
   padding: 24px;
-  background: rgba(18, 31, 25, 0.28);
+  background: rgba(22, 34, 52, 0.28);
 }
 
 :global(html[data-theme='dark']) .port-warning-mask {
@@ -2913,6 +2947,10 @@ async function confirmRemove(cidr: string): Promise<void> {
     padding: 16px;
   }
 
+  .nav button {
+    padding: 0 8px;
+  }
+
   .field-grid,
   .port-grid {
     grid-template-columns: 1fr;
@@ -2943,7 +2981,7 @@ async function confirmRemove(cidr: string): Promise<void> {
 
 /* 「设置已保存」浮层 toast（决议 #152/#216/#218）：
    固定在设置窗口整体水平居中、底部上浮；
-   深色胶囊对比当前主题、currentColor 对勾保证两主题对比、茶青味柔影（非纯黑）；淡入 + 上移 / 淡出 + 下移，尊重 reduced-motion */
+   深色胶囊对比当前主题、currentColor 对勾保证两主题对比、蓝色味柔影（非纯黑）；淡入 + 上移 / 淡出 + 下移，尊重 reduced-motion */
 .toast {
   position: fixed;
   left: 50%;

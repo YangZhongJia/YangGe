@@ -27,7 +27,7 @@ const showImage = computed(
   () => Boolean(imageSrc.value) && failedKey.value !== imageKey.value
 )
 const markStyle = computed(() => {
-  if (props.offline) return { backgroundColor: 'var(--offline)', color: '#fff' }
+  if (props.offline) return { backgroundColor: 'var(--bg-pinned)', color: 'var(--text-2)' }
   return avatarStyle(props.avatar, props.name)
 })
 

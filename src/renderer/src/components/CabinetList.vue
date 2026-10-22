@@ -129,9 +129,9 @@ onMounted(() => {
   margin: 0 10px 12px;
   padding: 12px;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--radius-panel);
   background: var(--material-strong);
-  box-shadow: var(--shadow-soft);
+  box-shadow: none;
   display: flex;
   flex-direction: column;
   gap: 9px;
@@ -159,7 +159,7 @@ onMounted(() => {
   place-items: center;
   width: 30px;
   height: 30px;
-  border-radius: 9px;
+  border-radius: var(--radius-panel);
   background: var(--primary-weak);
   color: var(--primary);
 }
@@ -238,10 +238,10 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 10px;
-  height: 50px;
+  height: 60px;
   padding: 0 10px;
   border: none;
-  border-radius: 10px;
+  border-radius: var(--radius-panel);
   background: transparent;
   color: inherit;
   font: inherit;
@@ -263,8 +263,9 @@ onMounted(() => {
 
 .peer-avatar {
   flex: none;
-  width: 32px;
-  height: 32px;
+  width: 38px;
+  height: 38px;
+  font-size: 16px;
 }
 
 .peer-txt {
@@ -274,8 +275,8 @@ onMounted(() => {
 }
 
 .peer-name {
-  font-size: 13.5px;
-  font-weight: 500;
+  font-size: 14px;
+  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -283,7 +284,7 @@ onMounted(() => {
 
 .peer-sub,
 .side-empty {
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text-3);
   overflow: hidden;
   text-overflow: ellipsis;

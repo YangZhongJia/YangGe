@@ -197,12 +197,12 @@ const replyMeta = computed((): ReplyMeta => {
         <span class="reply-quote-sender" v-if="replyMeta.senderName">{{ replyMeta.senderName }}：</span>
         <span class="reply-quote-text">{{ replyMeta.text }}</span>
       </div>
+      <span v-if="props.msg.isMine && props.msg.status === 'sent' &&
+        !['system', 'file', 'image', 'sticker'].includes(props.msg.kind)" class="delivery-state">{{ tr('已送达') }}</span>
     </span>
     <!-- 附件的 offer ACK 仅表示已通知；完成结果由 FileCard / ImageBubble 展示。 -->
-    <span v-if="props.msg.isMine && props.msg.kind !== 'system' &&
-      (props.msg.status !== 'sent' || !['file', 'image', 'sticker'].includes(props.msg.kind))" class="status">
+    <span v-if="props.msg.isMine && props.msg.kind !== 'system' && props.msg.status !== 'sent'" class="status">
       <PantryIcon v-if="props.msg.status === 'sending'" class="spin" name="loader" :size="13" />
-      <PantryIcon v-else-if="props.msg.status === 'sent'" class="ok" name="check" :size="13" />
       <PantryIcon
         v-else-if="props.msg.status === 'canceled'"
         class="canceled"
@@ -236,9 +236,9 @@ const replyMeta = computed((): ReplyMeta => {
 <style scoped>
 .sep {
   text-align: center;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-3);
-  margin: 10px 0 6px;
+  margin: 4px 0 18px;
 }
 .system-line {
   text-align: center;
@@ -261,19 +261,19 @@ const replyMeta = computed((): ReplyMeta => {
   display: flex;
   align-items: flex-end;
   gap: 6px;
-  margin: 6px 0;
+  margin: 12px 0;
 }
 .row.mine {
   flex-direction: row-reverse;
 }
 .row.highlight {
   animation: hl 2.4s ease;
-  border-radius: 14px;
+  border-radius: var(--radius-panel);
 }
 @keyframes hl {
   0%,
   60% {
-    background: rgba(61, 139, 107, 0.16);
+    background: rgba(var(--primary-rgb), 0.16);
   }
   100% {
     background: transparent;
@@ -307,7 +307,7 @@ const replyMeta = computed((): ReplyMeta => {
   flex-shrink: 1;
 }
 .sender {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-3);
   margin-left: 4px;
 }
@@ -331,14 +331,14 @@ const replyMeta = computed((): ReplyMeta => {
   gap: 4px;  /* 元素间距 */
 }
 .reply-quote:hover {
-  background: rgba(61, 139, 107, 0.12);
-  border-left-color: rgba(61, 139, 107, 0.7);
+  background: rgba(var(--primary-rgb), 0.12);
+  border-left-color: rgba(var(--primary-rgb), 0.7);
 }
 .row.mine .reply-quote {
-  border-left-color: rgba(61, 139, 107, 0.5);
+  border-left-color: rgba(var(--primary-rgb), 0.5);
 }
 .row.mine .reply-quote:hover {
-  border-left-color: rgba(61, 139, 107, 0.8);
+  border-left-color: rgba(var(--primary-rgb), 0.8);
 }
 .reply-quote-label {
   display: none;
@@ -359,10 +359,10 @@ const replyMeta = computed((): ReplyMeta => {
 }
 .bubble {
   max-width: 100%;
-  padding: 9px 13px;
+  padding: 10px 14px;
   border: 1px solid transparent;
-  border-radius: 14px;
-  font-size: 14px;
+  border-radius: var(--radius-panel);
+  font-size: 16px;
   line-height: 1.5;
   word-break: break-word;
   white-space: pre-wrap;
@@ -370,12 +370,12 @@ const replyMeta = computed((): ReplyMeta => {
 }
 .row.peer .bubble {
   background: var(--bubble-peer);
-  border-color: var(--line);
-  box-shadow: 0 5px 16px rgba(24, 50, 37, 0.055);
+  border-color: transparent;
+  box-shadow: none;
 }
 .row.mine .bubble {
   background: var(--bubble-mine);
-  border-color: rgba(61, 139, 107, 0.1);
+  border-color: transparent;
   box-shadow: none;
 }
 .text-link {
@@ -399,8 +399,11 @@ const replyMeta = computed((): ReplyMeta => {
   display: grid;
   place-items: center;
 }
-.status .ok {
-  color: var(--online);
+.delivery-state {
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-3);
 }
 .status .canceled {
   color: var(--text-3);

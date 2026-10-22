@@ -185,7 +185,7 @@ onUnmounted(() => {
 /* 茶青描边的明暗两套取值用局部变量承载——Chrome 108 不支持 color-mix，只能预置 rgba */
 /* 横向卡（决议 #145）：开奖窗左 + 信息列中 + 参与按钮右，高度由 42px 开奖窗决定，从原 ~170px 垂直堆叠瘦身到 ~60px */
 .pk-bubble {
-  --pk-edge: rgba(61, 139, 107, 0.22);
+  --pk-edge: rgba(var(--primary-rgb), 0.22);
   box-sizing: border-box;
   width: 132px;
   padding: 8px 9px;
@@ -198,7 +198,7 @@ onUnmounted(() => {
   overflow: hidden;
 }
 html[data-theme='dark'] .pk-bubble {
-  --pk-edge: rgba(91, 191, 145, 0.32);
+  --pk-edge: rgba(93, 143, 208, 0.32);
 }
 .pk-bubble.mine {
   background: var(--bubble-mine);
@@ -256,7 +256,7 @@ html[data-theme='dark'] .pk-bubble {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  box-shadow: inset 0 0 0 1.5px var(--primary), 0 0 6px rgba(61, 139, 107, 0.45);
+  box-shadow: inset 0 0 0 1.5px var(--primary), 0 0 6px rgba(var(--primary-rgb), 0.45);
   opacity: 0;
   pointer-events: none;
 }
@@ -348,13 +348,13 @@ html[data-theme='dark'] .pk-bubble {
 .pk-join:hover:not(:disabled) {
   background: var(--primary);
   border-color: var(--primary);
-  color: #fff;
+  color: var(--on-primary);
 }
 .pk-join:active:not(:disabled) {
   transform: translateY(0.5px);
 }
 .pk-join:focus-visible {
-  outline: 2px solid rgba(61, 139, 107, 0.35);
+  outline: 2px solid rgba(var(--primary-rgb), 0.35);
   outline-offset: 2px;
 }
 .pk-join:disabled {

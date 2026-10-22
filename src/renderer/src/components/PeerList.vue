@@ -209,7 +209,7 @@ function displayName(peer: PeerView): string {
   padding-top: 7px;
   padding-bottom: 7px;
   padding-right: 10px;
-  border-radius: 10px;
+  border-radius: var(--radius-panel);
   cursor: pointer;
   font-size: 13px;
   transition:
@@ -218,6 +218,10 @@ function displayName(peer: PeerView): string {
 }
 .tree-row:hover {
   background: var(--surface-hover);
+}
+.tree-row.peer {
+  min-height: 58px;
+  gap: 10px;
 }
 .tree-row:focus-visible {
   outline: 2px solid var(--primary);
@@ -240,18 +244,18 @@ function displayName(peer: PeerView): string {
   color: var(--text-2);
 }
 .peer-avatar {
-  width: 32px;
-  height: 32px;
+  width: 38px;
+  height: 38px;
   border-radius: 50%;
-  background: var(--primary);
-  color: #fff;
+  background: transparent;
+  color: var(--on-primary);
   display: grid;
   place-items: center;
-  font-size: 13px;
+  font-size: 16px;
   flex-shrink: 0;
 }
 .peer-avatar.off {
-  background: var(--offline);
+  background: transparent;
 }
 .peer-main {
   flex: 1;
@@ -262,7 +266,8 @@ function displayName(peer: PeerView): string {
 }
 .peer-name {
   color: var(--text-1);
-  font-weight: 550;
+  font-size: 14px;
+  font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -271,7 +276,7 @@ function displayName(peer: PeerView): string {
   color: var(--text-2);
 }
 .peer-sub {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-2);
 }
 .dot {

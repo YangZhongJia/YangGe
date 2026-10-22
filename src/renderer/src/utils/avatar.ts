@@ -28,16 +28,16 @@ export const AVATAR_EMOJIS = [
 ]
 
 export const AVATAR_COLORS = [
-  { name: '茶青', bg: '#3D8B6B', fg: '#FFFFFF' },
-  { name: '湖蓝', bg: '#2F80A7', fg: '#FFFFFF' },
-  { name: '靛蓝', bg: '#5366B3', fg: '#FFFFFF' },
-  { name: '紫藤', bg: '#7B5BA7', fg: '#FFFFFF' },
-  { name: '莓红', bg: '#B65072', fg: '#FFFFFF' },
-  { name: '枫红', bg: '#B75D4A', fg: '#FFFFFF' },
-  { name: '杏黄', bg: '#C88A2D', fg: '#FFFFFF' },
-  { name: '橄榄', bg: '#6F7F3F', fg: '#FFFFFF' },
-  { name: '石墨', bg: '#55616D', fg: '#FFFFFF' },
-  { name: '墨青', bg: '#2F6F73', fg: '#FFFFFF' }
+  { name: '茶青', bg: '#E0EDE6', fg: '#426B57' },
+  { name: '湖蓝', bg: '#DCE9FA', fg: '#365E91' },
+  { name: '靛蓝', bg: '#E2E7F7', fg: '#4D5F92' },
+  { name: '紫藤', bg: '#EBE4F4', fg: '#71568A' },
+  { name: '莓红', bg: '#F3E2E9', fg: '#985570' },
+  { name: '枫红', bg: '#F2E4DF', fg: '#945D4D' },
+  { name: '杏黄', bg: '#F3EBDD', fg: '#87652F' },
+  { name: '橄榄', bg: '#E9EBDD', fg: '#65703E' },
+  { name: '石墨', bg: '#E4E8ED', fg: '#546273' },
+  { name: '墨青', bg: '#DEEBED', fg: '#436C74' }
 ]
 
 const EMOJI_COUNT = AVATAR_EMOJIS.length

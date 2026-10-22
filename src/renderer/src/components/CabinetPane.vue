@@ -171,7 +171,7 @@ onUnmounted(() => {
   <!-- ——— 我的文件柜管理页 ——— -->
   <section v-if="cabinet.target.kind === 'mine'" class="cabinet-pane">
     <header class="head">
-      <span class="head-icon"><PantryIcon name="cabinet" :size="18" /></span>
+      <span class="head-icon"><PantryIcon name="cabinet" :size="26" /></span>
       <span class="head-txt">
         <span class="head-title">{{ tr('我的文件柜') }}</span>
         <span class="head-sub">
@@ -584,7 +584,7 @@ onUnmounted(() => {
   display: grid;
   place-items: center;
   border: 2px dashed var(--primary);
-  border-radius: 14px;
+  border-radius: var(--radius-panel);
   background: var(--primary-weak);
   color: var(--primary);
   font-size: 13px;
@@ -601,7 +601,7 @@ onUnmounted(() => {
 
 .head {
   flex: none;
-  height: 52px;
+  height: 64px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -612,17 +612,17 @@ onUnmounted(() => {
 
 .head-avatar {
   flex: none;
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 40px;
 }
 
 .head-icon {
   flex: none;
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 9px;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-panel);
   background: var(--primary-weak);
   color: var(--primary);
 }
@@ -635,7 +635,7 @@ onUnmounted(() => {
 }
 
 .head-title {
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 600;
 }
 
@@ -667,7 +667,7 @@ onUnmounted(() => {
   display: flex;
   gap: 2px;
   padding: 2px;
-  border-radius: 9px;
+  border-radius: var(--radius-panel);
   background: var(--surface-hover);
 }
 
@@ -696,7 +696,7 @@ onUnmounted(() => {
   width: 30px;
   height: 30px;
   border: none;
-  border-radius: 9px;
+  border-radius: var(--radius-panel);
   background: transparent;
   color: var(--text-2);
   cursor: pointer;
@@ -813,7 +813,7 @@ onUnmounted(() => {
   gap: 10px;
   height: 40px;
   padding: 0 10px;
-  border-radius: 9px;
+  border-radius: var(--radius-panel);
   cursor: pointer;
   user-select: none;
 }
@@ -895,7 +895,7 @@ onUnmounted(() => {
   gap: 8px;
   padding: 8px 6px;
   border: 1.5px solid transparent;
-  border-radius: 10px;
+  border-radius: var(--radius-panel);
   cursor: pointer;
   user-select: none;
 }
@@ -956,7 +956,7 @@ onUnmounted(() => {
   place-items: center;
   width: 42px;
   height: 42px;
-  border-radius: 9px;
+  border-radius: var(--radius-panel);
   background: var(--surface-hover);
   color: var(--text-3);
 }
@@ -1086,15 +1086,16 @@ onUnmounted(() => {
   padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  background: var(--bg-list);
+  gap: 24px;
+  background: var(--bg-window);
 }
 
 .card {
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--material-strong);
-  padding: 12px 16px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 0 4px 16px;
+  border-bottom: 1px solid var(--line);
   display: flex;
   flex-direction: column;
   gap: 11px;
@@ -1138,7 +1139,7 @@ onUnmounted(() => {
   align-items: center;
   gap: 10px;
   padding: 9px 11px;
-  border-radius: 9px;
+  border-radius: var(--radius-panel);
   background: var(--bg-list);
 }
 
@@ -1164,7 +1165,7 @@ onUnmounted(() => {
   display: flex;
   gap: 3px;
   padding: 3px;
-  border-radius: 9px;
+  border-radius: var(--radius-panel);
   background: var(--bg-list);
 }
 
@@ -1180,8 +1181,8 @@ onUnmounted(() => {
 }
 
 .segment button.on {
-  background: var(--primary);
-  color: #fff;
+  background: var(--surface-selected);
+  color: var(--primary);
   font-weight: 500;
 }
 
@@ -1256,7 +1257,7 @@ onUnmounted(() => {
   gap: 9px;
   padding: 7px 8px;
   border: none;
-  border-radius: 9px;
+  border-radius: var(--radius-panel);
   background: transparent;
   color: var(--text-2);
   font: inherit;
@@ -1318,7 +1319,7 @@ onUnmounted(() => {
   place-items: center;
   width: 52px;
   height: 52px;
-  border-radius: 14px;
+  border-radius: var(--radius-panel);
   background: var(--primary-weak);
   color: var(--primary);
 }
@@ -1330,7 +1331,7 @@ onUnmounted(() => {
   min-width: 140px;
   padding: 5px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-panel);
   background: var(--material-strong);
   box-shadow: var(--shadow-float);
   display: flex;
