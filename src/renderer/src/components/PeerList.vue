@@ -220,7 +220,7 @@ function displayName(peer: PeerView): string {
   background: var(--surface-hover);
 }
 .tree-row.peer {
-  min-height: 58px;
+  min-height: 52px;
   gap: 10px;
 }
 .tree-row:focus-visible {
@@ -244,14 +244,14 @@ function displayName(peer: PeerView): string {
   color: var(--text-2);
 }
 .peer-avatar {
-  width: 38px;
-  height: 38px;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
   background: transparent;
   color: var(--on-primary);
   display: grid;
   place-items: center;
-  font-size: 16px;
+  font-size: 15px;
   flex-shrink: 0;
 }
 .peer-avatar.off {

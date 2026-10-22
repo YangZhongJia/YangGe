@@ -171,7 +171,7 @@ onUnmounted(() => {
   <!-- ——— 我的文件柜管理页 ——— -->
   <section v-if="cabinet.target.kind === 'mine'" class="cabinet-pane">
     <header class="head">
-      <span class="head-icon"><PantryIcon name="cabinet" :size="26" /></span>
+      <span class="head-icon"><PantryIcon name="cabinet" :size="24" /></span>
       <span class="head-txt">
         <span class="head-title">{{ tr('我的文件柜') }}</span>
         <span class="head-sub">
@@ -601,7 +601,7 @@ onUnmounted(() => {
 
 .head {
   flex: none;
-  height: 64px;
+  height: 52px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -612,16 +612,16 @@ onUnmounted(() => {
 
 .head-avatar {
   flex: none;
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
 }
 
 .head-icon {
   flex: none;
   display: grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   border-radius: var(--radius-panel);
   background: var(--primary-weak);
   color: var(--primary);
@@ -635,7 +635,7 @@ onUnmounted(() => {
 }
 
 .head-title {
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 600;
 }
 

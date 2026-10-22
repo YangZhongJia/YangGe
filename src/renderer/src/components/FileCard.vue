@@ -236,7 +236,7 @@ function requestDirect(): void {
 <template>
   <div v-if="ref_" class="card">
     <div class="icon">
-      <FileTypeIcon :name="ref_.name" :dir="ref_.dir" :size="44" />
+      <FileTypeIcon :name="ref_.name" :dir="ref_.dir" :size="40" />
     </div>
     <div class="info">
       <div class="name-line">
@@ -325,13 +325,13 @@ function requestDirect(): void {
   white-space: nowrap;
 }
 .card {
-  width: 380px;
+  width: 360px;
   max-width: 100%;
-  min-height: 68px;
+  min-height: 62px;
   background: var(--bg-window);
   border: 1px solid var(--line);
   border-radius: var(--radius-panel);
-  padding: 11px 12px;
+  padding: 10px 12px;
   display: flex;
   /* 三栏共享同一垂直中心线（决议 #129）：图标、文件名/大小、右侧操作/状态高低一致，
      无论右侧是单徽标还是 3 个堆叠按钮都不再出现左上右中的错位 */
@@ -342,8 +342,8 @@ function requestDirect(): void {
   color: var(--primary);
   flex-shrink: 0;
   /* 与 FileTypeIcon 等宽，保持图标、文件名与操作的垂直中心一致。 */
-  width: 44px;
-  height: 44px;
+  width: 40px;
+  height: 40px;
   display: grid;
   place-items: center;
 }
