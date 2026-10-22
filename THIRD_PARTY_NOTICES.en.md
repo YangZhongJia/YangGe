@@ -21,3 +21,10 @@ Teahouse bundles a subset of Twemoji SVG artwork for built-in avatars and cross-
 - Use: selected unmodified SVG files
 - Artwork license: [Creative Commons Attribution 4.0 International](https://creativecommons.org/licenses/by/4.0/) (CC BY 4.0)
 - Copyright: Copyright Twitter, Inc. and other contributors
+
+## Navigation icons
+
+The left navigation uses `message-circle`, `users`, `package-2`, `refresh-cw` and `settings` from Lucide 0.468.0. Original geometry is preserved with a shared display size and stroke weight. Only these five glyphs are bundled, with no icon-library runtime dependency or network request.
+
+- Lucide: <https://github.com/lucide-icons/lucide/tree/0.468.0>, ISC License (some artwork originates from Feather / MIT)
+- Full copyright and license notices: [navigation-icons.txt](build/licenses/navigation-icons.txt), bundled as `licenses/navigation-icons.txt`.

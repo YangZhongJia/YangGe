@@ -21,6 +21,7 @@ import GroupCreator from './components/GroupCreator.vue'
 // 群发功能已停用（决议 #62）：建讨论组即可满足同样诉求，群发无实际意义；保留代码留痕。
 // import MassSender from './components/MassSender.vue'
 import PantryIcon from './components/PantryIcon.vue'
+import RailNavIcon from './components/RailNavIcon.vue'
 import WindowControls from './components/WindowControls.vue'
 import WindowDragStrip from './components/WindowDragStrip.vue'
 import { useGroupsStore } from './stores/groups'
@@ -471,7 +472,7 @@ onUnmounted(() => {
         @pointerleave="hideRailHint('chat')"
         @click="activateTab('chat', $event)"
       >
-        <PantryIcon name="chat" :size="28" />
+        <RailNavIcon name="chat" />
         <span v-if="chatStore.totalUnread > 0" class="rail-badge">{{
           chatStore.totalUnread > 99 ? '99+' : chatStore.totalUnread
         }}</span>
@@ -486,7 +487,7 @@ onUnmounted(() => {
         @pointerleave="hideRailHint('contacts')"
         @click="activateTab('contacts', $event)"
       >
-        <PantryIcon name="contacts" :size="28" />
+        <RailNavIcon name="contacts" />
       </button>
       <div class="spacer"></div>
       <button
@@ -519,7 +520,7 @@ onUnmounted(() => {
         @pointerleave="hideRailHint('cabinet')"
         @click="openCabinet($event)"
       >
-        <PantryIcon name="cabinet" :size="28" />
+        <RailNavIcon name="cabinet" />
       </button>
       <button
         type="button"
@@ -542,7 +543,7 @@ onUnmounted(() => {
           :style="{ '--scan-p': scanRingPct }"
           aria-hidden="true"
         ></span>
-        <PantryIcon name="refresh" :size="28" />
+        <RailNavIcon name="refresh" />
       </button>
       <button
         type="button"
@@ -554,7 +555,7 @@ onUnmounted(() => {
         @pointerleave="hideRailHint('settings')"
         @click="openSettings($event)"
       >
-        <PantryIcon name="settings" :size="28" />
+        <RailNavIcon name="settings" />
       </button>
     </nav>
 
