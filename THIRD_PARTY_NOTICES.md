@@ -21,3 +21,10 @@
 - 使用方式：仅选取所需 SVG 文件，未改绘
 - 图形许可：Creative Commons Attribution 4.0 International（CC-BY 4.0），<https://creativecommons.org/licenses/by/4.0/>
 - 版权：Copyright Twitter, Inc and other contributors
+
+## 左侧导航图标
+
+左侧导航使用 Lucide 0.468.0 的 `message-circle`、`users`、`package-2`、`refresh-cw`、`settings`。保留上游图形路径，统一显示尺寸与描边；仅内置这五个图标，不引入图标库运行时依赖或外网请求。
+
+- Lucide：<https://github.com/lucide-icons/lucide/tree/0.468.0>，ISC License（部分图形源自 Feather / MIT）
+- 完整版权与许可：[navigation-icons.txt](build/licenses/navigation-icons.txt)，随应用打包到 `licenses/navigation-icons.txt`。

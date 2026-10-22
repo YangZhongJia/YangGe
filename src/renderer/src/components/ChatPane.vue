@@ -2153,16 +2153,14 @@ async function onDrop(event: DragEvent): Promise<void> {
     </div>
 
     <footer class="input-area">
-      <!-- 输入框高度拖拽手柄（决议 #127）：压在消息/输入分隔线上，上下拖调高 -->
+      <!-- 桌面端在分隔线上保留拖拽热区，通过鼠标光标提示，不显示额外手柄。 -->
       <div
         class="input-resizer"
         role="separator"
         :aria-label="tr('拖动调整输入框高度')"
         :title="tr('拖动调整输入框高度')"
         @pointerdown="startInputResize"
-      >
-        <span class="input-resizer-grip"></span>
-      </div>
+      ></div>
       <div class="toolbar">
         <span ref="emojiScope" class="emoji-scope">
           <EmojiPanel
@@ -3645,27 +3643,13 @@ async function onDrop(event: DragEvent): Promise<void> {
   position: relative;
   z-index: 3;
 }
-/* 输入框高度拖拽手柄（决议 #127）：铺满顶部、压在消息/输入分隔线上；
-   默认细灰 grip 提示可拖，hover 变深，ns-resize 光标 */
+/* 输入框高度拖拽热区：铺满顶部并压在分隔线上，仅通过 ns-resize 光标提示。 */
 .input-resizer {
   height: 8px;
   margin: -13px -20px 7px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   cursor: ns-resize;
   touch-action: none;
   user-select: none;
-}
-.input-resizer-grip {
-  width: 28px;
-  height: 5px;
-  border-top: 1px solid var(--primary-border);
-  border-bottom: 1px solid var(--primary-border);
-  transition: border-color 0.15s ease;
-}
-.input-resizer:hover .input-resizer-grip {
-  border-color: var(--primary);
 }
 .input-shell {
   position: relative;
