@@ -98,6 +98,6 @@ describe('截图窗主色统一走 token（决议 #281）', () => {
     expect(source).toContain('ctx.strokeStyle = accent()')
     expect(source).toContain('ctx.fillStyle = accent()')
     // 读不到时仍要有确定的颜色兜底
-    expect(source).toContain("|| '#3d8b6b'")
+    expect(source).toContain("|| '#4e79af'")
   })
 })

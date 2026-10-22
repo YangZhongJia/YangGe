@@ -484,7 +484,7 @@ async function runUpdate(patch: GroupPatch, failureMessage: string): Promise<boo
   border-radius: 5px;
   padding: 0 7px;
   background: var(--primary);
-  color: #fff;
+  color: var(--on-primary);
   font-size: 11px;
   cursor: pointer;
 }

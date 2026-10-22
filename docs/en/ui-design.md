@@ -12,7 +12,7 @@
 
 Teahouse uses the familiar structure of a stable desktop messenger, with restrained material, spacing, and feedback principles inspired by Apple platform design.
 
-- **One accent:** tea green `#3D8B6B` for primary actions, selected states, and local-message tint. Other surfaces use neutral gray/green values.
+- **Mist blue:** `#4E79AF` for primary actions and selection, slate-blue navigation `#354F75`, pale blue-gray lists and white content. Preserve the teacup brand and user-selected avatar colors.
 - **System typography:** PingFang SC, Microsoft YaHei, and Noto Sans CJK fallbacks; 14px body text.
 - **Project-owned line icons:** 1.6px rounded strokes, current-color inheritance, and no emoji as system controls.
 - **Local cross-platform emoji:** bundled Twemoji SVG subsets support Windows 7 and UOS without a color emoji font. Clipboard and protocol retain original UTF-8 characters.
@@ -29,7 +29,7 @@ Naive UI 2.43.2 provides standard form, search, and common action primitives thr
 ```text
 ┌────────┬────────────────────────┬──────────────────────────────────┐
 │ Rail   │ List                   │ Content                          │
-│ 68 px  │ 272 px                 │ flexible, at least 560 px        │
+│ 68 px  │ 240–300 px             │ flexible, at least 560 px        │
 │        │                        │                                  │
 │ avatar │ search / section       │ chat / contact / cabinet         │
 │ chat   │ conversations/contacts │ header and primary content       │
@@ -46,7 +46,7 @@ The minimum window is 960×640 and restores its previous size and position. The 
 - Fixed 68px neutral surface with a subtle divider.
 - Top identity avatar opens profile editing; main entries switch Chat and Contacts.
 - Bottom tools, top to bottom: File Cabinet, global peer refresh, Settings.
-- Main icons are 25px and lower tools 21px. Selected/hover state uses tea green.
+- Main and lower tool icons are optically matched at 30–32px. Selected/hover state uses blue.
 - File Cabinet switches the existing main window to its third tab and remains available before a shared directory is configured.
 - Global refresh is enabled only when a scan range exists. Every activation opens a centered confirmation with an amber warning icon, range count/list, Cancel, and Start scan. During scanning, the action is disabled and shows a conic progress ring.
 - Icon tooltips appear only after real pointer movement and a short delay. They do not use native `title`, arrows, or translation motion.
@@ -270,22 +270,32 @@ Desktop file-manager semantics apply: single-click select, double-click enter, C
 
 ## 9. Visual tokens
 
-| Token | Value or role |
+The approved 2026-10-22 blue design supersedes earlier tea-green material styling; historical decisions remain below. Preserve the 68px rail and current minimum window sizes. Size the list with `clamp(240px, 28vw, 300px)`, reaching 300px at the usual 1080px viewport. Align the search and chat headers at 96px. Conversation rows begin directly below search, with 74px rows, 42px avatars, 15px names and 13px previews. Use full-row selection and a bottom-aligned composer separated by a hairline, retaining its resize handle, seven private-chat tools and right-aligned history search. Groups still omit nudge. Settings use section headings, spacing and separators instead of nested elevated cards. Functionality, permissions and autosave stay unchanged.
+
+Message text uses 16px / 1.5 line height, 10px 14px bubble padding and 12px message spacing. Delivered status sits below outgoing text; retry controls remain available. The 15px composer uses a short placeholder and a separate footer helper that updates with the send-key preference; its emoji mirror and Win7 editor use the same type size. Completed file cards use a blue text action with a folder icon. Rail targets are 44px with optically matched 30–32px icons; settings icons are 24px. The ten avatar presets use pastel backgrounds and dark lettering, retaining IDs, named hues, animal graphics and custom photos.
+
+| Token | Light value or role |
 |---|---|
-| `--primary` | `#3D8B6B` tea green |
-| `--text-1/2/3` | `#17211C` / `#58645E` / `#87918C` |
-| `--text-placeholder` | `#B8B8B8` |
-| `--bg-window/list/chat` | `#F9FBFA` / `#F1F5F3` / `#EDF2EF` |
-| `--bubble-peer/mine` | white / 12% primary |
-| `--line` | `rgba(40, 66, 53, 0.10)` |
-| `--material-bar/panel/strong` | theme-specific structural surfaces |
+| `--primary` | `#4E79AF`; dark `#5D8FD0` |
+| `--primary-rgb/weak/border` | `78, 121, 175` / `#EDF3FB` / `#B8CCE5` |
+| `--on-primary` | white; dark `#101E31` for contrast |
+| `--text-1/2/3` | `#293241` / `#657387` / `#7D8795` |
+| `--text-placeholder` | `#8B95A3` |
+| `--bg-window/list/chat/input` | white / `#F4F8FD` / white / white |
+| `--rail-bg/text/active` | `#354F75` / `#DFE9F7` / `#527CAD` |
+| `--bg-pinned` | `#F0F3F8` |
+| `--bubble-peer/mine` | `#F0F3F7` / `#E5EDF9`, no shadows |
+| `--line` | `#E5E9F0` |
+| `--material-bar/panel/strong` | opaque white / pale blue-gray / white, no backdrop blur |
 | `--scrim` | theme-specific translucent modal backdrop |
-| `--surface-hover/selected` | neutral 5% / tea green 12% |
-| `--online/offline` | `#2BA245` / `#C2C2C2` |
-| `--danger/badge` | `#E5484D` / `#FA5151` |
+| `--surface-hover/selected` | `#EEF2F7` / `#E5EDF9` |
+| `--online/offline` | `#34869B` / `#B6BEC9` |
+| `--danger/badge` | `#D94B55` / `#DC5260` |
 | `--font-xs/sm/md/lg` | 12 / 13 / 14 / 16px |
 | Spacing | multiples of 4px |
-| `--radius-control/panel/pill` | 8 / 12 / 999px |
+| `--radius-control/panel/pill` | 6 / 8 / 999px |
+
+Dark main/list/composer surfaces are `#171E29` / `#202A38` / `#1D2633`, with `#E6EDF6` text and `#2B4263` selection. Only overlays keep short shadows, further reduced for software rendering. Retain local fonts, icons, brand assets and avatar choices.
 
 Circular avatars, local line icons, file-type artwork, tray graphics, and brand art remain consistent across light/dark surfaces and supported operating systems.
 

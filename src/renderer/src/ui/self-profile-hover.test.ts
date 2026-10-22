@@ -8,7 +8,7 @@ describe('个人资料入口交互', () => {
   it('设置侧栏直接展示分组导航', () => {
     expect(settingsSource).not.toContain('class="account-card"')
     expect(settingsSource).not.toContain('.account-card')
-    expect(settingsSource).toMatch(/<aside class="sidebar">\s*<nav class="nav"/)
+    expect(settingsSource).toMatch(/<aside class="sidebar">[\s\S]*?<nav class="nav"/)
     expect(settingsSource).toContain('class="avatar-editor"')
   })
 

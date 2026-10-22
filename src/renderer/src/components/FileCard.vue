@@ -236,7 +236,7 @@ function requestDirect(): void {
 <template>
   <div v-if="ref_" class="card">
     <div class="icon">
-      <FileTypeIcon :name="ref_.name" :dir="ref_.dir" :size="36" />
+      <FileTypeIcon :name="ref_.name" :dir="ref_.dir" :size="44" />
     </div>
     <div class="info">
       <div class="name-line">
@@ -301,7 +301,9 @@ function requestDirect(): void {
           </button>
         </div>
       </template>
-      <button v-else-if="showReveal" class="act" @click="transfers.reveal(ref_.transferId)">{{ tr('打开所在文件夹') }}</button>
+      <button v-else-if="showReveal" class="act reveal" @click="transfers.reveal(ref_.transferId)">
+        {{ tr('打开所在文件夹') }}<PantryIcon name="folder" :size="20" />
+      </button>
       <button v-else-if="showRetry" class="act primary" @click="transfers.accept(ref_.transferId)">
         {{ retryLabel }}
       </button>
@@ -323,13 +325,13 @@ function requestDirect(): void {
   white-space: nowrap;
 }
 .card {
-  width: 360px;
+  width: 380px;
   max-width: 100%;
-  min-height: 58px;
+  min-height: 68px;
   background: var(--bg-window);
   border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 9px 10px;
+  border-radius: var(--radius-panel);
+  padding: 11px 12px;
   display: flex;
   /* 三栏共享同一垂直中心线（决议 #129）：图标、文件名/大小、右侧操作/状态高低一致，
      无论右侧是单徽标还是 3 个堆叠按钮都不再出现左上右中的错位 */
@@ -339,9 +341,9 @@ function requestDirect(): void {
 .icon {
   color: var(--primary);
   flex-shrink: 0;
-  /* 与 FileTypeIcon 的 36px 字形等宽，避免图标溢出小盒子、挤占与文件名的间距 */
-  width: 36px;
-  height: 36px;
+  /* 与 FileTypeIcon 等宽，保持图标、文件名与操作的垂直中心一致。 */
+  width: 44px;
+  height: 44px;
   display: grid;
   place-items: center;
 }
@@ -358,7 +360,8 @@ function requestDirect(): void {
 .name {
   min-width: 0;
   flex: 1;
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 500;
 }
 .direct-chip {
   flex: 0 0 auto;
@@ -387,8 +390,8 @@ function requestDirect(): void {
   color: var(--primary);
 }
 .meta {
-  font-size: 11px;
-  color: var(--text-3);
+  font-size: 12px;
+  color: var(--text-2);
   margin-top: 2px;
   white-space: nowrap;
   overflow: hidden;
@@ -451,6 +454,14 @@ function requestDirect(): void {
   align-items: center;
   gap: 6px;
 }
+.act.reveal {
+  border-color: transparent;
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 500;
+  gap: 4px;
+  padding: 0 2px;
+}
 .act {
   border: 1px solid var(--line);
   background: transparent;
@@ -474,7 +485,7 @@ function requestDirect(): void {
 .act.primary {
   background: var(--primary);
   border-color: var(--primary);
-  color: #fff;
+  color: var(--on-primary);
   font-weight: 600;
 }
 .act.danger {

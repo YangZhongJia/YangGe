@@ -6,11 +6,11 @@ const appSource = readFileSync(new URL('../App.vue', import.meta.url), 'utf8')
 const settingsSource = readFileSync(new URL('../SettingsApp.vue', import.meta.url), 'utf8')
 
 describe('Naive UI 茶话间主题', () => {
-  it('保持茶青主色、紧凑控件和材质化圆角标尺', () => {
-    expect(teahouseLightThemeOverrides.common?.primaryColor).toBe('#3d8b6b')
-    expect(teahouseDarkThemeOverrides.common?.primaryColor).toBe('#5bbf91')
-    expect(teahouseLightThemeOverrides.common?.borderRadius).toBe('10px')
-    expect(teahouseLightThemeOverrides.Button?.borderRadiusMedium).toBe('9px')
+  it('保持雾蓝主色、紧凑控件和简洁圆角标尺', () => {
+    expect(teahouseLightThemeOverrides.common?.primaryColor).toBe('#4e79af')
+    expect(teahouseDarkThemeOverrides.common?.primaryColor).toBe('#5d8fd0')
+    expect(teahouseLightThemeOverrides.common?.borderRadius).toBe('8px')
+    expect(teahouseLightThemeOverrides.Button?.borderRadiusMedium).toBe('6px')
     expect(teahouseLightThemeOverrides.Button?.heightMedium).toBe('34px')
     expect(teahouseLightThemeOverrides.Input?.heightMedium).toBe('34px')
   })

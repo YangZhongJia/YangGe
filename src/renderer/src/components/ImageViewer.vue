@@ -649,8 +649,8 @@ onBeforeUnmount(() => {
 .viewer {
   position: fixed;
   inset: 0;
-  color: #f5f7f6;
-  background: #111412;
+  color: #e6edf6;
+  background: #131b27;
   overflow: hidden;
 }
 .navigate {
@@ -712,11 +712,9 @@ onBeforeUnmount(() => {
   padding: 5px 7px;
   border: 1px solid rgba(255, 255, 255, 0.13);
   border-radius: 8px;
-  background: rgba(28, 32, 30, 0.68);
-  box-shadow:
-    0 16px 40px rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(18px);
+  background: #202a38;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+
   overflow-x: auto;
   z-index: 2;
 }
@@ -724,7 +722,7 @@ onBeforeUnmount(() => {
 .zoom-readout {
   min-width: 50px;
   padding: 0 7px 0 5px;
-  color: rgba(245, 247, 246, 0.82);
+  color: rgba(230, 237, 246, 0.82);
   font-size: 12px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -739,7 +737,7 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: rgba(245, 247, 246, 0.86);
+  color: rgba(230, 237, 246, 0.86);
   background: transparent;
   cursor: pointer;
   transition:
@@ -751,14 +749,14 @@ onBeforeUnmount(() => {
 .tool:hover:not(:disabled),
 .tool.active {
   color: #ffffff;
-  border-color: rgba(91, 191, 145, 0.36);
-  background: rgba(91, 191, 145, 0.2);
+  border-color: rgba(93, 143, 208, 0.36);
+  background: rgba(93, 143, 208, 0.2);
 }
 .tool:active:not(:disabled) {
   transform: translateY(1px);
 }
 .tool:disabled {
-  color: rgba(245, 247, 246, 0.28);
+  color: rgba(230, 237, 246, 0.28);
   cursor: default;
 }
 .copy-selection {
@@ -780,7 +778,7 @@ onBeforeUnmount(() => {
 .ocr-readout {
   max-width: 116px;
   padding: 0 6px;
-  color: rgba(245, 247, 246, 0.72);
+  color: rgba(230, 237, 246, 0.72);
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
@@ -843,8 +841,8 @@ onBeforeUnmount(() => {
   padding: 10px 14px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 8px;
-  background: rgba(28, 32, 30, 0.82);
-  color: rgba(245, 247, 246, 0.76);
+  background: #202a38;
+  color: rgba(230, 237, 246, 0.76);
   font-size: 13px;
   text-align: center;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.24);
@@ -853,12 +851,6 @@ onBeforeUnmount(() => {
   color: #ffb1b5;
   border-color: rgba(255, 107, 114, 0.26);
   background: rgba(54, 24, 27, 0.82);
-}
-
-@supports not (backdrop-filter: blur(18px)) {
-  .viewer-menu {
-    background: #1c201e;
-  }
 }
 
 @media (max-width: 720px) {

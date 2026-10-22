@@ -173,7 +173,7 @@ async function openHit(convId: string, seq: number, msgId: string): Promise<void
   height: 34px;
   flex: 0 0 34px;
   background: var(--primary);
-  color: #fff;
+  color: var(--on-primary);
   font-size: 13px;
 }
 .peer-text {

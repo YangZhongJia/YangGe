@@ -475,10 +475,10 @@ onUnmounted(() => {
   gap: 4px;
   min-height: 24px;
   padding: 4px 8px 4px 7px;
-  border: 1px solid rgba(61, 139, 107, 0.22);
+  border: 1px solid rgba(var(--primary-rgb), 0.22);
   border-radius: 999px;
   background: var(--bg-window);
-  box-shadow: 0 6px 18px rgba(34, 49, 42, 0.14);
+  box-shadow: 0 6px 18px rgba(29, 45, 68, 0.14);
   color: var(--primary);
   font-size: 12px;
   font-weight: 500;

@@ -214,7 +214,7 @@ function lastSeenLabel(peer: PeerView): string {
   height: 68px;
   border-radius: 50%;
   background: var(--primary);
-  color: #fff;
+  color: var(--on-primary);
   display: grid;
   place-items: center;
   font-size: 24px;
@@ -261,8 +261,8 @@ h2 {
 }
 .status-pill.on {
   color: var(--online);
-  background: rgba(43, 162, 69, 0.08);
-  border-color: rgba(43, 162, 69, 0.18);
+  background: var(--online-weak);
+  border-color: transparent;
 }
 .status-dot {
   width: 6px;

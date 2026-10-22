@@ -23,7 +23,7 @@ describe('设置分组导航图标', () => {
     }
     expect(settingsSource.match(/icon: 'settings-/g)).toHaveLength(7)
     expect(settingsSource).toContain(
-      '<SettingsNavIcon class="nav-icon" :name="item.icon" :size="18" />'
+      '<SettingsNavIcon class="nav-icon" :name="item.icon" :size="24" />'
     )
     expect(sharedIconSource).not.toContain("name === 'settings-profile'")
   })

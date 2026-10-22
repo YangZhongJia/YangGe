@@ -11,13 +11,13 @@ describe('设置窗口视觉层级', () => {
 
     const scrimRule = appSource.match(/\.settings-scrim \{[\s\S]*?\n\}/)?.[0] ?? ''
     expect(scrimRule).toContain('pointer-events: auto')
-    expect(scrimRule).toContain('background: rgba(18, 31, 25, 0.24)')
+    expect(scrimRule).toContain('background: rgba(22, 34, 52, 0.24)')
     expect(scrimRule).not.toContain('backdrop-filter')
   })
 
   it('设置窗口用顶层内描边提供平台无关边界', () => {
     expect(settingsSource).toContain('.settings::after')
-    expect(settingsSource).toContain('inset 0 0 0 1px rgba(33, 59, 46, 0.26)')
+    expect(settingsSource).toContain('inset 0 0 0 1px rgba(45, 63, 88, 0.26)')
     expect(settingsSource).toContain('inset 0 0 0 1px rgba(255, 255, 255, 0.18)')
     expect(settingsSource).toContain('pointer-events: none')
   })

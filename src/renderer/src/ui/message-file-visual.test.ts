@@ -31,9 +31,9 @@ describe('消息与文件视觉统一', () => {
     expect(ruleBody(messageSource, '.row.mine .bubble')).toContain('box-shadow: none')
   })
 
-  it('文字气泡与文件卡统一四角 14px', () => {
-    expect(ruleBody(messageSource, '.bubble')).toContain('border-radius: 14px')
-    expect(ruleBody(fileCardSource, '.card')).toContain('border-radius: 14px')
+  it('文字气泡与文件卡统一使用面板圆角', () => {
+    expect(ruleBody(messageSource, '.bubble')).toContain('border-radius: var(--radius-panel)')
+    expect(ruleBody(fileCardSource, '.card')).toContain('border-radius: var(--radius-panel)')
   })
 
   it('发送方主动取消使用独立的灰色状态，不落入失败重发入口', () => {

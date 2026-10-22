@@ -294,10 +294,10 @@ onMounted(() => renderValue(props.modelValue))
   outline: none;
   padding: 6px 8px;
   font-family: 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.5;
   color: var(--text-1);
-  background: var(--material-strong);
+  background: var(--bg-input);
   white-space: pre-wrap;
   word-break: break-word;
   overflow-wrap: anywhere;

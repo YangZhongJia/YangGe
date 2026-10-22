@@ -130,7 +130,7 @@ onBeforeUnmount(() => {
   position: fixed;
   inset: 0;
   padding: 24px;
-  background: rgba(18, 31, 25, 0.32);
+  background: rgba(22, 34, 52, 0.32);
   display: grid;
   place-items: center;
   z-index: 1200;
@@ -143,7 +143,7 @@ onBeforeUnmount(() => {
   box-sizing: border-box;
   background: var(--material-strong);
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: var(--radius-panel);
   padding: 18px 20px;
   box-shadow: var(--highlight-edge), var(--shadow-float);
   animation: group-invite-dialog-in 180ms cubic-bezier(0.16, 1, 0.3, 1);

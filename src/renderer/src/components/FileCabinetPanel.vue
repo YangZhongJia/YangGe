@@ -515,7 +515,7 @@ onUnmounted(stopTransfer)
 
 .primary {
   background: var(--primary);
-  color: #fff;
+  color: var(--on-primary);
 }
 
 .ghost {

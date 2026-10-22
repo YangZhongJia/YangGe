@@ -196,7 +196,7 @@ async function finish(): Promise<void> {
 .primary {
   border: none;
   background: var(--primary);
-  color: #fff;
+  color: var(--on-primary);
   font-size: 14px;
   padding: 8px 28px;
   border-radius: 4px;

@@ -377,10 +377,11 @@ const mentionCandidates = computed(() => {
 })
 const inputPlaceholder = computed(() => {
   if (!canSend.value) return tr('你已不在该讨论组，无法发言')
-  return settings.value?.sendKey === 'ctrlEnter'
-    ? tr('输入消息，Ctrl+Enter 发送，Enter 换行；可粘贴截图/文件')
-    : tr('输入消息，Enter 发送，Ctrl+Enter 换行；可粘贴截图/文件')
+  return tr('输入消息…')
 })
+const sendKeyHint = computed(() => settings.value?.sendKey === 'ctrlEnter'
+  ? tr('Ctrl+Enter 发送，Enter 换行')
+  : tr('Enter 发送，Ctrl+Enter 换行'))
 const draftEmojiParts = computed(() => splitEmojiText(draft.value))
 // Win7 由系统字体 contenteditable 直接承载 Twemoji 原子节点，不再启用 textarea 镜像（决议 #262）。
 const draftUsesEmojiMirror = computed(() =>
@@ -1639,11 +1640,11 @@ async function renderTableTextImageBytes(text: string): Promise<ArrayBuffer | nu
   if (!ctx) return null
   ctx.fillStyle = '#ffffff'
   ctx.fillRect(0, 0, width, height)
-  ctx.strokeStyle = '#D8DED9'
+  ctx.strokeStyle = '#E5E9F0'
   ctx.lineWidth = 1
   ctx.font = measureCtx.font
   ctx.textBaseline = 'middle'
-  ctx.fillStyle = '#1F2A24'
+  ctx.fillStyle = '#293241'
 
   let y = 0
   for (const row of rows) {
@@ -2045,7 +2046,7 @@ async function onDrop(event: DragEvent): Promise<void> {
         <GroupAvatar
           class="group-head-avatar"
           :avatar-hash="group?.avatarHash"
-          :icon-size="20"
+          :icon-size="28"
         />
         <span class="title-block">
           <span class="title">{{ peerName }}</span>
@@ -2055,7 +2056,7 @@ async function onDrop(event: DragEvent): Promise<void> {
       <span class="head-spacer"></span>
       <button v-if="!isGroup && peer?.caps.includes(CAPS.remoteView)" class="head-btn"
         :disabled="!!screenDisabledReason" :title="screenDisabledReason || tr('查看屏幕')" :aria-label="screenDisabledReason || tr('查看屏幕')"
-        @click="requestScreen"><PantryIcon name="screen" :size="17" /></button>
+        @click="requestScreen"><PantryIcon name="screen" :size="26" /></button>
       <button
         v-if="!isGroup"
         class="head-btn"
@@ -2064,7 +2065,7 @@ async function onDrop(event: DragEvent): Promise<void> {
         :aria-disabled="!!cabinetDisabledReason"
         @click="toggleCabinet"
       >
-        <PantryIcon name="folder" :size="17" />
+        <PantryIcon name="folder" :size="28" />
       </button>
       <button v-if="isGroup" class="head-btn" :title="tr('成员')" @click="showMembers = !showMembers">
         <PantryIcon name="users" :size="17" />
@@ -2178,7 +2179,7 @@ async function onDrop(event: DragEvent): Promise<void> {
               :disabled="!canSend"
               @click="showEmoji = !showEmoji"
             >
-              <PantryIcon name="smile" :size="18" />
+              <PantryIcon name="smile" :size="28" />
             </button>
           </span>
         </span>
@@ -2190,7 +2191,7 @@ async function onDrop(event: DragEvent): Promise<void> {
               :title="canSendPk ? tr('猜拳') : pkDisabledReason"
               @click="sendPk('rps')"
             >
-              <span class="pk-pop-window"><PantryIcon name="pk-rps" :size="22" /></span>
+              <span class="pk-pop-window"><PantryIcon name="pk-rps" :size="28" /></span>
               <span>{{ tr('猜拳') }}</span>
             </button>
             <button
@@ -2199,7 +2200,7 @@ async function onDrop(event: DragEvent): Promise<void> {
               :title="canSendPk ? tr('骰子') : pkDisabledReason"
               @click="sendPk('dice')"
             >
-              <span class="pk-pop-window"><PantryIcon name="pk-dice" :size="22" /></span>
+              <span class="pk-pop-window"><PantryIcon name="pk-dice" :size="28" /></span>
               <span>{{ tr('骰子') }}</span>
             </button>
           </div>
@@ -2213,7 +2214,7 @@ async function onDrop(event: DragEvent): Promise<void> {
               :aria-expanded="showPk ? 'true' : 'false'"
               @click="showPk = !showPk"
             >
-              <PantryIcon name="pk" :size="18" />
+              <PantryIcon name="pk" :size="24" />
             </button>
           </span>
         </span>
@@ -2225,7 +2226,7 @@ async function onDrop(event: DragEvent): Promise<void> {
             :disabled="!canSendNudge"
             @click="sendNudge"
           >
-            <PantryIcon name="nudge" :size="18" />
+            <PantryIcon name="nudge" :size="28" />
           </button>
         </span>
         <span class="tool-wrap" :data-tip="tr('截图')">
@@ -2235,7 +2236,7 @@ async function onDrop(event: DragEvent): Promise<void> {
             :aria-label="tr('截图（Ctrl/Cmd+Alt+A）')"
             @click="window_startCapture"
           >
-            <PantryIcon name="scissors" :size="18" />
+            <PantryIcon name="scissors" :size="28" />
           </button>
         </span>
         <span class="tool-wrap" :data-tip="tr('发送图片')">
@@ -2246,7 +2247,7 @@ async function onDrop(event: DragEvent): Promise<void> {
             :disabled="!canSendMedia"
             @click="sendImage"
           >
-            <PantryIcon name="image" :size="18" />
+            <PantryIcon name="image" :size="28" />
           </button>
         </span>
         <span class="tool-wrap" :data-tip="tr('发送文件')">
@@ -2257,7 +2258,7 @@ async function onDrop(event: DragEvent): Promise<void> {
             :disabled="!canSendMedia"
             @click="sendFiles(false)"
           >
-            <PantryIcon name="file" :size="18" />
+            <PantryIcon name="file" :size="28" />
           </button>
         </span>
         <span class="tool-wrap" :data-tip="tr('发送文件夹')">
@@ -2268,7 +2269,7 @@ async function onDrop(event: DragEvent): Promise<void> {
             :disabled="!canSendMedia"
             @click="sendFiles(true)"
           >
-            <PantryIcon name="folder" :size="18" />
+            <PantryIcon name="folder" :size="28" />
           </button>
         </span>
         <span v-if="isGroup && canSend && onlineGroupRecipientCount === 0" class="tool-hint">{{ tr('群成员离线，无法发送图片/文件') }}</span>
@@ -2287,7 +2288,7 @@ async function onDrop(event: DragEvent): Promise<void> {
               :aria-label="tr('历史搜索')"
               @click="toggleHistorySearch"
             >
-              <PantryIcon name="search" :size="18" />
+              <PantryIcon name="search" :size="28" />
             </button>
           </span>
         </span>
@@ -2386,6 +2387,8 @@ async function onDrop(event: DragEvent): Promise<void> {
           :model-value="draft"
           :disabled="!canSend"
           :placeholder="inputPlaceholder"
+          :title="tr('可粘贴截图或文件')"
+          aria-describedby="composer-send-hint"
           @update:model-value="onWin7EditorValue"
           @keydown="onKeydown"
           @keyup="syncMentionQuery"
@@ -2403,6 +2406,8 @@ async function onDrop(event: DragEvent): Promise<void> {
           :class="{ 'mirror-active': draftUsesEmojiMirror }"
           :disabled="!canSend"
           :placeholder="inputPlaceholder"
+          :title="tr('可粘贴截图或文件')"
+          aria-describedby="composer-send-hint"
           @keydown="onKeydown"
           @keyup="syncMentionQuery"
           @mouseup="syncMentionQuery"
@@ -2416,6 +2421,7 @@ async function onDrop(event: DragEvent): Promise<void> {
         <span v-if="draftBytes > 600" class="counter" :class="{ over: overLimit }">
           {{ tr('{0} / {1} 字节{2}', { 0: draftBytes, 1: TEXT_TCP_LIMIT, 2: overLimit ? tr('（文本过长）') : overUdpLimit ? tr('（将通过 TCP 发送）') : '' }) }}
         </span>
+        <span v-if="canSend" id="composer-send-hint" class="send-hint">{{ sendKeyHint }}</span>
         <button class="send" :disabled="sendDisabled" @click="send">{{ attachmentsSending ? tr('正在发送…') : pendingAttachments.length ? tr('发送（{0}）', { 0: pendingAttachments.length }) : tr('发送') }}</button>
       </div>
     </footer>
@@ -2438,7 +2444,7 @@ async function onDrop(event: DragEvent): Promise<void> {
 .drop-mask {
   position: absolute;
   inset: 0;
-  background: rgba(61, 139, 107, 0.12);
+  background: rgba(var(--primary-rgb), 0.12);
   border: 2px dashed var(--primary);
   display: grid;
   place-items: center;
@@ -2450,7 +2456,7 @@ async function onDrop(event: DragEvent): Promise<void> {
 .toolbar {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 12px;
   padding-bottom: 6px;
   position: relative;
 }
@@ -2477,17 +2483,16 @@ async function onDrop(event: DragEvent): Promise<void> {
   gap: 6px;
   padding: 8px;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--radius-panel);
   background: var(--material-strong);
   box-shadow: var(--highlight-edge), var(--shadow-float);
-  backdrop-filter: blur(18px) saturate(135%);
-  -webkit-backdrop-filter: blur(18px) saturate(135%);
+
   z-index: 28;
 }
 .pk-popover button {
   padding: 8px 6px 7px;
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: var(--radius-panel);
   background: transparent;
   color: var(--text-1);
   display: flex;
@@ -2499,7 +2504,7 @@ async function onDrop(event: DragEvent): Promise<void> {
   cursor: pointer;
   transition: background 150ms ease, transform 100ms ease-out;
 }
-/* 玩法卡的图标小窗：与 PkBubble 开奖窗同底（--bg-chat）、同茶青语义，让浮层与气泡视觉呼应 */
+/* 玩法卡的图标小窗：与 PkBubble 开奖窗同底（--bg-chat）、同蓝色语义，让浮层与气泡视觉呼应 */
 .pk-pop-window {
   width: 40px;
   height: 40px;
@@ -2522,7 +2527,7 @@ async function onDrop(event: DragEvent): Promise<void> {
   transform: scale(0.97);
 }
 .pk-popover button:focus-visible {
-  outline: 2px solid rgba(61, 139, 107, 0.35);
+  outline: 2px solid rgba(var(--primary-rgb), 0.35);
   outline-offset: 2px;
 }
 .pk-popover button:disabled {
@@ -2544,7 +2549,7 @@ async function onDrop(event: DragEvent): Promise<void> {
   overflow-y: auto;
   background: var(--material-strong);
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-panel);
   box-shadow: var(--highlight-edge), var(--shadow-float);
   padding: 5px;
   z-index: 4;
@@ -2642,8 +2647,8 @@ async function onDrop(event: DragEvent): Promise<void> {
   height: 28px;
   margin: 0 0 6px;
   padding: 0 6px 0 10px;
-  background: rgba(61, 139, 107, 0.08);
-  border: 1px solid rgba(61, 139, 107, 0.22);
+  background: rgba(var(--primary-rgb), 0.08);
+  border: 1px solid rgba(var(--primary-rgb), 0.22);
   border-radius: 8px;
   color: var(--text-2);
   font-size: 12px;
@@ -2687,7 +2692,7 @@ async function onDrop(event: DragEvent): Promise<void> {
   background: var(--line);
   color: var(--text-1);
 }
-/* "回到最新"悬浮圆按钮（决议 #134）：贴消息区右下角，白底 + 茶青箭头 + 柔和阴影 */
+/* "回到最新"悬浮圆按钮（决议 #134）：贴消息区右下角，白底 + 蓝色箭头 + 柔和阴影 */
 .jump-latest {
   position: absolute;
   right: 16px;
@@ -2729,22 +2734,22 @@ async function onDrop(event: DragEvent): Promise<void> {
     transform: none;
   }
 }
-/* hover 只做高亮：茶青描边 + 阴影略增，保持白底，不加半透明、不浮动（决议 #135） */
+/* hover 只做高亮：蓝色描边 + 阴影略增，保持白底，不加半透明、不浮动（决议 #135） */
 .jump-latest:hover {
   background: var(--material-strong);
   border-color: var(--primary);
-  box-shadow: var(--highlight-edge), 0 8px 24px rgba(24, 50, 37, 0.14);
+  box-shadow: var(--highlight-edge), 0 8px 24px rgba(29, 45, 68, 0.14);
   opacity: 1;
 }
 .tool {
   border: none;
   background: transparent;
-  color: var(--text-2);
+  color: var(--text-1);
   cursor: pointer;
   width: 32px;
-  height: 30px;
+  height: 32px;
   padding: 0;
-  border-radius: 9px;
+  border-radius: var(--radius-panel);
   display: grid;
   place-items: center;
   position: relative;
@@ -2790,6 +2795,15 @@ async function onDrop(event: DragEvent): Promise<void> {
   white-space: nowrap;
   box-shadow: var(--shadow-soft);
 }
+.history-search-scope .tool-wrap::after {
+  left: auto;
+  right: 0;
+  transform: translateY(4px);
+}
+.history-search-scope .tool-wrap:hover::after,
+.history-search-scope .tool-wrap:focus-within::after {
+  transform: translateY(0);
+}
 .tool-wrap:hover::before,
 .tool-wrap:hover::after,
 .tool-wrap:focus-within::before,
@@ -2806,7 +2820,7 @@ async function onDrop(event: DragEvent): Promise<void> {
   transform: scale(0.96);
 }
 .tool:focus-visible {
-  outline: 2px solid rgba(61, 139, 107, 0.35);
+  outline: 2px solid rgba(var(--primary-rgb), 0.35);
   outline-offset: 1px;
 }
 .tool.active {
@@ -2956,7 +2970,7 @@ async function onDrop(event: DragEvent): Promise<void> {
   font-size: 13px;
 }
 .history-input:focus {
-  border-color: rgba(61, 139, 107, 0.55);
+  border-color: rgba(var(--primary-rgb), 0.55);
   background: var(--bg-window);
 }
 .history-segments {
@@ -2983,7 +2997,7 @@ async function onDrop(event: DragEvent): Promise<void> {
 }
 .history-segments button.selected {
   color: var(--primary);
-  background: rgba(61, 139, 107, 0.1);
+  background: rgba(var(--primary-rgb), 0.1);
 }
 .history-clear {
   width: 100%;
@@ -2998,7 +3012,7 @@ async function onDrop(event: DragEvent): Promise<void> {
 }
 .history-clear:hover {
   color: var(--primary);
-  border-color: rgba(61, 139, 107, 0.35);
+  border-color: rgba(var(--primary-rgb), 0.35);
 }
 .history-range-label {
   width: 100%;
@@ -3080,16 +3094,16 @@ async function onDrop(event: DragEvent): Promise<void> {
   opacity: 0.55;
 }
 .history-day.today:not(.range-edge) {
-  box-shadow: inset 0 0 0 1px rgba(61, 139, 107, 0.38);
+  box-shadow: inset 0 0 0 1px rgba(var(--primary-rgb), 0.38);
   color: var(--primary);
 }
 .history-day.in-range {
-  background: rgba(61, 139, 107, 0.1);
+  background: rgba(var(--primary-rgb), 0.1);
   color: var(--primary);
 }
 .history-day.range-edge {
   background: var(--primary);
-  color: #fff;
+  color: var(--on-primary);
   opacity: 1;
 }
 .history-day:hover:not(.range-edge) {
@@ -3223,20 +3237,20 @@ async function onDrop(event: DragEvent): Promise<void> {
   /* 沉浸式（决议 #49）：头部背景直通窗口顶，内容压在 32px 拖拽带下方。
      这里不许设 no-drag —— no-drag 矩形会从系统 drag region 中挖洞，
      把聊天区顶部 32px 的拖拽带挖掉（Win7/mac 实测顶部无法拖窗）。 */
-  height: 84px;
-  flex: 0 0 84px;
+  height: 96px;
+  flex: 0 0 96px;
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 32px 20px 0;
   background: var(--material-bar);
   border-bottom: 1px solid var(--line);
-  box-shadow: var(--highlight-edge), 0 12px 30px rgba(24, 50, 37, 0.035);
+  box-shadow: none;
   position: relative;
   z-index: 4;
 }
 .title {
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 650;
   letter-spacing: -0.01em;
 }
@@ -3270,7 +3284,7 @@ async function onDrop(event: DragEvent): Promise<void> {
   border: none;
   background: transparent;
   color: inherit;
-  border-radius: 11px;
+  border-radius: var(--radius-panel);
   padding: 5px 10px 5px 5px;
   margin-left: -4px;
   display: flex;
@@ -3281,17 +3295,17 @@ async function onDrop(event: DragEvent): Promise<void> {
   cursor: pointer;
 }
 .head-avatar {
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
-  flex: 0 0 40px;
+  flex: 0 0 44px;
   color: #fff;
-  font-size: 17px;
+  font-size: 18px;
 }
 .group-head-avatar {
-  width: 40px;
-  height: 40px;
-  flex: 0 0 40px;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
 }
 .title-text {
   min-width: 0;
@@ -3308,8 +3322,8 @@ async function onDrop(event: DragEvent): Promise<void> {
   outline-offset: 2px;
 }
 .subtitle {
-  font-size: 11px;
-  line-height: 1.2;
+  font-size: 13px;
+  line-height: 1.4;
   color: var(--text-3);
   min-width: 0;
   white-space: nowrap;
@@ -3329,11 +3343,10 @@ async function onDrop(event: DragEvent): Promise<void> {
   z-index: 22;
   padding: 14px;
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: var(--radius-panel);
   background: var(--material-strong);
   box-shadow: var(--highlight-edge), var(--shadow-float);
-  backdrop-filter: blur(22px) saturate(140%);
-  -webkit-backdrop-filter: blur(22px) saturate(140%);
+
 }
 .peer-profile-popover::before {
   content: '';
@@ -3400,8 +3413,8 @@ async function onDrop(event: DragEvent): Promise<void> {
 }
 .profile-status.on {
   color: var(--online);
-  background: rgba(43, 162, 69, 0.08);
-  border-color: rgba(43, 162, 69, 0.18);
+  background: var(--online-weak);
+  border-color: transparent;
 }
 .profile-status-dot {
   width: 6px;
@@ -3448,7 +3461,7 @@ async function onDrop(event: DragEvent): Promise<void> {
   min-width: 0;
   height: 32px;
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: var(--radius-panel);
   background: var(--material-panel);
   color: var(--text-1);
   font: inherit;
@@ -3458,7 +3471,7 @@ async function onDrop(event: DragEvent): Promise<void> {
   user-select: text;
 }
 .profile-remark input:focus {
-  border-color: rgba(61, 139, 107, 0.55);
+  border-color: rgba(var(--primary-rgb), 0.55);
   background: var(--bg-window);
 }
 .profile-actions {
@@ -3479,7 +3492,7 @@ async function onDrop(event: DragEvent): Promise<void> {
   border: none;
   border-radius: 8px;
   background: var(--primary);
-  color: #fff;
+  color: var(--on-primary);
   font-size: 12px;
   cursor: pointer;
   transition: transform 90ms ease-out, filter 150ms ease;
@@ -3523,12 +3536,12 @@ async function onDrop(event: DragEvent): Promise<void> {
 .head-btn {
   border: none;
   background: transparent;
-  color: var(--text-2);
+  color: var(--text-1);
   cursor: pointer;
   width: 34px;
   height: 32px;
   padding: 0;
-  border-radius: 9px;
+  border-radius: var(--radius-panel);
   display: grid;
   place-items: center;
   transition:
@@ -3567,11 +3580,10 @@ async function onDrop(event: DragEvent): Promise<void> {
   box-sizing: border-box;
   background: var(--material-strong);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-panel);
   box-shadow: var(--highlight-edge), var(--shadow-float);
   padding: 5px;
-  backdrop-filter: blur(18px) saturate(135%);
-  -webkit-backdrop-filter: blur(18px) saturate(135%);
+
   z-index: 20;
 }
 .msg-menu button {
@@ -3623,12 +3635,13 @@ async function onDrop(event: DragEvent): Promise<void> {
 }
 .input-area {
   flex: 0 0 auto;
-  margin: 0 14px 14px;
-  padding: 9px 12px 10px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: var(--material-strong);
-  box-shadow: var(--highlight-edge), var(--shadow-soft);
+  margin: 0;
+  padding: 9px 20px 14px;
+  border: none;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--bg-input);
+  box-shadow: none;
   position: relative;
   z-index: 3;
 }
@@ -3636,7 +3649,7 @@ async function onDrop(event: DragEvent): Promise<void> {
    默认细灰 grip 提示可拖，hover 变深，ns-resize 光标 */
 .input-resizer {
   height: 8px;
-  margin: -9px -12px 3px;
+  margin: -13px -20px 7px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3646,17 +3659,17 @@ async function onDrop(event: DragEvent): Promise<void> {
 }
 .input-resizer-grip {
   width: 28px;
-  height: 3px;
-  border-radius: 2px;
-  background: var(--line);
-  transition: background 0.15s ease;
+  height: 5px;
+  border-top: 1px solid var(--primary-border);
+  border-bottom: 1px solid var(--primary-border);
+  transition: border-color 0.15s ease;
 }
 .input-resizer:hover .input-resizer-grip {
-  background: var(--text-3);
+  border-color: var(--primary);
 }
 .input-shell {
   position: relative;
-  border-radius: 10px;
+  border-radius: var(--radius-panel);
 }
 .input {
   position: relative;
@@ -3675,7 +3688,7 @@ async function onDrop(event: DragEvent): Promise<void> {
     'Microsoft YaHei',
     'Noto Sans CJK SC',
     sans-serif;
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.5;
   background: transparent;
   color: var(--text-1);
@@ -3690,7 +3703,7 @@ async function onDrop(event: DragEvent): Promise<void> {
 }
 .input.mirror-active::selection {
   color: transparent;
-  background: rgba(61, 139, 107, 0.18);
+  background: rgba(var(--primary-rgb), 0.18);
 }
 .input-mirror {
   position: absolute;
@@ -3706,7 +3719,7 @@ async function onDrop(event: DragEvent): Promise<void> {
     'Microsoft YaHei',
     'Noto Sans CJK SC',
     sans-serif;
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
@@ -3746,36 +3759,44 @@ async function onDrop(event: DragEvent): Promise<void> {
 .counter {
   font-size: 11px;
   color: var(--text-3);
+  margin-right: auto;
+}
+.send-hint {
+  color: var(--text-2);
+  font-size: 12px;
+  text-align: right;
 }
 .counter.over {
   color: var(--danger);
 }
 .send {
+  flex: 0 0 auto;
   border: none;
   background: var(--primary);
-  color: #fff;
-  font-size: 13px;
-  min-width: 72px;
-  height: 32px;
+  color: var(--on-primary);
+  font-size: 14px;
+  min-width: 84px;
+  height: 34px;
   padding: 0 20px;
-  border-radius: 9px;
+  border-radius: var(--radius-control);
   font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(44, 104, 78, 0.16);
+  box-shadow: none;
   transition:
     filter 150ms ease,
     transform 90ms ease-out,
     box-shadow 150ms ease;
 }
 .send:hover:not(:disabled) {
-  filter: brightness(1.04);
-  box-shadow: 0 6px 16px rgba(44, 104, 78, 0.22);
+  background: var(--primary-hover);
+  box-shadow: none;
 }
 .send:active:not(:disabled) {
   transform: scale(0.97);
 }
 .send:disabled {
-  opacity: 0.4;
+  background: var(--surface-selected);
+  color: var(--text-3);
   cursor: default;
 }
 @media (prefers-reduced-motion: reduce) {
@@ -3798,12 +3819,5 @@ async function onDrop(event: DragEvent): Promise<void> {
     transform: none;
   }
 }
-@media (prefers-reduced-transparency: reduce) {
-  .pk-popover,
-  .peer-profile-popover,
-  .msg-menu {
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-  }
-}
+
 </style>

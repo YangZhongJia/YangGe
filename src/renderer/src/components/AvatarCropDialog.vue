@@ -248,7 +248,7 @@ onBeforeUnmount(() => {
   max-height: calc(100vh - 32px);
   overflow-y: auto;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--radius-panel);
   background: var(--bg-window);
   color: var(--text-1);
   box-shadow: var(--shadow-float);
@@ -283,7 +283,7 @@ header p {
   display: grid;
   place-items: center;
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: var(--radius-panel);
   background: var(--bg-window);
   color: var(--text-2);
   cursor: pointer;
@@ -298,7 +298,7 @@ header p {
   height: 240px;
   margin: 0 auto;
   overflow: hidden;
-  border-radius: 14px;
+  border-radius: var(--radius-panel);
   background: var(--bg-list);
   cursor: grab;
   touch-action: none;
@@ -364,7 +364,7 @@ footer {
 }
 footer button {
   height: 32px;
-  border-radius: 9px;
+  border-radius: var(--radius-panel);
   padding: 0 12px;
   font: inherit;
   font-size: 13px;
@@ -378,6 +378,6 @@ footer .secondary {
 footer .primary {
   border: 1px solid var(--primary);
   background: var(--primary);
-  color: #fff;
+  color: var(--on-primary);
 }
 </style>

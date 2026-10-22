@@ -472,7 +472,7 @@ onUnmounted(() => {
         @pointerleave="hideRailHint('chat')"
         @click="activateTab('chat', $event)"
       >
-        <PantryIcon name="chat" :size="25" />
+        <PantryIcon name="chat" :size="32" />
         <span v-if="chatStore.totalUnread > 0" class="rail-badge">{{
           chatStore.totalUnread > 99 ? '99+' : chatStore.totalUnread
         }}</span>
@@ -487,7 +487,7 @@ onUnmounted(() => {
         @pointerleave="hideRailHint('contacts')"
         @click="activateTab('contacts', $event)"
       >
-        <PantryIcon name="contacts" :size="25" />
+        <PantryIcon name="contacts" :size="30" />
       </button>
       <div class="spacer"></div>
       <button
@@ -520,7 +520,7 @@ onUnmounted(() => {
         @pointerleave="hideRailHint('cabinet')"
         @click="openCabinet($event)"
       >
-        <PantryIcon name="cabinet" :size="21" />
+        <PantryIcon name="cabinet" :size="30" />
       </button>
       <button
         type="button"
@@ -543,7 +543,7 @@ onUnmounted(() => {
           :style="{ '--scan-p': scanRingPct }"
           aria-hidden="true"
         ></span>
-        <PantryIcon name="refresh" :size="21" />
+        <PantryIcon name="refresh" :size="32" />
       </button>
       <button
         type="button"
@@ -555,7 +555,7 @@ onUnmounted(() => {
         @pointerleave="hideRailHint('settings')"
         @click="openSettings($event)"
       >
-        <PantryIcon name="settings" :size="21" />
+        <PantryIcon name="settings" :size="32" />
       </button>
     </nav>
 
@@ -593,12 +593,12 @@ onUnmounted(() => {
         <NInput
           v-model:value="searchQuery"
           class="search"
-          size="small"
+          size="medium"
           clearable
           :aria-label="tr('搜索联系人、讨论组和聊天记录')"
           :placeholder="tr('搜索')"
         >
-          <template #prefix><PantryIcon name="search" :size="15" /></template>
+          <template #prefix><PantryIcon name="search" :size="20" /></template>
         </NInput>
         <!-- 群发入口已停用（决议 #62）：直接建讨论组即可，群发无意义；保留留痕
         <button class="new-group" title="群发消息" @click="showMassSender = true">
@@ -607,14 +607,12 @@ onUnmounted(() => {
         -->
         <NButton
           class="new-group"
-          size="small"
-          quaternary
-          circle
+          size="medium"
           :title="tr('发起讨论组')"
           :aria-label="tr('发起讨论组')"
           @click="showGroupCreator = true"
         >
-          <PantryIcon name="plus" :size="17" />
+          <PantryIcon name="plus" :size="24" />
         </NButton>
       </div>
       <GroupCreator v-if="showGroupCreator" @close="showGroupCreator = false" />
@@ -709,7 +707,7 @@ onUnmounted(() => {
   position: fixed;
   inset: 0;
   z-index: 1000;
-  background: rgba(18, 31, 25, 0.24);
+  background: rgba(22, 34, 52, 0.24);
   pointer-events: auto;
   opacity: 1;
   transition: opacity 140ms ease-out;
@@ -734,16 +732,16 @@ onUnmounted(() => {
 
 /* 栏① 导航 */
 .rail {
-  /* 68px 容纳标准 mac 红绿灯（决议 #68）；浅灰底（决议 #70，微信式）让红绿灯落在浅色上自然 */
+  /* 保持 68px 导航宽度与 mac 红绿灯预留区。 */
   width: 68px;
+  flex: 0 0 68px;
   background: var(--rail-bg);
   border-right: 1px solid var(--line);
-  box-shadow: var(--highlight-edge);
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 38px 0 12px; /* 顶部让出拖拽带与 mac 红绿灯 */
-  gap: 7px;
+  padding: 44px 0 16px; /* 与会话头像对齐，顶部保留拖拽带与 mac 红绿灯。 */
+  gap: 8px;
   position: relative;
   z-index: 3;
 }
@@ -786,12 +784,11 @@ onUnmounted(() => {
   width: 304px;
   overflow: hidden;
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: var(--radius-panel);
   background: var(--material-strong);
   color: var(--text-1);
   box-shadow: var(--highlight-edge), var(--shadow-float);
-  backdrop-filter: blur(24px) saturate(145%);
-  -webkit-backdrop-filter: blur(24px) saturate(145%);
+
   display: flex;
   flex-direction: column;
   opacity: 0;
@@ -922,15 +919,15 @@ onUnmounted(() => {
 }
 .rail-btn {
   position: relative;
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   border: none;
-  border-radius: 12px;
+  border-radius: 8px;
   appearance: none;
   -webkit-appearance: none;
   outline: none;
   background: transparent;
-  color: var(--text-2); /* 浅灰底上用深灰图标（决议 #70） */
+  color: var(--rail-text);
   cursor: pointer;
   display: grid;
   place-items: center;
@@ -944,8 +941,9 @@ onUnmounted(() => {
   outline: none;
 }
 .rail-btn:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px rgba(61, 139, 107, 0.2);
+  outline: 2px solid var(--rail-focus);
+  outline-offset: 2px;
+  box-shadow: none;
 }
 .rail-hint::after {
   content: attr(data-label);
@@ -957,7 +955,7 @@ onUnmounted(() => {
   max-width: 160px;
   padding: 6px 9px;
   border-radius: 8px;
-  background: rgba(36, 42, 38, 0.96);
+  background: rgba(32, 43, 59, 0.96);
   color: #fff;
   font-size: 12px;
   line-height: 1.2;
@@ -978,18 +976,18 @@ onUnmounted(() => {
   transition-delay: 0s;
 }
 .rail-btn:hover {
-  background: var(--surface-hover);
-  color: var(--text-1);
+  background: var(--rail-hover);
+  color: #ffffff;
 }
 .rail-btn.active,
 .rail-btn.active:hover {
-  background: var(--surface-selected);
-  color: var(--primary);
-  box-shadow: var(--highlight-edge);
+  background: var(--rail-active);
+  color: #ffffff;
+  box-shadow: none;
 }
 .rail-btn:active:not(.is-disabled) {
   transform: scale(0.96);
-  background: var(--surface-pressed);
+  background: var(--rail-active);
 }
 .rail-btn.is-disabled:not(.scanning) {
   cursor: default;
@@ -997,22 +995,22 @@ onUnmounted(() => {
 }
 .rail-btn.is-disabled:not(.scanning):hover {
   background: transparent;
-  color: var(--text-2);
+  color: var(--rail-text);
 }
 .rail-btn.scanning,
 .rail-btn.scanning:hover {
   /* 扫描态不再用方块底/图标旋转，进度改由图标外圈环形表达（决议 #162） */
   background: transparent;
-  color: var(--primary);
+  color: var(--rail-focus);
   opacity: 1;
 }
 /* 局域网自更新提示入口（决议 #166 第一步） */
 .rail-update {
-  color: var(--primary);
+  color: var(--rail-focus);
 }
 .rail-update.active,
 .rail-update:hover {
-  background: var(--primary-weak);
+  background: var(--rail-hover);
 }
 .rail-dot {
   position: absolute;
@@ -1033,10 +1031,9 @@ onUnmounted(() => {
   padding: 16px;
   background: var(--material-strong);
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--radius-panel);
   box-shadow: var(--highlight-edge), var(--shadow-float);
-  backdrop-filter: blur(22px) saturate(140%);
-  -webkit-backdrop-filter: blur(22px) saturate(140%);
+
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -1075,11 +1072,11 @@ onUnmounted(() => {
 }
 .update-help-trigger:hover,
 .update-help-trigger:focus-visible {
-  border-color: rgba(61, 139, 107, 0.42);
+  border-color: rgba(var(--primary-rgb), 0.42);
   background: var(--primary-weak);
   color: var(--primary);
   outline: none;
-  box-shadow: 0 0 0 2px rgba(61, 139, 107, 0.1);
+  box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.1);
 }
 .update-help-pop {
   position: absolute;
@@ -1091,7 +1088,7 @@ onUnmounted(() => {
   border-radius: 6px;
   background: var(--text-1);
   color: var(--bg-window);
-  box-shadow: 0 8px 24px rgba(34, 49, 42, 0.22);
+  box-shadow: 0 8px 24px rgba(29, 45, 68, 0.22);
   font-size: 12px;
   font-weight: 500;
   line-height: 1.45;
@@ -1207,12 +1204,11 @@ onUnmounted(() => {
   width: min(620px, calc(100% - 48px));
   padding: 11px 12px 11px 14px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-panel);
   background: var(--material-strong);
   color: var(--text-1);
   box-shadow: var(--highlight-edge), var(--shadow-float);
-  backdrop-filter: blur(20px) saturate(135%);
-  -webkit-backdrop-filter: blur(20px) saturate(135%);
+
   font-size: 13px;
   line-height: 1.45;
 }
@@ -1258,22 +1254,23 @@ onUnmounted(() => {
 
 /* 栏② 列表 */
 .list {
-  width: 272px;
+  width: clamp(240px, 28vw, 300px);
+  flex: 0 0 clamp(240px, 28vw, 300px);
   background: var(--material-panel);
   border-right: 1px solid var(--line);
-  box-shadow: 8px 0 26px rgba(26, 48, 38, 0.035), var(--highlight-edge);
+  box-shadow: none;
   display: flex;
   flex-direction: column;
   position: relative;
   z-index: 2;
 }
 .search-box {
-  /* 与聊天头部 .head 等高（84px），两栏顶栏分隔线连成一条（决议 #127）；
+  /* 与聊天头部 .head 等高（96px），两栏顶栏分隔线连成一条（决议 #127）；
      padding-top 32px 让出拖拽带与 mac 红绿灯，与 .head 一致 */
-  height: 84px;
-  flex: 0 0 84px;
+  height: 96px;
+  flex: 0 0 96px;
   box-sizing: border-box;
-  padding: 36px 12px 10px;
+  padding: 32px 14px 0;
   display: flex;
   gap: 8px;
   align-items: center;
@@ -1284,10 +1281,11 @@ onUnmounted(() => {
   min-width: 0;
 }
 .new-group {
-  width: 32px;
-  height: 32px;
-  flex: 0 0 32px;
-  color: var(--text-2);
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  padding: 0;
+  color: var(--text-1);
 }
 .new-group:hover {
   color: var(--primary);
@@ -1313,7 +1311,7 @@ onUnmounted(() => {
 }
 .empty-logo {
   margin: 0 auto 18px;
-  filter: drop-shadow(0 10px 22px rgba(48, 104, 80, 0.13));
+  filter: none;
 }
 .brand-title {
   font-size: 30px;
@@ -1348,16 +1346,15 @@ onUnmounted(() => {
   display: grid;
   place-items: center;
   padding: 24px;
-  background: rgba(20, 28, 24, 0.26);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: rgba(22, 34, 52, 0.26);
+
   animation: scan-confirm-fade 0.14s ease;
 }
 .scan-confirm-card {
   width: min(300px, 100%);
   padding: 20px 18px 14px;
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: var(--radius-panel);
   background: var(--material-strong);
   box-shadow: var(--highlight-edge), var(--shadow-float);
   text-align: center;
@@ -1405,7 +1402,7 @@ onUnmounted(() => {
   align-items: center;
   min-height: 28px;
   padding: 0 10px;
-  border-radius: 9px;
+  border-radius: var(--radius-panel);
   background: var(--bg-list);
 }
 .scan-confirm-list code {
@@ -1439,7 +1436,7 @@ onUnmounted(() => {
 .scan-confirm-actions button {
   height: 32px;
   padding: 0 14px;
-  border-radius: 9px;
+  border-radius: var(--radius-panel);
   font-size: 13px;
   cursor: pointer;
   transition:
@@ -1465,7 +1462,7 @@ onUnmounted(() => {
 .scan-confirm-go {
   border: none;
   background: var(--primary);
-  color: #fff;
+  color: var(--on-primary);
   font-weight: 600;
 }
 .scan-confirm-go:hover {
@@ -1503,7 +1500,7 @@ onUnmounted(() => {
   }
 }
 
-/* 移除聊天撤回提示（决议 #125）：底部居中浮条，茶青撤回按钮，尊重 reduced-motion */
+/* 移除聊天撤回提示（决议 #125）：底部居中浮条，蓝色撤回按钮，尊重 reduced-motion */
 .undo-toast {
   position: fixed;
   left: 50%;
@@ -1515,12 +1512,11 @@ onUnmounted(() => {
   gap: 14px;
   max-width: calc(100% - 48px);
   padding: 10px 12px 10px 16px;
-  border-radius: 14px;
+  border-radius: var(--radius-panel);
   background: var(--material-strong);
   border: 1px solid var(--line);
   box-shadow: var(--highlight-edge), var(--shadow-float);
-  backdrop-filter: blur(20px) saturate(135%);
-  -webkit-backdrop-filter: blur(20px) saturate(135%);
+
   animation: undo-rise 0.18s ease;
 }
 .undo-text {
@@ -1549,7 +1545,7 @@ onUnmounted(() => {
 }
 .undo-btn:hover {
   background: var(--primary);
-  color: #fff;
+  color: var(--on-primary);
 }
 .undo-btn:active {
   transform: scale(0.97);
