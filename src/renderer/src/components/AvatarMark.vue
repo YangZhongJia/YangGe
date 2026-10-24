@@ -60,8 +60,9 @@ watch(imageKey, () => {
 </template>
 
 <style scoped>
-/* 根只作定位容器：圆形裁切交给 .avatar-face，状态点要露在头像圆形外缘，故根不裁切。
-   尺寸 / 背景 / 字号仍由调用方 class（如 .conv-avatar）落到根，.avatar-face 撑满继承。 */
+/* 根只作定位容器：裁切交给 .avatar-face，状态点要露在头像外缘，故根不裁切。
+   尺寸 / 背景 / 字号仍由调用方 class（如 .conv-avatar）落到根，.avatar-face 撑满继承。
+   Iris 风格：头像为圆形。 */
 .avatar-mark {
   position: relative;
   border-radius: 50%;

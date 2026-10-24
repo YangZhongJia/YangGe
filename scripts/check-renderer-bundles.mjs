@@ -11,7 +11,8 @@ const DEFAULT_ROOT_BUDGETS = {
   // manifest 里就没有 src/App.vue 这个动态入口了，四入口契约（决议 #210）随之失效。
   // 决议 #319：输入区附件预览新增约 3 KiB CSS，保持静态入口契约。
   // Issue #62：长文件名即时浮层与自适应文件卡新增约 0.6 KiB CSS。
-  'App.vue': { js: 800 * 1024, css: 120 * 1024 },
+  // 二开 Iris 主题：靛蓝气泡白字、悬浮输入卡与协助/PK 卡片对比度修正新增约 1 KiB CSS。
+  'App.vue': { js: 800 * 1024, css: 124 * 1024 },
   'SettingsApp.vue': { js: 704 * 1024, css: 40 * 1024 },
   'CaptureApp.vue': { js: 112 * 1024, css: 12 * 1024 },
   'ImageViewerApp.vue': { js: 160 * 1024, css: 20 * 1024 }

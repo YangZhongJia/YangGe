@@ -50,7 +50,7 @@ async function finish(): Promise<void> {
     <div class="card">
       <div class="brand">
         <PantryBrandLogo variant="color" :size="52" class="brand-logo" />
-        <div class="brand-name">{{ tr('茶话间') }}<span v-if="language === 'zh-CN'" class="brand-latin">Teahouse</span></div>
+        <div class="brand-name">{{ tr('阳鸽') }}<span v-if="language === 'zh-CN'" class="brand-latin">YangGe</span></div>
       </div>
       <label class="language-choice">语言 / Language
         <select :value="language" @change="changeLanguage">
@@ -89,7 +89,7 @@ async function finish(): Promise<void> {
         </div>
         <div class="actions">
           <button class="ghost" @click="step = 2">{{ tr('上一步') }}</button>
-          <button class="primary" @click="finish">{{ tr('进入茶话间') }}</button>
+          <button class="primary" @click="finish">{{ tr('进入阳鸽') }}</button>
         </div>
       </div>
     </div>

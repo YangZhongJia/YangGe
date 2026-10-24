@@ -644,7 +644,7 @@ describe('FilesService 群聊媒体', () => {
   it('发送更新包 offer 不进入聊天与普通传输视图', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'pantry-update-send-'))
     tmpDirs.push(dir)
-    const pkgPath = join(dir, 'Teahouse-0.28.0-linux-amd64.deb')
+    const pkgPath = join(dir, 'YangGe-0.28.0-linux-amd64.deb')
     writeFileSync(pkgPath, 'deb')
 
     const messenger = new FakeMessenger()
@@ -669,7 +669,7 @@ describe('FilesService 群聊媒体', () => {
     expect(row.msg_id).toMatch(/^update:/)
     expect(row.status).toBe('offering')
     expect(JSON.parse(row.files)).toMatchObject({
-      name: 'Teahouse-0.28.0-linux-amd64.deb',
+      name: 'YangGe-0.28.0-linux-amd64.deb',
       savedPath: pkgPath,
       purpose: 'update'
     })
@@ -680,7 +680,7 @@ describe('FilesService 群聊媒体', () => {
         type: MSG_TYPES.fileCtl,
         payload: {
           op: 'offer',
-          rootName: 'Teahouse-0.28.0-linux-amd64.deb',
+          rootName: 'YangGe-0.28.0-linux-amd64.deb',
           purpose: 'update'
         }
       }
@@ -717,10 +717,10 @@ describe('FilesService 群聊媒体', () => {
         transferId: 't-update',
         seq: 1,
         total: 1,
-        files: [{ fileId: 'f-1', path: 'Teahouse-0.28.0-linux-amd64.deb', size: 1024 }],
+        files: [{ fileId: 'f-1', path: 'YangGe-0.28.0-linux-amd64.deb', size: 1024 }],
         totalSize: 1024,
         fileCount: 1,
-        rootName: 'Teahouse-0.28.0-linux-amd64.deb',
+        rootName: 'YangGe-0.28.0-linux-amd64.deb',
         purpose: 'update'
       })
     )
@@ -733,9 +733,9 @@ describe('FilesService 群聊媒体', () => {
     expect(row?.msg_id).toBe('update:t-update')
     expect(row?.status).toBe('failed')
     expect(JSON.parse(row!.files)).toMatchObject({
-      name: 'Teahouse-0.28.0-linux-amd64.deb',
+      name: 'YangGe-0.28.0-linux-amd64.deb',
       purpose: 'update',
-      savedPath: join(updateDir, 'Teahouse-0.28.0-linux-amd64.deb')
+      savedPath: join(updateDir, 'YangGe-0.28.0-linux-amd64.deb')
     })
     expect(messenger.sent[0]).toMatchObject({
       peerId: 'node-bob',
@@ -766,10 +766,10 @@ describe('FilesService 群聊媒体', () => {
         transferId: 't-update-unauthorized',
         seq: 1,
         total: 1,
-        files: [{ fileId: 'f-1', path: 'Teahouse-0.28.0-linux-amd64.deb', size: 1024 }],
+        files: [{ fileId: 'f-1', path: 'YangGe-0.28.0-linux-amd64.deb', size: 1024 }],
         totalSize: 1024,
         fileCount: 1,
-        rootName: 'Teahouse-0.28.0-linux-amd64.deb',
+        rootName: 'YangGe-0.28.0-linux-amd64.deb',
         purpose: 'update'
       })
     )

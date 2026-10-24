@@ -19,8 +19,8 @@ describe('tray unread badge', () => {
     expect(unreadBadgeText(8)).toBe('8')
     expect(unreadBadgeText(42)).toBe('42')
     expect(unreadBadgeText(128)).toBe('99+')
-    expect(trayUnreadToolTip(0)).toBe('茶话间')
-    expect(trayUnreadToolTip(12)).toBe('茶话间（12 条未读）')
+    expect(trayUnreadToolTip(0)).toBe('阳鸽')
+    expect(trayUnreadToolTip(12)).toBe('阳鸽（12 条未读）')
   })
 
   it('生成可解码的 PNG DataURL', () => {

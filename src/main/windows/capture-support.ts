@@ -90,7 +90,7 @@ export function captureFailureNotice(
   if (reason === 'window-hide-failed') {
     return {
       reason,
-      message: tr('截图前未能完全隐藏茶话间窗口，请重试；仍失败可使用系统截图。')
+      message: tr('截图前未能完全隐藏阳鸽窗口，请重试；仍失败可使用系统截图。')
     }
   }
   if (reason === 'screen-unavailable' && wayland) {

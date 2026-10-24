@@ -801,7 +801,7 @@ async function confirmRemove(cidr: string): Promise<void> {
     <aside class="sidebar">
       <header class="sidebar-heading">
         <h2>{{ tr('设置') }}</h2>
-        <p>{{ tr('茶话间') }}<span v-if="info"> v{{ info.version }}</span></p>
+        <p>{{ tr('阳鸽') }}<span v-if="info"> v{{ info.version }}</span></p>
       </header>
       <nav class="nav" :aria-label="tr('设置分组')">
         <button
@@ -972,7 +972,7 @@ async function confirmRemove(cidr: string): Promise<void> {
             <div class="setting-line">
               <div>
                 <strong>{{ tr('开机自启') }}</strong>
-                <small>{{ tr('登录系统后自动启动茶话间。') }}</small>
+                <small>{{ tr('登录系统后自动启动阳鸽。') }}</small>
               </div>
               <NSwitch :value="settings.autoLaunch" @update:value="toggleAutoLaunch" />
             </div>
@@ -1372,7 +1372,7 @@ async function confirmRemove(cidr: string): Promise<void> {
             <div class="setting-line">
               <div>
                 <strong>{{ tr('截图时隐藏窗口') }}</strong>
-                <small>{{ tr('避免把茶话间主窗口截进去。') }}</small>
+                <small>{{ tr('避免把阳鸽主窗口截进去。') }}</small>
               </div>
               <NSwitch :value="settings.hideOnCapture" @update:value="toggleHideOnCapture" />
             </div>
@@ -1387,7 +1387,7 @@ async function confirmRemove(cidr: string): Promise<void> {
             <!-- 品牌标识区（决议 #90 重设计）：居中圆标 + 中英文名 + 定位 + 纯内网信任徽条 -->
             <div class="about-hero">
               <PantryBrandLogo variant="color" :size="60" class="about-logo" />
-              <h2>{{ tr('茶话间') }}<span v-if="language === 'zh-CN'" class="about-latin">Teahouse</span></h2>
+              <h2>{{ tr('阳鸽') }}<span v-if="language === 'zh-CN'" class="about-latin">YangGe</span></h2>
               <p class="about-tagline">{{ tr('纯内网即时通讯与文件传输') }}</p>
               <div class="about-trust">
                 <PantryIcon name="shield" :size="13" />

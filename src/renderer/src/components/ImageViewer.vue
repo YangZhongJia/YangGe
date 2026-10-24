@@ -712,7 +712,7 @@ onBeforeUnmount(() => {
   padding: 5px 7px;
   border: 1px solid rgba(255, 255, 255, 0.13);
   border-radius: 8px;
-  background: #202a38;
+  background: #1a1d25;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
 
   overflow-x: auto;
@@ -841,7 +841,7 @@ onBeforeUnmount(() => {
   padding: 10px 14px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 8px;
-  background: #202a38;
+  background: #1a1d25;
   color: rgba(230, 237, 246, 0.76);
   font-size: 13px;
   text-align: center;

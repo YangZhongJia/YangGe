@@ -631,7 +631,7 @@ export const SHARE_ROOT_REJECT_TEXT: Record<ShareRootRejectReason, string> = {
   relative: '请选择一个完整的目录路径',
   'fs-root': '不能共享整个磁盘根目录，请选择其中一个文件夹',
   home: '不能共享整个用户主目录，请选择其中一个文件夹',
-  'app-data': '不能共享茶话间自己的数据目录，请换一个文件夹',
+  'app-data': '不能共享阳鸽自己的数据目录，请换一个文件夹',
   unreadable: '这个目录读不到，请确认它还在且有访问权限'
 }
 

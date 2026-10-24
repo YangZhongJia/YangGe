@@ -59,7 +59,7 @@ function notifySettingsWindowState(parent: BrowserWindow | null, open: boolean):
 }
 
 export function syncSettingsWindowLanguage(): void {
-  win?.setTitle(tr('设置 - 茶话间'))
+  win?.setTitle(tr('设置 - 阳鸽'))
 }
 
 export function syncSettingsWindowZoom(fontScale: SettingsView['fontScale']): void {
@@ -87,7 +87,7 @@ export function openSettingsWindow(
     minimizable: false,
     maximizable: false,
     show: false,
-    title: tr('设置 - 茶话间'),
+    title: tr('设置 - 阳鸽'),
     parent: activeParent ?? undefined,
     ...(process.platform !== 'darwin' && activeParent ? { modal: true } : {}),
     hasShadow: true,

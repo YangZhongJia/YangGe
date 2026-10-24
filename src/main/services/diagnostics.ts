@@ -326,7 +326,7 @@ export class DiagnosticsService {
 }
 
 export function diagnosticSummary(environment: Record<string, unknown>): string {
-  return '茶话间 / Teahouse 诊断信息\n' +
+  return '阳鸽 / YangGe 诊断信息（衍生自 Teahouse）\n' +
     '请说明发生时间、操作步骤和预期结果；传输问题建议双方导出。\n' +
     'Include the time, steps and expected result; export from both peers for transfer issues.\n' +
     '不含聊天/文件内容；日志可能被保留上限截断。异常退出标记仅表示未完成正常关闭。\n' +

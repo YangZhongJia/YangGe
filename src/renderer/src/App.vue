@@ -203,7 +203,7 @@ watch(language, () => applyWindowTitle(settings.value))
 
 function applyWindowTitle(next: SettingsView | null): void {
   const nick = next?.setupDone ? next.nick.trim() : ''
-  document.title = nick ? `${nick}-🍵Teahouse` : tr('茶话间')
+  document.title = nick ? `${nick}-阳鸽` : tr('阳鸽')
 }
 
 function onVisibilityChange(): void {
@@ -767,7 +767,7 @@ onUnmounted(() => {
 .avatar {
   width: 38px;
   height: 38px;
-  border-radius: 50%; /* 决议：圆形头像 */
+  border-radius: 50%;
   display: grid;
   place-items: center;
   font-weight: 600;
@@ -974,12 +974,12 @@ onUnmounted(() => {
 }
 .rail-btn:hover {
   background: var(--rail-hover);
-  color: #ffffff;
+  color: var(--text-1);
 }
 .rail-btn.active,
 .rail-btn.active:hover {
   background: var(--rail-active);
-  color: #ffffff;
+  color: var(--primary);
   box-shadow: none;
 }
 .rail-btn:active:not(.is-disabled) {

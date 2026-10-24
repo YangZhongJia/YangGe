@@ -30,7 +30,7 @@ const logoSrc = computed(() => {
     :src="logoSrc"
     :width="props.size"
     :height="props.size"
-    :alt="tr('茶话间 logo')"
+    :alt="tr('阳鸽 logo')"
     draggable="false"
   />
 </template>

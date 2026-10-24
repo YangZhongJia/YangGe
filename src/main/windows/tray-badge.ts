@@ -31,7 +31,7 @@ export function unreadBadgeText(count: number): string {
 }
 
 export function trayUnreadToolTip(count: number): string {
-  return count > 0 ? tr('茶话间（{0} 条未读）', { 0: unreadBadgeText(count) }) : tr('茶话间')
+  return count > 0 ? tr('阳鸽（{0} 条未读）', { 0: unreadBadgeText(count) }) : tr('阳鸽')
 }
 
 export function createUnreadTrayIconDataURL(count: number): string {

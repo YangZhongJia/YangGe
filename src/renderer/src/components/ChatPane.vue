@@ -3633,27 +3633,26 @@ async function onDrop(event: DragEvent): Promise<void> {
 }
 .input-area {
   flex: 0 0 auto;
-  margin: 0;
-  padding: 9px 20px 14px;
-  border: none;
-  border-top: 1px solid var(--line);
-  border-radius: 0;
+  margin: 0 16px 14px;
+  padding: 9px 14px 12px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
   background: var(--bg-input);
-  box-shadow: none;
+  box-shadow: var(--shadow-soft);
   position: relative;
   z-index: 3;
 }
-/* 输入框高度拖拽热区：铺满顶部并压在分隔线上，仅通过 ns-resize 光标提示。 */
+/* 输入框高度拖拽热区：铺满顶部，仅通过 ns-resize 光标提示。 */
 .input-resizer {
   height: 8px;
-  margin: -13px -20px 7px;
+  margin: -9px -14px 7px;
   cursor: ns-resize;
   touch-action: none;
   user-select: none;
 }
 .input-shell {
   position: relative;
-  border-radius: var(--radius-panel);
+  border-radius: 12px;
 }
 .input {
   position: relative;

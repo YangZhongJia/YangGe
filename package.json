@@ -1,8 +1,8 @@
 {
-  "name": "pantry",
-  "productName": "茶话间",
-  "version": "0.64.2",
-  "description": "茶话间（Teahouse）—— 纯内网、基于 IP 的局域网即时通讯与文件传输工具",
+  "name": "yangge",
+  "productName": "阳鸽",
+  "version": "1.2.1",
+  "description": "阳鸽（YangGe）—— 纯内网、基于 IP 的局域网即时通讯与文件传输工具（衍生自开源项目 Teahouse，GPL-3.0）",
   "license": "GPL-3.0-only",
   "private": true,
   "main": "./out/main/index.js",
@@ -35,15 +35,11 @@
     "check:renderer-bundles": "node scripts/check-renderer-bundles.mjs",
     "test:db": "esbuild src/main/store/db-selftest.ts --bundle --platform=node --target=node16 --external:better-sqlite3 --outfile=out/db-selftest.cjs --log-level=warning && cross-env ELECTRON_RUN_AS_NODE=1 electron out/db-selftest.cjs",
     "smoke": "npm run build && cross-env PANTRY_SMOKE=1 electron .",
-    "dist:win": "npm run build && cross-env NO_UPDATE_NOTIFIER=1 electron-builder --win --x64 --publish never",
-    "dist:win:ia32": "npm run build && cross-env NO_UPDATE_NOTIFIER=1 electron-builder --win --ia32 --publish never",
-    "dist:linux": "npm run build && cross-env NO_UPDATE_NOTIFIER=1 USE_HARD_LINKS=false electron-builder --linux deb:x64 AppImage:x64 --publish never",
-    "dist:linux:arm64": "npm run build && cross-env NO_UPDATE_NOTIFIER=1 USE_HARD_LINKS=false electron-builder --linux deb:arm64 AppImage:arm64 --publish never",
-    "dist:mac": "npm run build && cross-env NO_UPDATE_NOTIFIER=1 electron-builder --mac --publish never"
+    "dist:win": "npm run build && cross-env NO_UPDATE_NOTIFIER=1 electron-builder --win --x64 --publish never"
   },
   "build": {
-    "appId": "com.pantry.app",
-    "productName": "Teahouse",
+    "appId": "com.yangge.app",
+    "productName": "YangGe",
     "electronVersion": "22.3.27",
     "npmRebuild": false,
     "asar": true,
@@ -64,15 +60,13 @@
         {
           "target": "nsis",
           "arch": [
-            "x64",
-            "ia32"
+            "x64"
           ]
         },
         {
           "target": "portable",
           "arch": [
-            "x64",
-            "ia32"
+            "x64"
           ]
         }
       ]
@@ -82,70 +76,11 @@
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "deleteAppDataOnUninstall": false,
-      "artifactName": "Teahouse-${version}-win-${arch}-setup.${ext}",
-      "shortcutName": "茶话间"
+      "artifactName": "YangGe-${version}-win-${arch}-setup.${ext}",
+      "shortcutName": "阳鸽"
     },
     "portable": {
-      "artifactName": "Teahouse-${version}-win-${arch}-portable.${ext}"
-    },
-    "linux": {
-      "icon": "build/icons/linux",
-      "maintainer": "Teahouse Maintainers <teahouse-maintainers@example.invalid>",
-      "target": [
-        "deb",
-        "AppImage"
-      ],
-      "category": "Network",
-      "artifactName": "Teahouse-${version}-${os}-${arch}.${ext}",
-      "desktop": {
-        "StartupWMClass": "teahouse",
-        "Name": "茶话间"
-      }
-    },
-    "deb": {
-      "compression": "gz",
-      "depends": [
-        "libgtk-3-0",
-        "libnotify4",
-        "libnss3",
-        "libxss1",
-        "libxtst6",
-        "xdg-utils",
-        "libatspi2.0-0",
-        "libuuid1"
-      ]
-    },
-    "mac": {
-      "icon": "build/icons/pantry-logo-icon.icns",
-      "target": [
-        {
-          "target": "dmg",
-          "arch": [
-            "arm64"
-          ]
-        },
-        {
-          "target": "zip",
-          "arch": [
-            "arm64"
-          ]
-        }
-      ],
-      "artifactName": "Teahouse-${version}-${os}-${arch}.${ext}",
-      "extendInfo": {
-        "CFBundleDisplayName": "Teahouse",
-        "CFBundleName": "Teahouse"
-      },
-      "extraResources": [
-        {
-          "from": "build/mac/zh_CN.lproj",
-          "to": "zh_CN.lproj"
-        },
-        {
-          "from": "build/mac/zh-Hans.lproj",
-          "to": "zh-Hans.lproj"
-        }
-      ]
+      "artifactName": "YangGe-${version}-win-${arch}-portable.${ext}"
     },
     "extraResources": [
       {

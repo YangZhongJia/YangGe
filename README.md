@@ -2,22 +2,20 @@
 
 <p><b>简体中文</b> · <a href="README.en.md">English</a></p>
 
-<img src="build/icons/pantry-logo-icon.png" alt="茶话间 Logo" width="120" height="120" />
+<img src="build/icons/pantry-logo-icon.png" alt="阳鸽 Logo" width="120" height="120" />
 
-<h1>茶话间 &nbsp;·&nbsp; Teahouse</h1>
+<h1>阳鸽 &nbsp;·&nbsp; YangGe</h1>
 
-<p><b>不用连外网、不用架服务器，局域网里聊天和传文件</b></p>
+<p><b>不用连外网、不用架服务器，局域网里聊天和传文件（Iris 靛蓝原创界面）</b></p>
+
+> **二开说明**：本项目是开源项目 [Teahouse（茶话间）](https://github.com/skyjt/teahouse) 的二次开发版本（GPL-3.0-only）。
+> 二开内容：Iris 靛蓝原创 UI 主题（石墨中性底 + 靛蓝主色 + 实色靛蓝气泡）、品牌更名（阳鸽 / YangGe）、打包收敛为仅 Windows x64。感谢上游作者的工作。
 
 <p>
-  <a href="https://github.com/skyjt/teahouse/releases/latest">
-    <img src="https://img.shields.io/github/v/release/skyjt/teahouse?style=flat-square&label=%E6%9C%80%E6%96%B0%E7%89%88%E6%9C%AC&color=3D8B6B&logo=github&logoColor=white" alt="最新版本" />
-  </a>
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/License-GPL--3.0--only-3D8B6B?style=flat-square" alt="GPL-3.0-only" />
   </a>
-  <a href="https://github.com/skyjt/teahouse/releases">
-    <img src="https://img.shields.io/badge/%E5%B9%B3%E5%8F%B0-Windows%207%2B%20%7C%20Linux%20%7C%20macOS-0366d6?style=flat-square" alt="平台" />
-  </a>
+  <img src="https://img.shields.io/badge/%E5%B9%B3%E5%8F%B0-Windows%2010%2B%20x64-0366d6?style=flat-square" alt="平台" />
   <img src="https://img.shields.io/badge/Electron-22-47848F?style=flat-square&logo=electron&logoColor=white" alt="Electron 22" />
 </p>
 
@@ -43,7 +41,7 @@
 
 ---
 
-同一个局域网里，每台电脑启动茶话间，就能自动看见彼此，点开就能发消息、传文件。全程不碰外网、不依赖任何服务器，数据只在内网里走。适合公司内网、隔离网、实验室这类不方便、或者根本不允许连外网的环境。
+同一个局域网里，每台电脑启动阳鸽，就能自动看见彼此，点开就能发消息、传文件。全程不碰外网、不依赖任何服务器，数据只在内网里走。适合公司内网、隔离网、实验室这类不方便、或者根本不允许连外网的环境。
 
 ## 为什么做这个
 
@@ -53,7 +51,7 @@
 - **内网通** 仅提供 Windows 版本，统信 UOS 与 Mac 无法直接安装；
 - **iptux** 虽跨平台但界面上手门槛偏高，日常办公使用不够直观。
 
-干脆自己写一个：免费开源、纯内网直连、从 Windows 7 到国产统信 UOS 再到 macOS 全平台覆盖、打开就会用。这就是茶话间。
+干脆自己写一个：免费开源、纯内网直连、从 Windows 7 到国产统信 UOS 再到 macOS 全平台覆盖、打开就会用。这就是阳鸽。
 
 ## 特性
 
@@ -84,26 +82,18 @@
 
 ## 安装
 
-前往 [**Releases**](https://github.com/skyjt/teahouse/releases) 下载对应平台的安装包。
+本二开版本仅面向 **Windows 10+ x64**。两种形态任选：
 
-**Windows** — 根据系统架构选择 x64 或 ia32（32 位）NSIS 安装包，也可直接使用对应便携版。Windows 7 需安装 **SP1**；若启用了代码签名，未打补丁的 Win7 需先安装系统更新 KB4474419。
+- **NSIS 安装包** `YangGe-<版本>-win-x64-setup.exe` — 双击安装，支持自定义安装目录、桌面快捷方式；
+- **便携版** `YangGe-<版本>-win-x64-portable.exe` — 免安装，单文件直接运行。
 
-**Linux** — `.deb` 适用于 Debian / Ubuntu / 统信 UOS / 麒麟等；其他发行版可用 `AppImage`（赋予可执行权限后运行）：
+安装包由 `npm run dist:win` 在本仓库构建，产物位于 `release/` 目录，在内网共享目录或 U 盘分发即可。
 
-```bash
-chmod +x Teahouse-*.AppImage
-./Teahouse-*.AppImage
-```
-
-**macOS** — 打开 `.dmg` 拖入「应用程序」。内网分发若未签名 / 公证，首次打开需在「系统设置 → 隐私与安全性」中允许，或在终端执行：
-
-```bash
-xattr -dr com.apple.quarantine /Applications/Teahouse.app
-```
+> 首次运行若操作系统防火墙弹出放行提示，请允许通行（默认端口：UDP `17878` 与 TCP `17879`）。
 
 ## 使用
 
-1. 同一局域网内的设备各自启动茶话间，会通过 UDP 广播自动相互发现并出现在左侧列表中。
+1. 同一局域网内的设备各自启动阳鸽，会通过 UDP 广播自动相互发现并出现在左侧列表中。
 2. 点击联系人即可开始单聊，或点击加号新建多人讨论组；将文件或文件夹拖入聊天窗口即可发送。
 3. 点击左侧导航栏的「文件柜」页签，可浏览同事开放共享的文件，或发布本机的共享文件夹并分配权限。
 4. **跨网段通信**：当 UDP 广播无法穿透不同路由网段时，可在「设置 → 网络」中手动添加对端 IP 或配置 CIDR 网段探测；已保存的网段会在在线同事间低频自动共享；点击导航栏底部的刷新按钮可一键扫描全部网段并查看实时进度。
@@ -153,9 +143,9 @@ xattr -dr com.apple.quarantine /Applications/Teahouse.app
 
 | 平台 | 默认日志目录 |
 |---|---|
-| Windows | `%APPDATA%\茶话间\logs` |
-| Linux / UOS / 麒麟 | `${XDG_CONFIG_HOME:-~/.config}/茶话间/logs` |
-| macOS | `~/Library/Application Support/茶话间/logs` |
+| Windows | `%APPDATA%\阳鸽\logs` |
+| Linux / UOS / 麒麟 | `${XDG_CONFIG_HOME:-~/.config}/阳鸽/logs` |
+| macOS | `~/Library/Application Support/阳鸽/logs` |
 
 开发实例覆盖 `PANTRY_USER_DATA` 时使用该目录的 `logs` 子目录。目录不可写时仅保留受限内存记录，摘要注明持久化失败；退出后内存记录无法恢复。日志只记录关键阶段，无逐帧记录或常驻性能监测，打包线程仅在导出时运行。
 
@@ -169,10 +159,11 @@ xattr -dr com.apple.quarantine /Applications/Teahouse.app
 
 完整文档索引与英文版规范见 **[docs/README.md](docs/README.md)**。
 
-如遇问题或有功能建议，欢迎在 [Issues](https://github.com/skyjt/teahouse/issues) 提交反馈。
+如遇问题或有功能建议，请联系本二开版本的维护者。
 
 ## 参考项目
 
+- [Teahouse（茶话间）](https://github.com/skyjt/teahouse) — 本项目的上游，纯内网 P2P 局域网通讯的完整实现
 - [IP Messenger](https://ipmsg.org/) — 局域网即时通信协议鼻祖
 - [iptux](https://github.com/iptux-src/iptux) — Linux 环境下流行的局域网通信工具
 - 飞秋（FeiQ）、内网通 — Windows 平台广泛使用的局域网即时通信产品，提供了优秀的产品形态参考
@@ -183,6 +174,6 @@ xattr -dr com.apple.quarantine /Applications/Teahouse.app
 
 ## License
 
-Copyright © 2026 skyjt。
+Copyright © 2026 skyjt 及阳鸽二开贡献者。
 
-从 0.37.0 起，茶话间自身的源码与二进制分发采用 [GNU General Public License v3.0 only](LICENSE)（SPDX：`GPL-3.0-only`）。0.36.8 及更早版本已经授予的 MIT 权利继续有效。第三方组件与图形资源仍遵循 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 中列出的各自许可证。
+阳鸽（YangGe）是 [Teahouse（茶话间）](https://github.com/skyjt/teahouse) 的二次开发版本，源码与二进制分发采用 [GNU General Public License v3.0 only](LICENSE)（SPDX：`GPL-3.0-only`）。上游从 0.37.0 起同样采用 GPL-3.0-only，0.36.8 及更早版本已经授予的 MIT 权利继续有效。第三方组件与图形资源仍遵循 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 中列出的各自许可证。

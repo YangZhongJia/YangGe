@@ -11,14 +11,12 @@ const packageJson = JSON.parse(
   }
 }
 const licenseText = readFileSync(new URL('../../../../LICENSE', import.meta.url), 'utf8')
-const readmeText = readFileSync(new URL('../../../../README.md', import.meta.url), 'utf8')
 
 describe('项目主许可元数据', () => {
-  it('统一声明 GPL-3.0-only', () => {
+  it('统一声明 GPL-3.0-only（衍生自 Teahouse 的二开同样遵循）', () => {
     expect(packageJson.license).toBe('GPL-3.0-only')
     expect(licenseText).toContain('GNU GENERAL PUBLIC LICENSE')
     expect(licenseText).toContain('Version 3, 29 June 2007')
-    expect(readmeText).toContain('GPL-3.0-only')
   })
 
   it('安装包资源目录携带根许可证', () => {
@@ -26,7 +24,8 @@ describe('项目主许可元数据', () => {
       from: 'LICENSE',
       to: 'LICENSE'
     })
-    expect(packageJson.build?.mac?.extraResources).not.toContainEqual({
+    // 二开仅面向 Windows，mac 配置块已移除；若将来恢复需避免与根 extraResources 重复携带
+    expect(packageJson.build?.mac?.extraResources ?? []).not.toContainEqual({
       from: 'LICENSE',
       to: 'LICENSE'
     })

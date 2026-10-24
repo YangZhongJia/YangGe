@@ -132,11 +132,10 @@ const replyMeta = computed((): ReplyMeta => {
     :class="[props.msg.isMine ? 'mine' : 'peer', { highlight: props.highlighted }]"
   >
     <AvatarMark
-      v-if="showGroupSender"
       class="msg-avatar"
-      :avatar="props.senderAvatar"
-      :avatar-hash="props.senderAvatarHash"
-      :name="props.senderName"
+      :avatar="props.msg.isMine ? chatStore.selfAvatar : props.senderAvatar"
+      :avatar-hash="props.msg.isMine ? chatStore.selfAvatarHash : props.senderAvatarHash"
+      :name="props.msg.isMine ? chatStore.selfNick : props.senderName"
     />
     <span class="message-stack" :class="{ 'file-stack': props.msg.kind === 'file' }">
       <span v-if="showGroupSender" class="sender">{{ props.senderName }}</span>
@@ -236,9 +235,13 @@ const replyMeta = computed((): ReplyMeta => {
 <style scoped>
 .sep {
   text-align: center;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-3);
-  margin: 4px 0 14px;
+  margin: 6px auto 16px;
+  width: fit-content;
+  padding: 2px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-pinned);
 }
 .system-line {
   text-align: center;
@@ -259,9 +262,9 @@ const replyMeta = computed((): ReplyMeta => {
 }
 .row {
   display: flex;
-  align-items: flex-end;
-  gap: 6px;
-  margin: 10px 0;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 12px 0;
 }
 .row.mine {
   flex-direction: row-reverse;
@@ -280,15 +283,14 @@ const replyMeta = computed((): ReplyMeta => {
   }
 }
 .msg-avatar {
-  width: 30px;
-  height: 30px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   display: grid;
   place-items: center;
-  font-size: 13px;
-  flex: 0 0 30px;
+  font-size: 14px;
+  flex: 0 0 36px;
   align-self: flex-start;
-  margin-top: 18px;
 }
 .message-stack {
   max-width: 68%;
@@ -358,10 +360,11 @@ const replyMeta = computed((): ReplyMeta => {
   color: var(--text-2);
 }
 .bubble {
+  position: relative;
   max-width: 100%;
-  padding: 9px 12px;
+  padding: 9px 13px;
   border: 1px solid transparent;
-  border-radius: var(--radius-panel);
+  border-radius: 16px;
   font-size: 15px;
   line-height: 1.5;
   word-break: break-word;
@@ -370,13 +373,31 @@ const replyMeta = computed((): ReplyMeta => {
 }
 .row.peer .bubble {
   background: var(--bubble-peer);
-  border-color: transparent;
-  box-shadow: none;
+  border-color: var(--line);
+  box-shadow: var(--shadow-soft);
 }
 .row.mine .bubble {
   background: var(--bubble-mine);
   border-color: transparent;
   box-shadow: none;
+  color: #ffffff;
+}
+.row.mine .text-link {
+  color: #c9cdfa;
+}
+.row.mine .reply-quote {
+  background: rgba(255, 255, 255, 0.14);
+  border-left-color: rgba(255, 255, 255, 0.45);
+}
+.row.mine .reply-quote:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-left-color: rgba(255, 255, 255, 0.6);
+}
+.row.mine .reply-quote-sender {
+  color: #cdd2fc;
+}
+.row.mine .reply-quote-text {
+  color: #dfe2fb;
 }
 .text-link {
   border: none;

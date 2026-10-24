@@ -38,10 +38,14 @@ const details = computed(() => {
 
 <style scoped>
 .screen-card { width: 260px; max-width: 100%; display: grid; grid-template-columns: 20px minmax(0, 1fr); align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-panel); color: var(--text-1); background: var(--bubble-peer); font-size: var(--font-sm); line-height: 1.5; }
-.mine { background: var(--bubble-mine); }
+.mine { background: var(--bubble-mine); border-color: transparent; color: #ffffff; }
+.mine header strong { color: #ffffff; }
+.mine header span,
+.mine p { color: rgba(255, 255, 255, 0.86); }
 header, p { display: flex; flex-wrap: wrap; gap: 2px 8px; }
 header { justify-content: space-between; align-items: baseline; }
 header span, p { font-size: var(--font-xs); color: var(--text-2); }
 .active header span { color: var(--primary); }
+.mine.active header span { color: #e6e9fd; }
 p { margin: 4px 0 0; }
 </style>

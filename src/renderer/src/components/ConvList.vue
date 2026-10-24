@@ -218,10 +218,10 @@ function confirmRemove(): void {
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 66px;
-  margin: 0;
-  padding: 12px 14px;
-  border-radius: 0;
+  min-height: 64px;
+  margin: 2px 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
   cursor: pointer;
   transition:
     background 150ms ease,

@@ -129,7 +129,7 @@ describe('tray unread integration', () => {
 
     updateTrayUnread(tray as never, win as never, 12)
 
-    expect(tray.setToolTip).toHaveBeenCalledWith('茶话间（12 条未读）')
+    expect(tray.setToolTip).toHaveBeenCalledWith('阳鸽（12 条未读）')
     expect(tray.setTitle).toHaveBeenCalledWith('12')
     expect(electronMock.app.dock.setBadge).toHaveBeenCalledWith('12')
     expect(electronMock.app.setBadgeCount).toHaveBeenCalledWith(12)
@@ -143,7 +143,7 @@ describe('tray unread integration', () => {
 
     updateTrayUnread(tray as never, null, 0)
 
-    expect(tray.setToolTip).toHaveBeenCalledWith('茶话间')
+    expect(tray.setToolTip).toHaveBeenCalledWith('阳鸽')
     expect(tray.setTitle).toHaveBeenCalledWith('')
     expect(electronMock.app.dock.setBadge).toHaveBeenCalledWith('')
     expect(electronMock.app.setBadgeCount).toHaveBeenCalledWith(0)
@@ -157,7 +157,7 @@ describe('tray unread integration', () => {
 
     updateTrayUnread(tray as never, win as never, 128)
 
-    expect(tray.setToolTip).toHaveBeenCalledWith('茶话间（99+ 条未读）')
+    expect(tray.setToolTip).toHaveBeenCalledWith('阳鸽（99+ 条未读）')
     expect(win.setOverlayIcon).toHaveBeenCalledTimes(1)
     expect(win.setOverlayIcon.mock.calls[0][1]).toBe('99+ 条未读消息')
     expect((win.setOverlayIcon.mock.calls[0][0] as FakeNativeImage).dataURL).toContain(
@@ -183,7 +183,7 @@ describe('tray unread integration', () => {
     updateTrayUnread(tray as never, win as never, 0)
 
     expect(win.setOverlayIcon.mock.calls[win.setOverlayIcon.mock.calls.length - 1]).toEqual([null, ''])
-    expect(tray.setToolTip.mock.calls[tray.setToolTip.mock.calls.length - 1]).toEqual(['茶话间'])
+    expect(tray.setToolTip.mock.calls[tray.setToolTip.mock.calls.length - 1]).toEqual(['阳鸽'])
     const callCountAfterClear = tray.setImage.mock.calls.length
 
     vi.advanceTimersByTime(1600)
@@ -201,7 +201,7 @@ describe('tray unread integration', () => {
 
     expect(electronMock.app.setBadgeCount).toHaveBeenCalledWith(5)
     expect(win.setOverlayIcon).not.toHaveBeenCalled()
-    expect(tray.setToolTip).toHaveBeenCalledWith('茶话间（5 条未读）')
+    expect(tray.setToolTip).toHaveBeenCalledWith('阳鸽（5 条未读）')
     expect(tray.setImage).toHaveBeenCalledTimes(1)
     const attentionIcon = tray.setImage.mock.calls[0][0] as FakeNativeImage
 
@@ -291,7 +291,7 @@ describe('tray unread integration', () => {
 
     expect(tray.setImage).toHaveBeenCalledTimes(callCountAfterClear)
     expect(restoredIcon.dataURL).toContain('data:image/png;base64,')
-    expect(tray.setToolTip).toHaveBeenLastCalledWith('茶话间')
+    expect(tray.setToolTip).toHaveBeenLastCalledWith('阳鸽')
   })
 
   it('创建托盘时 macOS 使用 template image 并挂载菜单和点击入口', async () => {
@@ -309,7 +309,7 @@ describe('tray unread integration', () => {
     )
     expect(image.setTemplateImage).toHaveBeenCalledWith(true)
     expect(electronMock.Tray).toHaveBeenCalledWith(image)
-    expect(tray.setToolTip).toHaveBeenCalledWith('茶话间')
+    expect(tray.setToolTip).toHaveBeenCalledWith('阳鸽')
     expect(electronMock.Menu.buildFromTemplate).toHaveBeenCalledTimes(1)
     expect(tray.setContextMenu).toHaveBeenCalledWith(electronMock.Menu.buildFromTemplate.mock.results[0].value)
     expect(tray.on).toHaveBeenCalledWith('click', showWindow)

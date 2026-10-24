@@ -24,9 +24,9 @@ describe('Win7 与 Linux 软渲染画像', () => {
     expect(tokensSource).toContain("html[data-rendering='software']")
     expect(imageViewerSource).not.toContain('backdrop-filter')
     expect(tokensSource).toContain('--material-strong: #ffffff')
-    expect(tokensSource).toContain('--material-strong: #202a38')
+    expect(tokensSource).toContain('--material-strong: #1a1d25')
     expect(tokensSource).toContain('--shadow-float: 0 4px 14px')
-    expect(imageViewerSource).toContain('background: #202a38')
+    expect(imageViewerSource).toContain('background: #1a1d25')
   })
 
   it('图片查看窗口加载画像后再挂载，所有平台仅手动触发 OCR', () => {

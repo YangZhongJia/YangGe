@@ -66,7 +66,7 @@ export function refreshTrayLanguage(tray: Tray | null, mainWindow: BrowserWindow
   if (!tray || !menuDeps) return
   updateTrayUnread(tray, mainWindow, unreadCount)
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: tr('打开茶话间'), click: menuDeps.showWindow },
+    { label: tr('打开阳鸽'), click: menuDeps.showWindow },
     { type: 'separator' },
     { label: tr('退出'), click: menuDeps.quit }
   ]))

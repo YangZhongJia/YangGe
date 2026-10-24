@@ -2,11 +2,14 @@
 
 <p><a href="README.md">简体中文</a> · <b>English</b></p>
 
-<img src="build/icons/pantry-logo-icon.png" alt="Teahouse logo" width="120" height="120" />
+<img src="build/icons/pantry-logo-icon.png" alt="YangGe logo" width="120" height="120" />
 
-<h1>茶话间 &nbsp;·&nbsp; Teahouse</h1>
+<h1>阳鸽 &nbsp;·&nbsp; YangGe</h1>
 
-<p><b>Chat and transfer files across a LAN, with no Internet connection or server</b></p>
+<p><b>Chat and transfer files across a LAN, with no Internet connection or server (original Iris indigo UI)</b></p>
+
+> **Fork notice**: YangGe is a secondary-development fork of the open-source [Teahouse](https://github.com/skyjt/teahouse) project (GPL-3.0-only).
+> Fork changes: the original Iris indigo UI theme (graphite neutrals, indigo accent, solid indigo bubbles), rebranding to YangGe, and packaging trimmed to Windows x64 only.
 
 <p>
   <a href="https://github.com/skyjt/teahouse/releases/latest">
@@ -22,7 +25,7 @@
 </p>
 
 <p>
-  <a href="#why-teahouse">Why Teahouse</a>
+  <a href="#why-yangge">Why YangGe</a>
   &nbsp;·&nbsp;
   <a href="#features">Features</a>
   &nbsp;·&nbsp;
@@ -43,11 +46,11 @@
 
 ---
 
-Start Teahouse on computers connected to the same local network and they discover each other automatically. Open a peer to chat or transfer files directly. No cloud account, central server, telemetry, or Internet access is involved. Teahouse is designed for corporate intranets, isolated networks, and laboratories where external connectivity is limited or prohibited.
+Start YangGe on computers connected to the same local network and they discover each other automatically. Open a peer to chat or transfer files directly. No cloud account, central server, telemetry, or Internet access is involved. YangGe is designed for corporate intranets, isolated networks, and laboratories where external connectivity is limited or prohibited.
 
-## Why Teahouse
+## Why YangGe
 
-Moving a file or sending a short message inside an office network should be effortless. Existing tools often miss at least one requirement: commercial solutions require licensing fees, Neiwangtong provides only Windows binaries without support for domestic UOS or macOS, and iptux presents a steeper learning curve for regular office users. Teahouse aims for an open-source, serverless, zero-configuration experience across Windows 7, domestic UOS deployments, Linux, and macOS.
+Moving a file or sending a short message inside an office network should be effortless. Existing tools often miss at least one requirement: commercial solutions require licensing fees, Neiwangtong provides only Windows binaries without support for domestic UOS or macOS, and iptux presents a steeper learning curve for regular office users. YangGe aims for an open-source, serverless, zero-configuration experience across Windows 7, domestic UOS deployments, Linux, and macOS.
 
 ## Features
 
@@ -78,26 +81,18 @@ Electron is pinned to **22.3.27**, the final major release supporting Windows 7.
 
 ## Installation
 
-Download the package for your platform from [GitHub Releases](https://github.com/skyjt/teahouse/releases).
+This fork targets **Windows 10+ x64** only. Two package forms:
 
-**Windows** — Choose the x64 or ia32 NSIS installer for your system, or use the matching portable executable. Windows 7 requires **SP1**. If a signed build is used on an unpatched Windows 7 installation, install KB4474419 first.
+- **NSIS installer** `YangGe-<version>-win-x64-setup.exe` — run to install, with custom install directory and desktop shortcut support;
+- **Portable** `YangGe-<version>-win-x64-portable.exe` — no installation, single executable.
 
-**Linux** — Use the `.deb` package on Debian, Ubuntu, UOS, Kylin, and compatible distributions. For other distributions, mark the AppImage executable and run it:
+Packages are built from this repository via `npm run dist:win` and placed under `release/`; distribute them over an intranet share or USB drive.
 
-```bash
-chmod +x Teahouse-*.AppImage
-./Teahouse-*.AppImage
-```
-
-**macOS** — Open the `.dmg` and drag Teahouse into Applications. An unsigned or unnotarized intranet build may require approval under System Settings → Privacy & Security. You can also remove the quarantine attribute in terminal:
-
-```bash
-xattr -dr com.apple.quarantine /Applications/Teahouse.app
-```
+> If the operating-system firewall prompts on first run, allow it (default ports: UDP `17878` and TCP `17879`).
 
 ## Usage
 
-1. Start Teahouse on each device connected to the LAN. Peers on the same subnet appear automatically in the left contact list.
+1. Start YangGe on each device connected to the LAN. Peers on the same subnet appear automatically in the left contact list.
 2. Select a peer to start a private chat, click the plus icon to create a discussion group, or drag files and folders into the chat window to send them.
 3. Switch to the File Cabinet tab in the navigation rail to browse files shared by colleagues, or publish your own shared folder with custom access permissions.
 4. **Cross-subnet communication**: For routed subnets where UDP broadcast does not cross boundaries, add peer IPs or configure CIDR scan ranges in Settings → Network. Saved ranges are shared at a low rate among online peers. Click the refresh button at the bottom of the navigation rail to scan all ranges with live progress.
@@ -125,7 +120,7 @@ Main process
 | Long Message Channel | Direct TCP | 17879 | Fallback channel for lengthy messages exceeding UDP MTU |
 | File & Data Transfer | Direct TCP | 17879 | Chunked verified file/folder transfers, cabinet uploads/downloads, LAN P2P self-updates |
 
-The discovery sequence takes inspiration from IP Messenger, while Teahouse uses its own UTF-8 JSON protocol and does not claim wire compatibility with legacy ipmsg clients.
+The discovery sequence takes inspiration from IP Messenger, while YangGe uses its own UTF-8 JSON protocol and does not claim wire compatibility with legacy ipmsg clients.
 
 ## Security
 
@@ -134,7 +129,7 @@ The discovery sequence takes inspiration from IP Messenger, while Teahouse uses 
 - **Untrusted input validation** — Incoming network packets undergo strict schema and length allowlist validation; unknown message types are ignored gracefully; inline images are bounded to ≤8192px and ≤32 megapixels to prevent decoder OOM.
 - **Safe file persistence** — Incoming file names are sanitized against path traversal; files are saved exclusively to user-selected or isolated subdirectories with automatic conflict renaming to prevent overwrites; cabinet uploads are restricted to dedicated peer folders.
 - **Operational log sanitization** — Message contents and transferred file data are never written to disk logs; only transaction IDs, status codes, and file byte sizes are recorded.
-- **Physical LAN trust model** — Teahouse adopts the unencrypted LAN transmission model of classic tools like IP Messenger and iptux, intended for operation within trusted intranet perimeters and isolated laboratory networks.
+- **Physical LAN trust model** — YangGe adopts the unencrypted LAN transmission model of classic tools like IP Messenger and iptux, intended for operation within trusted intranet perimeters and isolated laboratory networks.
 
 ## Development
 
@@ -156,9 +151,9 @@ Standard renderer controls use [Naive UI](https://github.com/tusen-ai/naive-ui) 
 
 ## License
 
-Copyright © 2026 skyjt.
+Copyright © 2026 skyjt and YangGe fork contributors.
 
-Starting with version 0.37.0, Teahouse source code and binary distributions are licensed under the [GNU General Public License v3.0 only](LICENSE), SPDX identifier `GPL-3.0-only`. MIT rights granted for version 0.36.8 and earlier remain valid. Third-party components and artwork retain the licenses listed in [Third-party notices](THIRD_PARTY_NOTICES.en.md).
+YangGe is a secondary-development fork of [Teahouse](https://github.com/skyjt/teahouse), licensed under the [GNU General Public License v3.0 only](LICENSE), SPDX identifier `GPL-3.0-only`. The upstream project has used GPL-3.0-only since version 0.37.0; MIT rights granted for version 0.36.8 and earlier remain valid. Third-party components and artwork retain the licenses listed in [Third-party notices](THIRD_PARTY_NOTICES.en.md).
 
 
 ## Diagnostics and feedback (since v0.60.0)

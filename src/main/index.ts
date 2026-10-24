@@ -216,10 +216,10 @@ app.commandLine.appendSwitch('no-proxy-server')
 // 运行时应用名固定为中文（决议 #60）：productName 已改 ASCII "Teahouse" 以保证
 // 安装路径无中文（/opt/Teahouse 等），但 userData 目录（已有用户数据所在）与
 // 系统通知标题必须保持「茶话间」——setName 必须在任何 getPath('userData') 之前。
-app.setName('茶话间')
+app.setName('阳鸽')
 // Windows 通知/任务栏归属名（决议 #66）：不设则 Win10/11 的 toast 顶部显示默认
 // "electron.app.Teahouse"；设为 appId，与 NSIS 安装的快捷方式 AUMID 一致，显示为「茶话间」。
-if (process.platform === 'win32') app.setAppUserModelId('com.pantry.app')
+if (process.platform === 'win32') app.setAppUserModelId('com.yangge.app')
 
 // 本机双实例联调：PANTRY_USER_DATA 隔离数据目录（同时绕开单实例锁），见 README「开发」
 if (process.env['PANTRY_USER_DATA']) {
@@ -650,7 +650,7 @@ if (!gotLock) {
 
   function mainWindowTitle(): string {
     const nick = appState?.config.setupDone ? appState.config.nick.trim() : ''
-    return nick ? `${nick}-🍵Teahouse` : tr('茶话间')
+    return nick ? `${nick}-阳鸽` : tr('阳鸽')
   }
 
   function updateMainWindowTitle(): void {
@@ -794,7 +794,7 @@ if (!gotLock) {
         const content = [
           '[Desktop Entry]',
           'Type=Application',
-          'Name=茶话间',
+          'Name=阳鸽',
           `Exec="${process.execPath}"`,
           'Terminal=false',
           'X-GNOME-Autostart-enabled=true',
@@ -1452,7 +1452,7 @@ if (!gotLock) {
       try {
         const icon = systemNotificationIcon()
         new Notification({
-          title: tr('茶话间'),
+          title: tr('阳鸽'),
           body: notice.message,
           ...(icon ? { icon } : {})
         }).show()
@@ -2439,7 +2439,7 @@ if (!gotLock) {
       const ext = fmt === 'backup' ? 'pantry-bak' : fmt
       const result = await dialog.showSaveDialog(mainWindow, {
         title: tr('导出聊天记录'),
-        defaultPath: tr('茶话间导出-{0}.{1}', { 0: new Date().toISOString().slice(0, 10), 1: ext }),
+        defaultPath: tr('阳鸽导出-{0}.{1}', { 0: new Date().toISOString().slice(0, 10), 1: ext }),
         filters: [{ name: ext.toUpperCase(), extensions: [ext] }]
       })
       if (result.canceled || !result.filePath) return null

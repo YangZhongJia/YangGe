@@ -198,10 +198,18 @@ onUnmounted(() => {
   overflow: hidden;
 }
 html[data-theme='dark'] .pk-bubble {
-  --pk-edge: rgba(93, 143, 208, 0.32);
+  --pk-edge: rgba(123, 118, 240, 0.4);
 }
 .pk-bubble.mine {
   background: var(--bubble-mine);
+  color: #ffffff;
+}
+.pk-bubble.mine .pk-label,
+.pk-bubble.mine .pk-label .pantry-icon {
+  color: #dfe2fb;
+}
+.pk-bubble.mine .pk-result {
+  color: #ffffff;
 }
 /* 固定卡片宽度（决议 #147）：避免「出了布」比「出了石头」短一截、动画态→定格态宽度跳变；他人含参与按钮更宽，信息列 flex:1 撑满、结果左对齐、短文字右侧留白 */
 .pk-bubble.has-action {
