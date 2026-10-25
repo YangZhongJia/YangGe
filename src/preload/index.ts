@@ -44,6 +44,7 @@ import {
   type TransferView,
   type TypingEvent,
   type ClipboardSendResult,
+  type SharePackageResult,
   type SummarizeResult,
   type UpdateAvailability,
   type UpdatePackageReady
@@ -100,6 +101,9 @@ const api: PantryApi = {
     ipcRenderer.invoke(IpcChannels.clipboardSend, peerNodeId),
   summarizeGroup: (convId: string): Promise<SummarizeResult> =>
     ipcRenderer.invoke(IpcChannels.aiSummarize, convId),
+  sharePackageTo: (peerNodeId: string): Promise<SharePackageResult> =>
+    ipcRenderer.invoke(IpcChannels.appSharePackage, peerNodeId),
+  copyReleaseLink: (): Promise<void> => ipcRenderer.invoke(IpcChannels.appShareCopyLink),
   probePeer: (nodeId: string): Promise<boolean> =>
     ipcRenderer.invoke(IpcChannels.peersProbe, nodeId),
   listConversations: (): Promise<ConversationView[]> => ipcRenderer.invoke(IpcChannels.convList),

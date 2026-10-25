@@ -274,6 +274,7 @@ onMounted(async () => {
   info.value = await window.pantry.getAppInfo()
   applyPerformanceProfile(info.value)
   await reload()
+  await reloadShareTargets()
   stopSettings = window.pantry.onSettingsUpdated((s) => {
     if (settings.value && settings.value.language !== s.language) {
       settings.value = s
@@ -332,6 +333,49 @@ function flashSaved(text = tr('设置已保存')): void {
 }
 
 // 关于页源码链接（决议 #90）：交系统浏览器打开，非 app 内加载远程内容，不违反纯内网红线
+// ---------- 分享阳鸽（决议 #322） ----------
+const shareTargets = ref<Array<{ nodeId: string; nick: string }>>([])
+const sharePeerId = ref('')
+const shareSending = ref(false)
+const shareFeedback = ref('')
+let shareFeedbackTimer: ReturnType<typeof setTimeout> | null = null
+function setShareFeedback(text: string): void {
+  shareFeedback.value = text
+  if (shareFeedbackTimer) clearTimeout(shareFeedbackTimer)
+  shareFeedbackTimer = setTimeout(() => { shareFeedback.value = '' }, 4000)
+}
+async function reloadShareTargets(): Promise<void> {
+  try {
+    const peers = await window.pantry.getPeers()
+    shareTargets.value = (peers ?? []).filter((x) => x.online).map((x) => ({ nodeId: x.nodeId, nick: x.nick }))
+  } catch {
+    shareTargets.value = []
+  }
+}
+async function sharePackageNow(): Promise<void> {
+  if (!sharePeerId.value || shareSending.value) return
+  shareSending.value = true
+  try {
+    const res = await window.pantry.sharePackageTo(sharePeerId.value)
+    if (res.ok) setShareFeedback(tr('安装包已发送，对方聊天里可直接保存安装'))
+    else if (res.reason === 'no-package') setShareFeedback(tr('本机没有可分享的安装包'))
+    else if (res.reason === 'offline') setShareFeedback(tr('对方离线，发送失败'))
+    else setShareFeedback(tr('发送失败，请稍后再试'))
+  } catch {
+    setShareFeedback(tr('发送失败，请稍后再试'))
+  } finally {
+    shareSending.value = false
+  }
+}
+async function copyReleaseLinkNow(): Promise<void> {
+  try {
+    await window.pantry.copyReleaseLink()
+    setShareFeedback(tr('下载链接已复制'))
+  } catch {
+    setShareFeedback(tr('复制失败'))
+  }
+}
+
 async function openUrl(url: string): Promise<void> {
   await window.pantry.openUrl(url)
 }
@@ -1510,6 +1554,31 @@ async function confirmRemove(cidr: string): Promise<void> {
                     github.com/YangZhongJia/YangGe
                     <PantryIcon name="external" :size="13" />
                   </a>
+                </dd>
+              </div>
+              <div class="about-row">
+                <dt>{{ tr('分享') }}</dt>
+                <dd>
+                  <div class="share-pack">
+                    <select v-model:value="sharePeerId" class="share-peer-select" :aria-label="tr('选择同事')">
+                      <option value="" disabled>{{ tr('选择同事') }}</option>
+                      <option v-for="p in shareTargets" :key="p.nodeId" :value="p.nodeId">
+                        {{ p.nick }}
+                      </option>
+                    </select>
+                    <button
+                      type="button"
+                      class="about-action"
+                      :disabled="!sharePeerId || shareSending"
+                      @click="sharePackageNow"
+                    >
+                      {{ shareSending ? tr('发送中') : tr('发安装包') }}
+                    </button>
+                    <button type="button" class="about-action" @click="copyReleaseLinkNow">
+                      {{ tr('复制下载链接') }}
+                    </button>
+                  </div>
+                  <span v-if="shareFeedback" class="share-feedback" aria-live="polite">{{ shareFeedback }}</span>
                 </dd>
               </div>
               <div class="about-row about-update-row" :class="'is-' + updateCheckKind">
@@ -3137,6 +3206,39 @@ async function confirmRemove(cidr: string): Promise<void> {
   .port-warning-leave-to .port-warning-dialog {
     transform: none;
   }
+}
+/* ---------- 分享阳鸽（决议 #322） ---------- */
+.share-pack {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.share-peer-select {
+  max-width: 180px;
+  padding: 4px 8px;
+  font-size: var(--font-sm);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-1);
+}
+.about-action {
+  padding: 4px 12px;
+  font-size: var(--font-sm);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-1);
+  cursor: pointer;
+}
+.about-action:hover:not(:disabled) { background: var(--surface-hover); }
+.about-action:disabled { opacity: 0.5; cursor: default; }
+.share-feedback {
+  display: block;
+  margin-top: 6px;
+  font-size: var(--font-xs);
+  color: var(--text-2);
 }
 </style>
 

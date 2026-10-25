@@ -141,7 +141,11 @@ export const IpcChannels = {
   /** 发剪贴板：把本机剪贴板文本发给对方（决议 #321） */
   clipboardSend: 'clipboard:send',
   /** AI 群总结：总结今天该群的本地消息，结果只回请求者（决议 #321） */
-  aiSummarize: 'ai:summarize'
+  aiSummarize: 'ai:summarize',
+  /** 分享阳鸽：把本机自留的安装包发给同事（决议 #322） */
+  appSharePackage: 'app:share-package',
+  /** 分享阳鸽：复制当前版本的 GitHub Release 链接（决议 #322） */
+  appShareCopyLink: 'app:share-copy-link'
 } as const
 
 /** main → renderer 的事件推送 */
@@ -263,6 +267,10 @@ export type ClipboardSendResult =
 export type SummarizeResult =
   | { ok: true; summary: string }
   | { ok: false; reason: 'no-ai' | 'empty' | 'failed' | 'invalid' }
+
+export type SharePackageResult =
+  | { ok: true }
+  | { ok: false; reason: 'no-package' | 'offline' | 'failed' | 'invalid' }
 
 export interface NetState {
   ok: boolean
@@ -868,6 +876,10 @@ export interface PantryApi {
   summarizeGroup(convId: string): Promise<SummarizeResult>
   /** 输入中提示：对方开始输入 */
   onTyping(listener: (event: TypingEvent) => void): () => void
+  /** 分享阳鸽（决议 #322）：把自留安装包发给指定同事 */
+  sharePackageTo(peerId: string): Promise<SharePackageResult>
+  /** 分享阳鸽：复制当前版本的下载链接 */
+  copyReleaseLink(): Promise<void>
   /** 按需探活（F-DISC-8）；返回是否已发出 */
   probePeer(nodeId: string): Promise<boolean>
   listConversations(): Promise<ConversationView[]>

@@ -77,6 +77,7 @@ import {
   type TableTextMeta,
   type TransferView,
   type ClipboardSendResult,
+  type SharePackageResult,
   type SummarizeResult,
   type UpdateAvailability
 } from '../shared/ipc'
@@ -1925,6 +1926,26 @@ if (!gotLock) {
   ipcMain.handle(IpcChannels.aiSummarize, (_event, convId: unknown): Promise<SummarizeResult> => {
     if (typeof convId !== 'string') return Promise.resolve({ ok: false, reason: 'invalid' })
     return summarizeGroupToday(convId)
+  })
+
+  // 分享阳鸽（决议 #322）：把自留安装包作为普通文件发给同事
+  ipcMain.handle(IpcChannels.appSharePackage, async (_event, peerId: unknown): Promise<SharePackageResult> => {
+    if (!files || !appState) return { ok: false, reason: 'no-package' }
+    if (typeof peerId !== 'string' || !peerId || peerId.length > 64) return { ok: false, reason: 'invalid' }
+    const path = updatePackagePath(appState.profile.ver, currentProtocolPlatform(), currentRuntimeArch())
+    if (!path) return { ok: false, reason: 'no-package' }
+    const view = await files.offerPaths(peerId, [path], 'file')
+    return view ? { ok: true } : { ok: false, reason: 'offline' }
+  })
+
+  // 分享阳鸽：复制当前版本下载链接
+  ipcMain.handle(IpcChannels.appShareCopyLink, async (event): Promise<void> => {
+    if (!appState || event.sender !== mainWindow?.webContents) return
+    try {
+      clipboard.writeText(`https://github.com/YangZhongJia/YangGe/releases/tag/v${appState.profile.ver}`)
+    } catch {
+      // 剪贴板不可用时静默失败
+    }
   })
 
   ipcMain.handle(IpcChannels.peersProbe, (_event, nodeId: unknown): boolean => {
