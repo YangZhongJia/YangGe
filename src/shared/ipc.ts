@@ -546,6 +546,16 @@ export interface ConversationMessageHit {
 }
 
 /** 我的资料 + 首启向导状态（F-SYS-6） */
+export interface AiReplierSettings {
+  enabled: boolean
+  baseUrl: string
+  apiKey: string
+  model: string
+  persona: string
+  replyPrivate: boolean
+  replyGroup: boolean
+}
+
 export interface SettingsView {
   nick: string
   company: string
@@ -559,6 +569,8 @@ export interface SettingsView {
   fileDir: string
   /** 系统默认下载目录（向导第三步展示用） */
   defaultFileDir: string
+  /** AI 分身配置 */
+  ai: AiReplierSettings
   notifications: boolean
   manualPeers: string[]
   scanRanges: string[]
@@ -730,6 +742,7 @@ export interface AppSettingsPatch {
   theme?: SettingsView['theme']
   fontScale?: SettingsView['fontScale']
   showMessagePreview?: boolean
+  ai?: AiReplierSettings
   allowDirectFileSend?: boolean
   sound?: SettingsView['sound']
   sendKey?: SettingsView['sendKey']

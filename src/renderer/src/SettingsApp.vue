@@ -278,7 +278,10 @@ onMounted(async () => {
     if (settings.value && settings.value.language !== s.language) {
       settings.value = s
       applyAppearance(s)
-    } else syncForm(s)
+    } else {
+      syncForm(s)
+      syncAi(s)
+    }
   })
 })
 
@@ -290,6 +293,7 @@ onUnmounted(() => {
 async function reload(): Promise<void> {
   const s = await window.pantry.getSettings()
   syncForm(s)
+  syncAi(s)
   conversations.value = await window.pantry.listConversations()
   transfers.value = await window.pantry.listTransfers(30)
 }
@@ -340,6 +344,41 @@ async function changeLanguage(value: SettingsView['language']): Promise<void> {
     flashSaved()
   } catch {
     flashSaved(tr('切换语言失败，请重试'))
+  }
+}
+
+const ai = ref({
+  enabled: false,
+  baseUrl: '',
+  apiKey: '',
+  model: '',
+  persona: '',
+  replyPrivate: true,
+  replyGroup: true
+})
+
+function syncAi(s: SettingsView | null): void {
+  if (s?.ai) Object.assign(ai.value, s.ai)
+}
+
+async function saveAi(): Promise<void> {
+  try {
+    await saveApp(
+      {
+        ai: {
+          enabled: ai.value.enabled,
+          baseUrl: ai.value.baseUrl.trim(),
+          apiKey: ai.value.apiKey.trim(),
+          model: ai.value.model.trim(),
+          persona: ai.value.persona.trim(),
+          replyPrivate: ai.value.replyPrivate,
+          replyGroup: ai.value.replyGroup
+        }
+      },
+      tr('AI 分身设置已保存')
+    )
+  } catch {
+    flashSaved(tr('保存失败，请重试'))
   }
 }
 
@@ -1081,6 +1120,65 @@ async function confirmRemove(cidr: string): Promise<void> {
                 @update:value="changeSound"
               />
             </label>
+
+          </div>
+
+          <div class="panel">
+            <div class="panel-head">
+              <h2>{{ tr('AI 分身') }}</h2>
+              <p>{{ tr('默认关闭。开启后：收到单聊消息、或群里被 @ 时，大模型替你自动回复，回复带「[AI 代回]」前缀。聊天片段会发送到你配置的接口——填内网大模型（Ollama / vLLM 的 OpenAI 兼容地址）即可保持纯内网。') }}</p>
+            </div>
+            <div class="setting-line">
+              <div>
+                <strong>{{ tr('启用 AI 代回') }}</strong>
+                <small>{{ tr('关闭时不发起任何外部请求。') }}</small>
+              </div>
+              <NSwitch v-model:value="ai.enabled" />
+            </div>
+            <div class="setting-line">
+              <div>
+                <strong>{{ tr('接口地址（OpenAI 兼容）') }}</strong>
+                <small>{{ tr('例如 http://192.168.1.10:11434/v1') }}</small>
+              </div>
+              <NInput v-model:value="ai.baseUrl" style="width: 240px" :placeholder="tr('http://主机:端口/v1')" />
+            </div>
+            <div class="setting-line">
+              <div>
+                <strong>{{ tr('API 密钥') }}</strong>
+                <small>{{ tr('内网本地模型通常留空。') }}</small>
+              </div>
+              <NInput v-model:value="ai.apiKey" type="password" show-password-on="click" style="width: 240px" placeholder="" />
+            </div>
+            <div class="setting-line">
+              <div>
+                <strong>{{ tr('模型名') }}</strong>
+                <small>{{ tr('例如 qwen2.5:7b、deepseek-v3 等。') }}</small>
+              </div>
+              <NInput v-model:value="ai.model" style="width: 240px" />
+            </div>
+            <div class="setting-line">
+              <div>
+                <strong>{{ tr('人设提示词') }}</strong>
+                <small>{{ tr('留空使用默认办公助手；例如「你是电商公司的客服主管，回复专业简洁」。') }}</small>
+              </div>
+              <NInput v-model:value="ai.persona" type="textarea" :autosize="{ minRows: 2, maxRows: 4 }" style="width: 240px" />
+            </div>
+            <div class="setting-line">
+              <div>
+                <strong>{{ tr('单聊消息自动回复') }}</strong>
+              </div>
+              <NSwitch v-model:value="ai.replyPrivate" />
+            </div>
+            <div class="setting-line">
+              <div>
+                <strong>{{ tr('群里被 @ 时回复') }}</strong>
+              </div>
+              <NSwitch v-model:value="ai.replyGroup" />
+            </div>
+            <div class="setting-line">
+              <div></div>
+              <NButton size="small" @click="saveAi">{{ tr('保存 AI 设置') }}</NButton>
+            </div>
           </div>
         </section>
 

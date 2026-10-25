@@ -1,3 +1,10 @@
+import { AiReplier } from './services/ai-replier'
+import { normalizeAi } from './store/app-state'
+
+/** AI 分身的间接挂载点：chat/groups 先建、AiReplier 后挂（避免循环依赖） */
+const aiPortRef: {
+  current: import('./services/ai-replier').AiPortHolder['current']
+} = { current: null }
 import { RangeScanScheduler } from './services/range-scan'
 import { truncateUtf8 } from './util/utf8'
 import { DiagnosticsService, diagnosticEnvironment } from './services/diagnostics'
@@ -1233,6 +1240,7 @@ if (!gotLock) {
         groupRepo,
         messenger,
         peerClock,
+        aiReplier: aiPortRef,
         isOnline: (peerId) => registry?.get(peerId)?.online === true,
         probe: (peerId) => {
           discovery?.probeNode(peerId) // 打开会话 → 探活（F-DISC-8）
@@ -1324,6 +1332,7 @@ if (!gotLock) {
 
       groups = new GroupsService({
         selfId: state.nodeId,
+        aiReplier: aiPortRef,
         messenger,
         convRepo: new ConvRepo(db),
         msgRepo: new MsgRepo(db),
@@ -1868,6 +1877,7 @@ if (!gotLock) {
       setupDone: c?.setupDone ?? true,
       fileDir: c?.fileDir ?? '',
       defaultFileDir: defaultFileDir(),
+      ai: normalizeAi(c?.ai),
       notifications: c?.notifications !== false,
       manualPeers: c?.manualPeers ?? [],
       scanRanges: c?.scanRanges ?? [],
@@ -1911,6 +1921,18 @@ if (!gotLock) {
       s.fileDir.length <= 1024
     )
   }
+
+  aiPortRef.current = new AiReplier({
+    selfName: () => appState?.config.nick ?? '',
+    nameOf: (nodeId) => resolvePeerDisplayName(nodeId),
+    config: () => normalizeAi(appState?.config.ai),
+    sendToPeer: (peerId, text) => {
+      chat?.sendText(peerId, text)
+    },
+    sendToGroup: (groupId, text) => {
+      groups?.sendText(groupId, text)
+    }
+  })
 
   ipcMain.handle(IpcChannels.settingsGet, (): SettingsView => settingsView())
 
@@ -2534,6 +2556,7 @@ if (!gotLock) {
       const clean: AppSettingsPatch = {}
       const previousScanRanges = new Set(appState.config.scanRanges)
       if (typeof p.notifications === 'boolean') clean.notifications = p.notifications
+      if (p.ai && typeof p.ai === 'object') clean.ai = normalizeAi(p.ai)
       if (Array.isArray(p.manualPeers)) {
         clean.manualPeers = p.manualPeers
           .filter((s): s is string => typeof s === 'string')

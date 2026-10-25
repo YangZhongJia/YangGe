@@ -41,6 +41,13 @@ import {
 // 不依赖 Electron —— index.ts 负责把事件桥接到窗口。
 
 export interface ChatDeps {
+  /** AI 分身（可选；构造后再挂实现，避免循环依赖） */
+  aiReplier?: {
+    current: {
+      onPeerText(from: string, text: string): void
+      onGroupMention(groupId: string, from: string, text: string): void
+    } | null
+  }
   selfId: string
   convRepo: ConvRepo
   msgRepo: MsgRepo
@@ -346,6 +353,7 @@ export class ChatService extends EventEmitter {
       status: 'sent'
     })
     if (!inserted) return // 持久化去重之外的最后一道闸（messages 主键幂等）
+    if (payload.text) this.deps.aiReplier?.current?.onPeerText(env.from, payload.text)
     this.deps.convRepo.bump(convId, ts)
     this.deps.convRepo.incUnread(convId)
     const row = this.deps.msgRepo.get(env.id)

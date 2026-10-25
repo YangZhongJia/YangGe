@@ -374,12 +374,14 @@ const replyMeta = computed((): ReplyMeta => {
 .row.peer .bubble {
   background: var(--bubble-peer);
   border-color: var(--line);
+  border-bottom-left-radius: 6px;
   box-shadow: var(--shadow-soft);
 }
 .row.mine .bubble {
-  background: var(--bubble-mine);
+  background: linear-gradient(180deg, #6a5cff 0%, var(--bubble-mine) 55%, #5244e0 100%);
   border-color: transparent;
-  box-shadow: none;
+  border-bottom-right-radius: 6px;
+  box-shadow: 0 2px 6px rgba(88, 80, 236, 0.28);
   color: #ffffff;
 }
 .row.mine .text-link {

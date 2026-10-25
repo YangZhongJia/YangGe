@@ -338,10 +338,12 @@ function confirmRemove(): void {
 .badge {
   min-width: 18px;
   height: 18px;
-  border-radius: var(--radius-panel);
+  border-radius: var(--radius-pill);
   background: var(--badge);
   color: #fff;
   font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
   display: grid;
   place-items: center;
   padding: 0 5px;

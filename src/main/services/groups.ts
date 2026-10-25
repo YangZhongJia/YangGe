@@ -30,6 +30,13 @@ import { isPkGame, pkPreview, type PkGame, type PkRefView, type PkResult } from 
 // 事件：'message' / 'convs' / 'group'（与 chat/files 同构，index 桥接到窗口）。
 
 export interface GroupsDeps {
+  /** AI 分身（可选；构造后再挂实现，避免循环依赖） */
+  aiReplier?: {
+    current: {
+      onPeerText(from: string, text: string): void
+      onGroupMention(groupId: string, from: string, text: string): void
+    } | null
+  }
   selfId: string
   messenger: Messenger
   convRepo: ConvRepo
@@ -362,6 +369,8 @@ export class GroupsService extends EventEmitter {
         Array.isArray(payload.mentions) &&
         (payload.mentions.includes(this.deps.selfId) || payload.mentions.includes(MENTION_ALL))
       if (mentioned) this.deps.convRepo.markMentioned(convId)
+      if (mentioned && payload.text)
+        this.deps.aiReplier?.current?.onGroupMention(payload.groupId, env.from, payload.text)
       const row = this.deps.msgRepo.get(env.id)
       if (row) {
         const view = msgRowToView(row)

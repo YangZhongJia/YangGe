@@ -25,17 +25,19 @@ function readPngHeader(path: URL): { width: number; height: number; bitDepth: nu
 }
 
 describe('消息与文件视觉统一', () => {
-  it('文字气泡移除顶部高光（Iris：己方实色靛蓝无阴影）', () => {
+  it('文字气泡移除顶部高光（Iris：己方靛蓝渐变白字带柔影）', () => {
     expect(ruleBody(messageSource, '.row.peer .bubble')).not.toContain('--highlight-edge')
     expect(ruleBody(messageSource, '.row.mine .bubble')).not.toContain('--highlight-edge')
-    expect(ruleBody(messageSource, '.row.mine .bubble')).toContain('box-shadow: none')
+    expect(ruleBody(messageSource, '.row.mine .bubble')).toContain('linear-gradient')
     expect(ruleBody(messageSource, '.row.mine .bubble')).toContain('color: #ffffff')
   })
 
-  it('文字气泡使用 16px 均匀圆角且无尾尖，文件卡保持面板圆角', () => {
+  it('文字气泡 16px 圆角 + 靠头像侧底角收小（无尾尖），文件卡保持面板圆角', () => {
     expect(ruleBody(messageSource, '.bubble')).toContain('border-radius: 16px')
     expect(messageSource).not.toContain('.bubble::before')
     expect(messageSource).not.toContain('border-top-left-radius')
+    expect(ruleBody(messageSource, '.row.peer .bubble')).toContain('border-bottom-left-radius: 6px')
+    expect(ruleBody(messageSource, '.row.mine .bubble')).toContain('border-bottom-right-radius: 6px')
     expect(fileCardSource).toContain('border-radius: var(--radius-panel)')
   })
 

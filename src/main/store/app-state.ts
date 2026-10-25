@@ -39,6 +39,8 @@ export interface ConfigFile {
   fileDir: string
   /** 新消息系统通知开关 */
   notifications: boolean
+  /** AI 分身（大模型代回，默认关闭） */
+  ai: AiReplierConfig
   /** 手动添加的节点（"ip" 或 "ip:port"），启动时逐个探测（F-DISC-2 第一板斧） */
   manualPeers: string[]
   /** 网段扫描 CIDR 列表（F-DISC-2 第二板斧） */
@@ -227,6 +229,7 @@ export function saveAppSettings(
     Pick<
       ConfigFile,
       | 'notifications'
+      | 'ai'
       | 'manualPeers'
       | 'scanRanges'
       | 'udpPort'
@@ -250,6 +253,7 @@ export function saveAppSettings(
   if (!state.config.scanRangeSources) state.config.scanRangeSources = {}
   if (!state.config.ignoredScanRanges) state.config.ignoredScanRanges = {}
   if (patch.notifications !== undefined) state.config.notifications = patch.notifications
+  if (patch.ai !== undefined) state.config.ai = normalizeAi(patch.ai)
   if (patch.manualPeers !== undefined) state.config.manualPeers = patch.manualPeers
   if (patch.scanRanges !== undefined) {
     const now = Date.now()
@@ -341,6 +345,47 @@ export function markScanRangeAutoScanned(state: AppState, cidr: string, at = Dat
   atomicWriteJson(state.configPath, state.config)
 }
 
+export interface AiReplierConfig {
+  /** 总开关（默认关；关闭时不发起任何外部请求） */
+  enabled: boolean
+  /** OpenAI 兼容接口地址；可指向内网 Ollama/vLLM 或云端 API */
+  baseUrl: string
+  apiKey: string
+  model: string
+  /** 人设提示词；空 = 默认办公助手 */
+  persona: string
+  /** 触发范围：单聊新消息 */
+  replyPrivate: boolean
+  /** 触发范围：群里被 @（含 @所有人） */
+  replyGroup: boolean
+}
+
+export const DEFAULT_AI_REPLIER: AiReplierConfig = {
+  enabled: false,
+  baseUrl: '',
+  apiKey: '',
+  model: '',
+  persona: '',
+  replyPrivate: true,
+  replyGroup: true
+}
+
+export function normalizeAi(raw: unknown): AiReplierConfig {
+  if (!raw || typeof raw !== 'object') return { ...DEFAULT_AI_REPLIER }
+  const r = raw as Record<string, unknown>
+  const bool = (v: unknown, d: boolean): boolean => (typeof v === 'boolean' ? v : d)
+  const str = (v: unknown): string => (typeof v === 'string' ? v : '')
+  return {
+    enabled: bool(r.enabled, false),
+    baseUrl: str(r.baseUrl),
+    apiKey: str(r.apiKey),
+    model: str(r.model),
+    persona: str(r.persona),
+    replyPrivate: bool(r.replyPrivate, true),
+    replyGroup: bool(r.replyGroup, true)
+  }
+}
+
 export function loadAppState(
   dataDir: string,
   appVersion: string,
@@ -377,6 +422,7 @@ export function loadAppState(
       setupDone: false,
       fileDir: '',
       notifications: true,
+      ai: { ...DEFAULT_AI_REPLIER },
       manualPeers: [],
       scanRanges: [],
       scanRangeSources: {},

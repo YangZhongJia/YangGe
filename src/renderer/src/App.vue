@@ -982,6 +982,17 @@ onUnmounted(() => {
   color: var(--primary);
   box-shadow: none;
 }
+.rail-btn.active::before {
+  content: '';
+  position: absolute;
+  left: -14px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 18px;
+  border-radius: 2px;
+  background: var(--primary);
+}
 .rail-btn:active:not(.is-disabled) {
   transform: scale(0.96);
   background: var(--rail-active);

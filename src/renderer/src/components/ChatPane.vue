@@ -3641,6 +3641,11 @@ async function onDrop(event: DragEvent): Promise<void> {
   box-shadow: var(--shadow-soft);
   position: relative;
   z-index: 3;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+.input-area:focus-within {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.13), var(--shadow-soft);
 }
 /* 输入框高度拖拽热区：铺满顶部，仅通过 ns-resize 光标提示。 */
 .input-resizer {
