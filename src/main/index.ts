@@ -39,7 +39,7 @@ import {
 } from 'node:fs'
 import { copyFile, mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
-import { basename, extname, join, resolve } from 'node:path'
+import { basename, dirname, extname, join, resolve } from 'node:path'
 import {
   DEFAULT_CAPTURE_SHORTCUT,
   DEFAULT_SHOWHIDE_SHORTCUT,
@@ -189,8 +189,11 @@ import {
   findLocalUpdatePackage,
   pickUpdateSource,
   shouldServeUpdateRequest,
+  updatePackageVersionFromName,
   UpdateRequestGate
 } from './services/updater'
+import { compareSemver } from './util/semver'
+import { spawn } from 'node:child_process'
 
 // Win7（NT 6.1）终端为统一 VM 部署，虚拟显卡驱动不可靠；UOS/Debian 目标机多国产 GPU 或旧驱动，
 // GPU 进程频报 ContextResult::kTransientFailure —— 两者默认软渲染（tech-design §9，决议 #55/#231）
@@ -904,6 +907,33 @@ if (!gotLock) {
     }
   }
 
+  /** 已接收完成、可一键安装的更新包（决议 #166 第三步）；安装是一次性消费。 */
+  let readyUpdate: { version: string; path: string } | null = null
+
+  /** 更新包接收完成：版本高于本机才提示安装，避免陈旧 / 改名包误触。 */
+  function onReadyUpdatePackage(path: string): void {
+    if (!appState) return
+    const version = updatePackageVersionFromName(basename(path))
+    if (!version || compareSemver(version, appState.profile.ver) <= 0) return
+    readyUpdate = { version, path }
+    mainWindow?.webContents.send(IpcEvents.updatePackageReady, { version })
+  }
+
+  /** 静默安装就绪包并退出（nsis per-user 免管理员授权）：安装器 detached 自跑，本进程退出让位。 */
+  function installReadyUpdate(): boolean {
+    const ready = readyUpdate
+    if (!ready) return false
+    try {
+      const child = spawn(ready.path, ['/S'], { detached: true, stdio: 'ignore', cwd: dirname(ready.path) })
+      child.unref()
+      readyUpdate = null
+      app.quit()
+      return true
+    } catch {
+      return false
+    }
+  }
+
   function currentProtocolPlatform(): Platform {
     if (process.platform === 'win32') return 'win'
     if (process.platform === 'darwin') return 'mac'
@@ -1304,6 +1334,7 @@ if (!gotLock) {
         getUpdateDir: updatesDir,
         authorizeUpdateOffer: (peerId, name, totalSize) =>
           updateRequestGate.consume(peerId, name, totalSize),
+        onUpdatePackageReady: onReadyUpdatePackage,
         authorizeShareUpload: (peerId, totalSize) =>
           share?.handlePut(peerId, totalSize, resolvePeerDisplayName(peerId) || peerId) ?? null,
         authorizeShareDownload: (peerId) => {
@@ -1783,6 +1814,8 @@ if (!gotLock) {
   ipcMain.handle(IpcChannels.updateCheck, (): UpdateAvailability | null => currentUpdateAvailability())
 
   ipcMain.handle(IpcChannels.updateRequest, (): Promise<boolean> => requestUpdatePackage())
+
+  ipcMain.handle(IpcChannels.updateInstall, (): boolean => installReadyUpdate())
 
   ipcMain.handle(IpcChannels.peersProbe, (_event, nodeId: unknown): boolean => {
     if (typeof nodeId !== 'string' || nodeId.length === 0 || nodeId.length > 64) return false

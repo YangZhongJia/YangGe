@@ -87,7 +87,7 @@ const updateStore = useUpdateStore()
 const showUpdatePanel = ref(false)
 const updateRequesting = ref(false)
 const updateRequestMsg = ref('')
-const updateHelpText = computed(() => (tr('将从内网同平台节点请求安装包，不访问外网；同步更新只发起索包，不会静默安装。')))
+const updateHelpText = computed(() => (tr('将从内网同平台节点请求安装包，不访问外网；接收完成后点击「重启并完成更新」自动安装。')))
 const updateHintLabel = computed(() =>
   updateStore.available
     ? tr('内网有新版 v{0}（来自 {1}）', { 0: updateStore.available.version, 1: updateStore.available.fromName })
@@ -103,11 +103,24 @@ async function requestUpdatePackage(): Promise<void> {
   updateRequestMsg.value = ''
   try {
     const ok = await window.pantry.requestUpdate()
-    updateRequestMsg.value = ok ? tr('请求已发出。安装包将自动保存到「阳鸽数据目录 / data / updates」，下载完成后双击运行即可升级。') : tr('请求未送达，请稍后重试。')
+    updateRequestMsg.value = ok ? tr('请求已发出，正在接收安装包…') : tr('请求未送达，请稍后重试。')
   } catch {
     updateRequestMsg.value = tr('请求更新失败，请稍后重试。')
   } finally {
     updateRequesting.value = false
+  }
+}
+const updateInstalling = ref(false)
+async function installReadyUpdate(): Promise<void> {
+  if (updateInstalling.value) return
+  updateInstalling.value = true
+  try {
+    const ok = await window.pantry.installUpdate()
+    if (!ok) updateRequestMsg.value = tr('安装失败，请手动运行数据目录 data/updates 里的安装包。')
+  } catch {
+    updateRequestMsg.value = tr('安装失败，请手动运行数据目录 data/updates 里的安装包。')
+  } finally {
+    updateInstalling.value = false
   }
 }
 const info = ref<AppInfo | null>(null)
@@ -574,8 +587,24 @@ onUnmounted(() => {
       <div class="update-pop-ver">v{{ updateStore.available.version }}</div>
       <div class="update-pop-from">{{ tr('来自 {0}', { 0: updateStore.available.fromName }) }}</div>
       <div class="update-pop-cur">{{ tr('当前版本 v{0}', { 0: updateStore.available.currentVersion }) }}</div>
-      <p v-if="updateRequestMsg" class="update-pop-hint">{{ updateRequestMsg }}</p>
+      <p v-if="updateStore.packageReady" class="update-pop-hint" aria-live="polite">
+        {{ tr('安装包已就绪，点击即自动安装并重启。') }}
+      </p>
+      <p v-else-if="updateRequestMsg" class="update-pop-hint" aria-live="polite">{{ updateRequestMsg }}</p>
       <NButton
+        v-if="updateStore.packageReady"
+        type="primary"
+        size="small"
+        :loading="updateInstalling"
+        class="update-pop-ok"
+        :disabled="updateInstalling"
+        :aria-busy="updateInstalling"
+        @click="installReadyUpdate"
+      >
+        {{ updateInstalling ? tr('安装中') : tr('重启并完成更新') }}
+      </NButton>
+      <NButton
+        v-else
         type="primary"
         size="small"
         :loading="updateRequesting"

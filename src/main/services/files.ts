@@ -152,6 +152,8 @@ export interface FilesDeps {
   getUpdateDir?: () => string
   /** 用户确认更新请求后，对来源、包名与大小做一次性授权消费。 */
   authorizeUpdateOffer?: (peerId: string, name: string, totalSize: number) => boolean
+  /** 更新包接收完成（决议 #166 第三步）：入参为落盘安装包完整路径，仅 purpose:"update" 且 done 时回调。 */
+  onUpdatePackageReady?: (path: string) => void
   /**
    * 本机刚向该节点发过 share{op:"get"} 才允许接收其 share-get 传输（决议 #275）。
    * 命中返回落盘目录并消费授权，未授权返回 null。
@@ -819,6 +821,11 @@ export class FilesService extends EventEmitter {
         inc.queued = false
         this.deps.transferRepo.updateProgress(transferId, inc.bytesDone)
         this.finish(transferId, 'done')
+        // 更新包到货（决议 #166 第三步）：通知主进程「可一键安装重启」
+        const doneRow = this.deps.transferRepo.get(transferId)
+        if (doneRow && this.blobPurpose(doneRow) === 'update' && this.deps.onUpdatePackageReady) {
+          this.deps.onUpdatePackageReady(savedPath)
+        }
         this.sendResult(inc.peerId, { op: 'result', transferId, status: 'delivered' })
       })
       .catch((err: Error & { stage?: string }) => {

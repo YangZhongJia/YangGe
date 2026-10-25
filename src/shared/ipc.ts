@@ -133,7 +133,9 @@ export const IpcChannels = {
   /** 局域网自更新：查询当前可用更新源（决议 #166） */
   updateCheck: 'update:check',
   /** 局域网自更新：向当前最佳更新源请求安装包（决议 #170） */
-  updateRequest: 'update:request'
+  updateRequest: 'update:request',
+  /** 局域网自更新：安装包已就绪后静默安装并重启（决议 #166 第三步） */
+  updateInstall: 'update:install'
 } as const
 
 /** main → renderer 的事件推送 */
@@ -173,6 +175,8 @@ export const IpcEvents = {
   winMaximizeChanged: 'win:maximized-changed',
   /** 局域网自更新：可用更新源变化（决议 #166） */
   updateAvailable: 'update:available',
+  /** 局域网自更新：安装包接收完成，可一键安装重启（决议 #166 第三步） */
+  updatePackageReady: 'update:package-ready',
   /** 文件柜窗口已开着时再次请求打开某位同事的柜子（决议 #283） */
   cabinetFocusPeer: 'cabinet:focus-peer'
 } as const
@@ -231,6 +235,12 @@ export interface UpdateAvailability {
   version: string
   /** 本机当前版本 */
   currentVersion: string
+}
+
+/** 安装包接收完成，可一键静默安装并重启（决议 #166 第三步） */
+export interface UpdatePackageReady {
+  /** 安装包内解析出的版本（高于本机才推送） */
+  version: string
 }
 
 export interface NetState {
@@ -823,8 +833,12 @@ export interface PantryApi {
   checkUpdate(): Promise<UpdateAvailability | null>
   /** 局域网自更新：向当前最佳更新源请求安装包，返回请求是否已送达 */
   requestUpdate(): Promise<boolean>
+  /** 局域网自更新：安装已就绪的安装包（静默装完自动退出重启）；无就绪包返回 false */
+  installUpdate(): Promise<boolean>
   /** 局域网自更新：可用更新源变化推送（决议 #166） */
   onUpdateAvailable(listener: (info: UpdateAvailability | null) => void): () => void
+  /** 局域网自更新：安装包接收完成推送（决议 #166 第三步） */
+  onUpdatePackageReady(listener: (info: UpdatePackageReady) => void): () => void
   /** 按需探活（F-DISC-8）；返回是否已发出 */
   probePeer(nodeId: string): Promise<boolean>
   listConversations(): Promise<ConversationView[]>

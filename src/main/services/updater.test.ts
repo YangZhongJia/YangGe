@@ -7,6 +7,7 @@ import {
   matchesUpdatePackageName,
   pickUpdateSource,
   shouldServeUpdateRequest,
+  updatePackageVersionFromName,
   UpdateRequestGate
 } from './updater'
 import type { SourceCandidate } from './updater'
@@ -161,5 +162,18 @@ describe('UpdateRequestGate', () => {
     expect(canceled).toBeGreaterThan(newToken)
     gate.cancel(canceled)
     expect(gate.consume('node-d', 'YangGe-0.31.0-win-x64-setup.exe', 1024, 4_100)).toBe(false)
+  })
+})
+
+describe('安装包文件名解析版本（决议 #166 第三步）', () => {
+  it('解析 win 安装包版本；带预发布段也支持', () => {
+    expect(updatePackageVersionFromName('YangGe-1.3.3-win-x64-setup.exe')).toBe('1.3.3')
+    expect(updatePackageVersionFromName('YangGe-1.4.0-beta.2-win-arm64-setup.exe')).toBe('1.4.0-beta.2')
+  })
+
+  it('非安装包名 / 改名残留返回 null', () => {
+    expect(updatePackageVersionFromName('YangGe-1.3.3-win-x64-setup.exe.bak')).toBe(null)
+    expect(updatePackageVersionFromName('报告.pdf')).toBe(null)
+    expect(updatePackageVersionFromName('YangGe-1.3.3-win-x64-setup (2).exe')).toBe(null)
   })
 })

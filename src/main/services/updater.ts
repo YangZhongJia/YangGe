@@ -166,3 +166,11 @@ export function matchesUpdatePackageName(
   }
   return false
 }
+
+const WIN_SETUP_PACKAGE_RE = /^YangGe-(\d+(?:\.\d+)+[^\\/]*)-win-(x64|ia32|arm64)-setup\.exe$/
+
+/** 从安装包文件名解析版本号（决议 #166 第三步：收包后提示可安装）；非安装包名返回 null。 */
+export function updatePackageVersionFromName(name: string): string | null {
+  const match = WIN_SETUP_PACKAGE_RE.exec(name)
+  return match ? match[1] : null
+}
