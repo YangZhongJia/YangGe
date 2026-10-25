@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 256 256" role="img" aria-label="阳鸽 · 安然">
-  <rect x="8" y="8" width="240" height="240" rx="56" fill="#34335C"/>
-  <path fill="#FFF" d="M49 171 31 153 73 153C81 145 87 132 91 117L105 78C111 60 122 49 139 49 157 49 171 62 173 79L192 89 174 96C173 119 180 132 176 151 171 178 148 196 119 196 92 196 69 187 49 171Z"/>
-  <path d="M89 132C99 158 120 167 145 156" fill="none" stroke="#34335C" stroke-width="8" stroke-linecap="round"/>
-  <circle cx="153" cy="79" r="3.5" fill="#34335C"/>
-</svg>
