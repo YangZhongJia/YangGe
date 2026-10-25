@@ -5,7 +5,7 @@ import monoLogoUrl from '../assets/brand/icon-macos-menubar-outline.svg?url'
 import appIconUrl from '../assets/brand/teahouse-app-icon.png?url'
 
 // 茶话间品牌 logo（决议 #107/#226）：界面彩色品牌位统一复用透明位图，
-// macOS 菜单栏等单色场景继续使用可由系统着色的轮廓 SVG。
+// macOS 菜单栏等单色场景继续使用可由系统着色的单色 SVG。
 const props = withDefaults(
   defineProps<{
     variant?: 'icon' | 'color' | 'mono'
