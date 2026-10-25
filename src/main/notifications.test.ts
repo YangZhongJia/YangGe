@@ -3,7 +3,8 @@ import type { MessageView } from '../shared/ipc'
 import {
   incomingNotificationOptions,
   messageNotificationPreview,
-  notificationIconPath
+  notificationIconPath,
+  suppressIncomingToast
 } from './notifications'
 
 function makeMessage(patch: Partial<MessageView>): MessageView {
@@ -99,5 +100,26 @@ describe('notification helpers', () => {
         appPath: '/repo'
       })
     ).toBeUndefined()
+  })
+})
+
+describe('新消息免打扰判定（窗口聚焦且正在看该会话才免弹）', () => {
+  const gate = (focused: boolean, visible: boolean, convId: string, attendedConvId: string | null) =>
+    suppressIncomingToast({ focused, visible, convId, attendedConvId })
+
+  it('聚焦且正在看的正是该会话：免打扰（正文就在眼前）', () => {
+    expect(gate(true, true, 'single:p1', 'single:p1')).toBe(true)
+    expect(gate(true, true, 'group:g1', 'group:g1')).toBe(true)
+  })
+
+  it('聚焦但消息来自其他会话：照常弹通知（微信式）', () => {
+    expect(gate(true, true, 'single:p2', 'single:p1')).toBe(false)
+    expect(gate(true, true, 'group:g1', 'single:p1')).toBe(false)
+  })
+
+  it('未聚焦、不可见（最小化 / 托盘）或尚无注视会话：照常弹通知', () => {
+    expect(gate(false, true, 'single:p1', 'single:p1')).toBe(false)
+    expect(gate(true, false, 'single:p1', 'single:p1')).toBe(false)
+    expect(gate(true, true, 'single:p1', null)).toBe(false)
   })
 })

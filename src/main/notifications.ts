@@ -27,6 +27,22 @@ export interface IncomingNotificationOptions {
 
 const MAX_NOTIFICATION_BODY_CHARS = 60
 
+export interface IncomingToastGateInput {
+  focused: boolean
+  visible: boolean
+  convId: string
+  /** 用户正在看的会话（renderer 在窗口有人看时对当前会话调 convMarkRead，决议 #220 的镜像信号） */
+  attendedConvId: string | null
+}
+
+/**
+ * 新消息是否免弹系统通知（F-SYS-2，微信式）：窗口聚焦且用户正在看的正是该会话时免打扰
+ * （正文就在眼前，只留应用内呈现）；失焦 / 最小化 / 聚焦但消息来自其他会话时照常弹通知。
+ */
+export function suppressIncomingToast(input: IncomingToastGateInput): boolean {
+  return input.focused && input.visible && input.convId === input.attendedConvId
+}
+
 export function notificationIconPath(input: NotificationIconPathInput): string | undefined {
   if (input.platform === 'darwin') return undefined
   const path = input.platform === 'win32' ? win32 : posix

@@ -137,7 +137,8 @@ import { fitImageViewerContent } from './windows/image-viewer-sizing'
 import { showWindowForeground } from './windows/foreground'
 import {
   incomingNotificationOptions,
-  notificationIconPath
+  notificationIconPath,
+  suppressIncomingToast
 } from './notifications'
 import { StickerRepo } from './store/sticker-repo'
 import { buildCidrHostPlan, ipInCidr, normalizeCidr, parseCidr } from './net/cidr'
@@ -1550,13 +1551,23 @@ if (!gotLock) {
     }
   }
 
-  /** 新消息系统通知（F-SYS-2）：窗口聚焦时不打扰（应用内角标已可见）；点击直达会话 */
+  // renderer 对“窗口有人看时当前打开的会话”调 convMarkRead（决议 #220 的镜像信号），
+  // 主进程据此知道用户正盯着哪个会话：聚焦时只对眼前这个会话免打扰。
+  let attendedConvId: string | null = null
+
+  /** 新消息系统通知（F-SYS-2）：窗口聚焦且正在看的正是该会话时免打扰（正文就在眼前）；
+   *  聚焦但消息来自其他会话、或窗口最小化 / 失焦时照常弹通知，微信式点击直达会话 */
   function notifyIncoming(msg: MessageView): void {
     if (msg.isMine) return
     if (msg.kind === 'system') return
     if (appState && appState.config.notifications === false) return
     if (chat?.isMuted(msg.convId)) return
-    if (mainWindow && mainWindow.isFocused() && mainWindow.isVisible()) return
+    if (mainWindow && suppressIncomingToast({
+      focused: mainWindow.isFocused(),
+      visible: mainWindow.isVisible(),
+      convId: msg.convId,
+      attendedConvId
+    })) return
     if (!Notification.isSupported()) return
 
     const senderNick = registry?.get(msg.senderId)?.profile.nick ?? tr('新成员')
@@ -1582,7 +1593,9 @@ if (!gotLock) {
       mainWindow?.webContents.send(IpcEvents.openConv, msg.convId)
     })
     notification.show()
-    if (process.platform === 'win32') mainWindow?.flashFrame(true) // 任务栏闪烁提醒
+    if (process.platform === 'win32' && !(mainWindow?.isFocused() && mainWindow.isVisible())) {
+      mainWindow?.flashFrame(true) // 任务栏闪烁提醒（窗口已在前台时无需闪）
+    }
   }
 
   function createMainWindow(): void {
@@ -1784,7 +1797,10 @@ if (!gotLock) {
   })
 
   ipcMain.handle(IpcChannels.convMarkRead, (_event, convId: unknown) => {
-    if (typeof convId === 'string' && convId.length <= 128) chat?.markRead(convId)
+    if (typeof convId === 'string' && convId.length <= 128) {
+      attendedConvId = convId
+      chat?.markRead(convId)
+    }
   })
 
   ipcMain.handle(IpcChannels.convPin, (_event, convId: unknown, pinned: unknown) => {
