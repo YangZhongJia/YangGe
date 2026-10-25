@@ -99,7 +99,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          deb=$(ls release/Teahouse-*-linux-amd64.deb)
+          deb=$(ls release/YangGe-*-linux-amd64.deb)
           mkdir -p /tmp/deb-verify
           data=$(ar t "$deb" | grep '^data\.tar')
           ar p "$deb" "$data" > "/tmp/deb-verify/$data"
@@ -120,7 +120,7 @@ jobs:
           set -euo pipefail
           cd release
           shopt -s nullglob
-          files=(Teahouse-*-linux-amd64.deb Teahouse-*-linux-x86_64.AppImage)
+          files=(YangGe-*-linux-amd64.deb YangGe-*-linux-x86_64.AppImage)
           if [ "${#files[@]}" -lt 2 ]; then
             ls -la
             echo "Linux 产物数量不足，期望 deb 与 AppImage 各一个。" >&2
@@ -135,8 +135,8 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           path: |
-            release/Teahouse-*-linux-amd64.deb
-            release/Teahouse-*-linux-x86_64.AppImage
+            release/YangGe-*-linux-amd64.deb
+            release/YangGe-*-linux-x86_64.AppImage
             release/SHA256SUMS-debian10-uos20-x64.txt
 
   linux-debian10-uos20-arm64:
@@ -209,8 +209,8 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           path: |
-            release/Teahouse-*-linux-arm64.deb
-            release/Teahouse-*-linux-arm64.AppImage
+            release/YangGe-*-linux-arm64.deb
+            release/YangGe-*-linux-arm64.AppImage
             release/SHA256SUMS-debian10-uos20-arm64.txt
 
   windows7-x64:
@@ -268,7 +268,7 @@ jobs:
         shell: pwsh
         run: |
           $files = Get-ChildItem release -File | Where-Object {
-            $_.Name -like 'Teahouse-*-win-x64-setup.exe' -or $_.Name -like 'Teahouse-*-win-x64-portable.exe'
+            $_.Name -like 'YangGe-*-win-x64-setup.exe' -or $_.Name -like 'YangGe-*-win-x64-portable.exe'
           }
           if ($files.Count -lt 2) {
             Get-ChildItem release -File | Format-Table Name, Length
@@ -283,12 +283,12 @@ jobs:
       - name: 上传 Windows 产物
         uses: actions/upload-artifact@v4
         with:
-          name: pantry-win7-x64
+          name: yangge-win7-x64
           if-no-files-found: error
           compression-level: 0
           path: |
-            release/Teahouse-*-win-x64-setup.exe
-            release/Teahouse-*-win-x64-portable.exe
+            release/YangGe-*-win-x64-setup.exe
+            release/YangGe-*-win-x64-portable.exe
             release/SHA256SUMS-win7-x64.txt
 
   windows7-ia32:
@@ -370,7 +370,7 @@ jobs:
         shell: pwsh
         run: |
           $files = Get-ChildItem release -File | Where-Object {
-            $_.Name -like 'Teahouse-*-win-ia32-setup.exe' -or $_.Name -like 'Teahouse-*-win-ia32-portable.exe'
+            $_.Name -like 'YangGe-*-win-ia32-setup.exe' -or $_.Name -like 'YangGe-*-win-ia32-portable.exe'
           }
           if ($files.Count -lt 2) {
             Get-ChildItem release -File | Format-Table Name, Length
@@ -385,16 +385,16 @@ jobs:
       - name: 上传 Windows ia32 产物
         uses: actions/upload-artifact@v4
         with:
-          name: pantry-win7-ia32
+          name: yangge-win7-ia32
           if-no-files-found: error
           compression-level: 0
           path: |
-            release/Teahouse-*-win-ia32-setup.exe
-            release/Teahouse-*-win-ia32-portable.exe
+            release/YangGe-*-win-ia32-setup.exe
+            release/YangGe-*-win-ia32-portable.exe
             release/SHA256SUMS-win7-ia32.txt
 
   macos-arm64:
-    name: macOS arm64（Apple Silicon）
+    name: macOS arm64 + x64
     runs-on: macos-14
     steps:
       - name: 拉取源码
@@ -442,24 +442,26 @@ jobs:
           set -euo pipefail
           cd release
           shopt -s nullglob
-          files=(Teahouse-*-mac-arm64.dmg Teahouse-*-mac-arm64.zip)
-          if [ "${#files[@]}" -lt 2 ]; then
+          files=(YangGe-*-mac-arm64.dmg YangGe-*-mac-arm64.zip YangGe-*-mac-x64.dmg YangGe-*-mac-x64.zip)
+          if [ "${#files[@]}" -lt 4 ]; then
             ls -la
-            echo "macOS 产物数量不足，期望 dmg 与 zip 各一个。" >&2
+            echo "macOS 产物数量不足，期望 arm64/x64 的 dmg 与 zip 各一个。" >&2
             exit 1
           fi
-          shasum -a 256 "${files[@]}" > SHA256SUMS-mac-arm64.txt
+          shasum -a 256 "${files[@]}" > SHA256SUMS-mac.txt
 
       - name: 上传 macOS 产物
         uses: actions/upload-artifact@v4
         with:
-          name: pantry-mac-arm64
+          name: yangge-mac
           if-no-files-found: error
           compression-level: 0
           path: |
-            release/Teahouse-*-mac-arm64.dmg
-            release/Teahouse-*-mac-arm64.zip
-            release/SHA256SUMS-mac-arm64.txt
+            release/YangGe-*-mac-arm64.dmg
+            release/YangGe-*-mac-arm64.zip
+            release/YangGe-*-mac-x64.dmg
+            release/YangGe-*-mac-x64.zip
+            release/SHA256SUMS-mac.txt
 
   publish-github-release:
     name: 发布 GitHub Release
@@ -646,21 +648,23 @@ jobs:
             echo ""
             echo "| 平台 / Platform | 文件 / File | 说明 / Description |"
             echo "|---|---|---|"
-            echo "| Windows 7 SP1+ x64 | \`Teahouse-${VERSION}-win-x64-setup.exe\` | NSIS 安装包 / installer |"
-            echo "| Windows 7 SP1+ x64 | \`Teahouse-${VERSION}-win-x64-portable.exe\` | 便携版 / portable |"
-            echo "| Windows 7 SP1+ 32 位 / 32-bit | \`Teahouse-${VERSION}-win-ia32-setup.exe\` | NSIS 安装包 / installer |"
-            echo "| Windows 7 SP1+ 32 位 / 32-bit | \`Teahouse-${VERSION}-win-ia32-portable.exe\` | 便携版 / portable |"
-            echo "| Debian 10 / UOS 20 x64 | \`Teahouse-${VERSION}-linux-amd64.deb\` | dpkg 安装包 / package |"
-            echo "| Debian 10 / UOS 20 x64 | \`Teahouse-${VERSION}-linux-x86_64.AppImage\` | 通用 AppImage / portable AppImage |"
-            echo "| Debian 10 / UOS 20 arm64 | \`Teahouse-${VERSION}-linux-arm64.deb\` | dpkg 安装包 / package |"
-            echo "| Debian 10 / UOS 20 arm64 | \`Teahouse-${VERSION}-linux-arm64.AppImage\` | 通用 AppImage / portable AppImage |"
-            echo "| macOS arm64（M 系列 / Apple Silicon） | \`Teahouse-${VERSION}-mac-arm64.dmg\` | 磁盘映像 / disk image |"
-            echo "| macOS arm64（M 系列 / Apple Silicon） | \`Teahouse-${VERSION}-mac-arm64.zip\` | 压缩包 / archive |"
+            echo "| Windows 7 SP1+ x64 | \`YangGe-${VERSION}-win-x64-setup.exe\` | NSIS 安装包 / installer |"
+            echo "| Windows 7 SP1+ x64 | \`YangGe-${VERSION}-win-x64-portable.exe\` | 便携版 / portable |"
+            echo "| Windows 7 SP1+ 32 位 / 32-bit | \`YangGe-${VERSION}-win-ia32-setup.exe\` | NSIS 安装包 / installer |"
+            echo "| Windows 7 SP1+ 32 位 / 32-bit | \`YangGe-${VERSION}-win-ia32-portable.exe\` | 便携版 / portable |"
+            echo "| Debian 10 / UOS 20 x64 | \`YangGe-${VERSION}-linux-amd64.deb\` | dpkg 安装包 / package |"
+            echo "| Debian 10 / UOS 20 x64 | \`YangGe-${VERSION}-linux-x86_64.AppImage\` | 通用 AppImage / portable AppImage |"
+            echo "| Debian 10 / UOS 20 arm64 | \`YangGe-${VERSION}-linux-arm64.deb\` | dpkg 安装包 / package |"
+            echo "| Debian 10 / UOS 20 arm64 | \`YangGe-${VERSION}-linux-arm64.AppImage\` | 通用 AppImage / portable AppImage |"
+            echo "| macOS arm64（M 系列 / Apple Silicon） | \`YangGe-${VERSION}-mac-arm64.dmg\` | 磁盘映像 / disk image |"
+            echo "| macOS arm64（M 系列 / Apple Silicon） | \`YangGe-${VERSION}-mac-arm64.zip\` | 压缩包 / archive |"
+            echo "| macOS Intel x64 | \`YangGe-${VERSION}-mac-x64.dmg\` | 磁盘映像 / disk image |"
+            echo "| macOS Intel x64 | \`YangGe-${VERSION}-mac-x64.zip\` | 压缩包 / archive |"
             echo ""
             echo "> 每个平台产物附 SHA-256 校验清单（\`SHA256SUMS-*.txt\`）。"
             echo "> Each platform includes a SHA-256 checksum manifest."
             echo ""
-            echo "> macOS 构建未签名；首次打开需在「系统设置 → 隐私与安全性」中允许，或执行 \`xattr -dr com.apple.quarantine /Applications/Teahouse.app\`。"
+            echo "> macOS 构建未签名；首次打开需在「系统设置 → 隐私与安全性」中允许，或执行 \`xattr -dr com.apple.quarantine /Applications/阳鸽.app\`。"
             echo "> The macOS build is unsigned; approve it under System Settings → Privacy & Security on first launch, or run the command above."
           } > release-notes.md
 

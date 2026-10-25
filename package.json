@@ -96,7 +96,56 @@
         "from": "build/licenses/navigation-icons.txt",
         "to": "licenses/navigation-icons.txt"
       }
-    ]
+    ],
+    "mac": {
+      "icon": "build/icons/pantry-logo-icon.icns",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "YangGe-${version}-${os}-${arch}.${ext}",
+      "category": "public.app-category.social-networking",
+      "extendInfo": {
+        "CFBundleDisplayName": "阳鸽",
+        "CFBundleName": "阳鸽"
+      },
+      "extraResources": [
+        {
+          "from": "build/mac/zh_CN.lproj",
+          "to": "zh_CN.lproj"
+        },
+        {
+          "from": "build/mac/zh-Hans.lproj",
+          "to": "zh-Hans.lproj"
+        }
+      ]
+    },
+    "linux": {
+      "icon": "build/icons/linux",
+      "maintainer": "YangZhongJia <YangZhongJia@users.noreply.github.com>",
+      "target": [
+        "deb",
+        "AppImage"
+      ],
+      "category": "Network",
+      "artifactName": "YangGe-${version}-${os}-${arch}.${ext}",
+      "desktop": {
+        "StartupWMClass": "yangge",
+        "Name": "阳鸽"
+      }
+    }
   },
   "devDependencies": {
     "@electron/rebuild": "3.6.0",
