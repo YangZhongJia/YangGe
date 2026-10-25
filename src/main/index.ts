@@ -2199,6 +2199,12 @@ if (!gotLock) {
       defaultFileDir: defaultFileDir(),
       ai: normalizeAi(c?.ai),
       clipboardFollow: normalizeClipboardFollow(c?.clipboardFollow),
+      accent: (['indigo', 'teal', 'rose', 'amber', 'forest'] as const).includes(c?.accent as never)
+        ? (c?.accent as 'indigo' | 'teal' | 'rose' | 'amber' | 'forest')
+        : 'indigo',
+      chatBackground: (['plain', 'dove', 'dots', 'aurora'] as const).includes(c?.chatBackground as never)
+        ? (c?.chatBackground as 'plain' | 'dove' | 'dots' | 'aurora')
+        : 'plain',
       notifications: c?.notifications !== false,
       manualPeers: c?.manualPeers ?? [],
       scanRanges: c?.scanRanges ?? [],
@@ -2905,7 +2911,15 @@ if (!gotLock) {
       if (typeof p.autoLaunch === 'boolean') clean.autoLaunch = p.autoLaunch
       if (typeof p.closeToTray === 'boolean') clean.closeToTray = p.closeToTray
       if (isLanguage(p.language)) clean.language = p.language
-      if (p.theme === 'light' || p.theme === 'dark') clean.theme = p.theme
+      if (p.theme === 'light' || p.theme === 'dark' || p.theme === 'auto') clean.theme = p.theme
+      const ACCENT_IDS = ['indigo', 'teal', 'rose', 'amber', 'forest'] as const
+      const BG_IDS = ['plain', 'dove', 'dots', 'aurora'] as const
+      if (p.accent !== undefined && (ACCENT_IDS as readonly string[]).includes(p.accent as string)) {
+        clean.accent = p.accent as (typeof ACCENT_IDS)[number]
+      }
+      if (p.chatBackground !== undefined && (BG_IDS as readonly string[]).includes(p.chatBackground as string)) {
+        clean.chatBackground = p.chatBackground as (typeof BG_IDS)[number]
+      }
       if (p.fontScale === 100 || p.fontScale === 110 || p.fontScale === 125) {
         clean.fontScale = p.fontScale
       }

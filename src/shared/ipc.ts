@@ -630,6 +630,8 @@ export interface SettingsView {
   /** AI 分身配置 */
   ai: AiReplierSettings
   clipboardFollow: { enabled: boolean; peerId: string }
+  accent: 'indigo' | 'teal' | 'rose' | 'amber' | 'forest'
+  chatBackground: 'plain' | 'dove' | 'dots' | 'aurora'
   notifications: boolean
   manualPeers: string[]
   scanRanges: string[]
@@ -641,7 +643,7 @@ export interface SettingsView {
   autoLaunch: boolean
   closeToTray: boolean
   language: Language
-  theme: 'light' | 'dark'
+  theme: 'light' | 'dark' | 'auto'
   fontScale: 100 | 110 | 125
   showMessagePreview: boolean
   /** 是否允许私聊直接发送；默认接收落点为“保存位置/联系人名称”。 */
@@ -803,6 +805,8 @@ export interface AppSettingsPatch {
   showMessagePreview?: boolean
   ai?: AiReplierSettings
   clipboardFollow?: { enabled: boolean; peerId: string }
+  accent?: 'indigo' | 'teal' | 'rose' | 'amber' | 'forest'
+  chatBackground?: 'plain' | 'dove' | 'dots' | 'aurora'
   allowDirectFileSend?: boolean
   sound?: SettingsView['sound']
   sendKey?: SettingsView['sendKey']

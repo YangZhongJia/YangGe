@@ -13,9 +13,11 @@ const DEFAULT_ROOT_BUDGETS = {
   // Issue #62：长文件名即时浮层与自适应文件卡新增约 0.6 KiB CSS。
   // 二开 Iris 主题：靛蓝气泡白字、悬浮输入卡与协助/PK 卡片对比度修正新增约 1 KiB CSS。
   // 决议 #323/#324：离开状态点、AI 改写弹层与系统提示新增约 2 KiB CSS。
-  'App.vue': { js: 800 * 1024, css: 127 * 1024 },
-  'SettingsApp.vue': { js: 704 * 1024, css: 40 * 1024 },
-  'CaptureApp.vue': { js: 112 * 1024, css: 12 * 1024 },
+  // 决议 #327：主题色换装色卡、会话背景选项与空态卡片新增约 10 KiB CSS。
+  'App.vue': { js: 800 * 1024, css: 137 * 1024 },
+  // 决议 #327：主题色/背景选择行与跟随目标下拉新增约 2 KiB CSS。
+  'SettingsApp.vue': { js: 704 * 1024, css: 43 * 1024 },
+  'CaptureApp.vue': { js: 112 * 1024, css: 15 * 1024 },
   'ImageViewerApp.vue': { js: 160 * 1024, css: 20 * 1024 }
 }
 

@@ -2468,6 +2468,9 @@ async function onDrop(event: DragEvent): Promise<void> {
         <span v-else-if="isGroup" class="tool-hint">{{ tr('仅在线群成员可接收图片/文件') }}</span>
         <span v-else-if="!peerOnline" class="tool-hint">{{ tr('对方离线，无法发送图片/文件') }}</span>
         <span v-if="!isGroup && peerTyping" class="typing-line" aria-live="polite">
+          <span class="typing-dots" aria-hidden="true">
+            <i></i><i></i><i></i>
+          </span>
           {{ tr('对方正在输入…') }}
         </span>
         <span v-if="!isGroup" class="tool-wrap" :data-tip="tr('发送剪贴板内容，对方直接可粘贴')">
@@ -3817,6 +3820,7 @@ async function onDrop(event: DragEvent): Promise<void> {
   margin: 10px 0 6px;
 }
 .msg-menu {
+  animation: iris-pop-in 140ms ease-out;
   position: fixed;
   min-width: 128px;
   box-sizing: border-box;
@@ -4055,6 +4059,7 @@ async function onDrop(event: DragEvent): Promise<void> {
 /* ---------- AI 改写弹层（决议 #324） ---------- */
 .ai-scope { position: relative; }
 .ai-polish-pop {
+  animation: iris-pop-in 140ms ease-out;
   position: absolute;
   bottom: 44px;
   left: 0;
@@ -4109,18 +4114,26 @@ async function onDrop(event: DragEvent): Promise<void> {
   color: var(--primary);
   opacity: 0.85;
 }
-.typing-line::after {
-  content: '';
-  width: 3px;
-  height: 3px;
-  margin-left: 5px;
+.typing-dots {
+  display: inline-flex;
+  gap: 3px;
+}
+.typing-dots i {
+  width: 4px;
+  height: 4px;
   border-radius: 50%;
   background: currentColor;
-  animation: typing-blink 1s ease-in-out infinite;
 }
-@keyframes typing-blink {
-  0%, 100% { opacity: 0.2; }
-  50% { opacity: 1; }
+@media (prefers-reduced-motion: no-preference) {
+  .typing-dots i {
+    animation: typing-bounce 1.1s ease-in-out infinite;
+  }
+  .typing-dots i:nth-child(2) { animation-delay: 0.15s; }
+  .typing-dots i:nth-child(3) { animation-delay: 0.3s; }
+  @keyframes typing-bounce {
+    0%, 100% { opacity: 0.3; transform: translateY(0); }
+    50% { opacity: 1; transform: translateY(-3px); }
+  }
 }
 
 /* ---------- AI 总结弹窗（决议 #321） ---------- */

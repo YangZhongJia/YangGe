@@ -34,10 +34,9 @@ import CabinetList from './components/CabinetList.vue'
 import CabinetPane from './components/CabinetPane.vue'
 import { useCabinetStore } from './stores/cabinet'
 import { randomQuote } from './utils/quotes'
-import {
-  teahouseDarkThemeOverrides,
-  teahouseLightThemeOverrides
-} from './ui/naive-theme'
+import doveMarkUrl from './assets/brand/yangge-mark.svg?url'
+import { teahouseDarkThemeOverrides, teahouseLightThemeOverrides } from './ui/naive-theme'
+import { accentPalette, normalizeAccent } from './utils/accents'
 
 type Tab = 'chat' | 'contacts' | 'cabinet'
 
@@ -127,9 +126,19 @@ const info = ref<AppInfo | null>(null)
 // 主界面空态随机名言（决议 #82）：组件创建（每次打开软件）时随机一条，纯本地内置
 const quote = ref(randomQuote())
 const settings = ref<SettingsView | null>(null)
-const naiveTheme = computed(() => (settings.value?.theme === 'dark' ? darkTheme : null))
+// 主题（决议 #327）：light/dark/auto（auto 跟随系统）；accent 五色换装
+const systemDark = ref(false)
+let systemThemeQuery: MediaQueryList | null = null
+const effectiveDark = computed(() => {
+  const theme = settings.value?.theme ?? 'light'
+  return theme === 'auto' ? systemDark.value : theme === 'dark'
+})
+const accent = computed(() => normalizeAccent(settings.value?.accent))
+const naiveTheme = computed(() => (effectiveDark.value ? darkTheme : null))
 const naiveThemeOverrides = computed(() =>
-  settings.value?.theme === 'dark' ? teahouseDarkThemeOverrides : teahouseLightThemeOverrides
+  effectiveDark.value
+    ? teahouseDarkThemeOverrides(accentPalette(accent.value, true))
+    : teahouseLightThemeOverrides(accentPalette(accent.value, false))
 )
 const showWizard = ref(false)
 const settingsWindowOpen = ref(false)
@@ -359,6 +368,15 @@ function onMainKeydown(event: KeyboardEvent): void {
 }
 
 onMounted(async () => {
+  try {
+    systemThemeQuery = window.matchMedia('(prefers-color-scheme: dark)')
+    systemDark.value = systemThemeQuery.matches
+    systemThemeQuery.addEventListener('change', (e) => {
+      systemDark.value = e.matches
+    })
+  } catch {
+    // 老系统无 matchMedia 时维持 light
+  }
   stopTransferBlocked = window.pantry.onTransferSendBlocked((state) => { blockedTransferPort.value = state.port })
   stopNetState = window.pantry.onNetState((state) => {
     if (state.transfer) blockedTransferPort.value = state.transfer.available ? null : state.transfer.port
@@ -380,6 +398,9 @@ onMounted(async () => {
   applyPerformanceProfile(info.value)
   settings.value = await window.pantry.getSettings()
   applyAppearance(settings.value)
+  watch(systemDark, () => {
+    applyAppearance(settings.value!)
+  })
   applyWindowTitle(settings.value)
   showWizard.value = settings.value !== null && !settings.value.setupDone
   stopSettings = window.pantry.onSettingsUpdated((next) => {
@@ -668,8 +689,11 @@ onUnmounted(() => {
         :win7-ime-compat="info?.windows7 === true"
       />
       <div v-else class="empty">
-        <p class="quote">{{ tr(quote.text) }}</p>
-        <p class="quote-author">{{ tr(quote.author) }}</p>
+        <img :src="doveMarkUrl" class="empty-mark" alt="" draggable="false" />
+        <div class="quote-card">
+          <p class="quote">{{ tr(quote.text) }}</p>
+          <p class="quote-author">{{ tr(quote.author) }}</p>
+        </div>
       </div>
     </main>
   </div>
@@ -1338,6 +1362,21 @@ onUnmounted(() => {
   display: grid;
   position: relative;
   z-index: 1;
+}
+.empty-mark {
+  width: 84px;
+  height: 84px;
+  opacity: 0.92;
+  margin-bottom: 22px;
+  -webkit-user-drag: none;
+}
+.quote-card {
+  max-width: 420px;
+  padding: 18px 26px;
+  background: var(--material-strong);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-soft);
 }
 .empty {
   place-self: center;

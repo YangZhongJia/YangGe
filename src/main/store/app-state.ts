@@ -42,6 +42,10 @@ export interface ConfigFile {
   /** AI 分身（大模型代回，默认关闭） */
   ai: AiReplierConfig
   clipboardFollow: ClipboardFollowConfig
+  /** 主题色换装（决议 #327） */
+  accent: string
+  /** 会话背景（决议 #327）：plain / dove / dots / aurora */
+  chatBackground: string
   /** 手动添加的节点（"ip" 或 "ip:port"），启动时逐个探测（F-DISC-2 第一板斧） */
   manualPeers: string[]
   /** 网段扫描 CIDR 列表（F-DISC-2 第二板斧） */
@@ -62,7 +66,7 @@ export interface ConfigFile {
   /** 本机界面语言（决议 #307） */
   language: Language
   /** 深色主题手动切换（决议 #24） */
-  theme: 'light' | 'dark'
+  theme: 'light' | 'dark' | 'auto' | 'auto'
   /** 办公场景护眼字体缩放（百分比） */
   fontScale: 100 | 110 | 125
   /** 通知横幅是否显示消息正文摘要 */
@@ -232,6 +236,8 @@ export function saveAppSettings(
       | 'notifications'
       | 'ai'
       | 'clipboardFollow'
+      | 'accent'
+      | 'chatBackground'
       | 'manualPeers'
       | 'scanRanges'
       | 'udpPort'
@@ -257,6 +263,12 @@ export function saveAppSettings(
   if (patch.notifications !== undefined) state.config.notifications = patch.notifications
   if (patch.ai !== undefined) state.config.ai = normalizeAi(patch.ai)
   if (patch.clipboardFollow !== undefined) state.config.clipboardFollow = normalizeClipboardFollow(patch.clipboardFollow)
+  if (patch.accent !== undefined && ['indigo', 'teal', 'rose', 'amber', 'forest'].includes(patch.accent)) {
+    state.config.accent = patch.accent
+  }
+  if (patch.chatBackground !== undefined && ['plain', 'dove', 'dots', 'aurora'].includes(patch.chatBackground)) {
+    state.config.chatBackground = patch.chatBackground
+  }
   if (patch.manualPeers !== undefined) state.config.manualPeers = patch.manualPeers
   if (patch.scanRanges !== undefined) {
     const now = Date.now()
@@ -445,6 +457,8 @@ export function loadAppState(
       notifications: true,
       ai: { ...DEFAULT_AI_REPLIER },
       clipboardFollow: { ...DEFAULT_CLIPBOARD_FOLLOW },
+      accent: 'indigo',
+      chatBackground: 'plain',
       manualPeers: [],
       scanRanges: [],
       scanRangeSources: {},
@@ -539,7 +553,7 @@ export function loadAppState(
   config.autoLaunch = config.autoLaunch !== false
   config.closeToTray = config.closeToTray !== false
   config.language = initialLanguage(true, config.language, systemLanguage)
-  config.theme = config.theme === 'dark' ? 'dark' : 'light'
+  config.theme = config.theme === 'dark' || config.theme === 'auto' ? config.theme : 'light'
   config.fontScale = config.fontScale === 110 || config.fontScale === 125 ? config.fontScale : 100
   config.showMessagePreview = config.showMessagePreview !== false
   config.allowDirectFileSend = config.allowDirectFileSend !== false

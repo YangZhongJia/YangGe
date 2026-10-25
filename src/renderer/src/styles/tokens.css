@@ -25,6 +25,8 @@
   --bg-input: #ffffff;
   --bubble-peer: #ffffff;
   --bubble-mine: #5850ec;
+  --bubble-mine-hi: #6a5cff;
+  --bubble-mine-lo: #5244e0;
   --line: #e8eaef;
   --away: #e8a13c;
   --online: #10b981;
@@ -67,6 +69,8 @@ html[data-theme='dark'] {
   --bg-input: #171a22;
   --bubble-peer: #1e222c;
   --bubble-mine: #5850ec;
+  --bubble-mine-hi: #6f6af5;
+  --bubble-mine-lo: #4f4ad8;
   --line: #242836;
   --online: #34d399;
   --online-weak: #17302a;
@@ -94,6 +98,123 @@ html[data-theme='dark'] {
 html[data-theme='dark'], html[data-theme='dark'] ::backdrop { --scrim: rgba(0, 0, 0, 0.58); }
 
 /* 浮层为不透明纯色，不需要逐帧背景重采样；保留软渲染平台的短阴影。 */
+
+/* ===== 主题色换装（决议 #327）：五套预设主色，浅色 ===== */
+html[data-accent='teal'] {
+  --primary: #0e9f9a;
+  --primary-rgb: 14, 159, 154;
+  --primary-hover: #0c8b87;
+  --primary-weak: #e6f6f5;
+  --primary-border: #b5e2e0;
+  --rail-focus: #0e9f9a;
+  --rail-active: #e0f2f1;
+  --surface-selected: #d7efee;
+  --surface-pressed: #cbeae8;
+  --bubble-mine: #0e9f9a;
+  --bubble-mine-hi: #17b3ad;
+  --bubble-mine-lo: #0b7f7b;
+}
+html[data-accent='rose'] {
+  --primary: #d6407e;
+  --primary-rgb: 214, 64, 126;
+  --primary-hover: #c2386f;
+  --primary-weak: #fdeef4;
+  --primary-border: #f2c3d8;
+  --rail-focus: #d6407e;
+  --rail-active: #fbe4ee;
+  --surface-selected: #f7d7e5;
+  --surface-pressed: #f2c8db;
+  --bubble-mine: #d6407e;
+  --bubble-mine-hi: #e45490;
+  --bubble-mine-lo: #b9336b;
+}
+html[data-accent='amber'] {
+  --primary: #b06f10;
+  --primary-rgb: 176, 111, 16;
+  --primary-hover: #9c6109;
+  --primary-weak: #fbf3e4;
+  --primary-border: #ecd9b4;
+  --rail-focus: #b06f10;
+  --rail-active: #f7ecd7;
+  --surface-selected: #f2e3c4;
+  --surface-pressed: #ecd8b0;
+  --bubble-mine: #b06f10;
+  --bubble-mine-hi: #c07f1e;
+  --bubble-mine-lo: #96590a;
+}
+html[data-accent='forest'] {
+  --primary: #2f8a5d;
+  --primary-rgb: 47, 138, 93;
+  --primary-hover: #297a52;
+  --primary-weak: #e9f6ef;
+  --primary-border: #bfe3d0;
+  --rail-focus: #2f8a5d;
+  --rail-active: #e2f2e9;
+  --surface-selected: #d8ecdf;
+  --surface-pressed: #cce5d7;
+  --bubble-mine: #2f8a5d;
+  --bubble-mine-hi: #3aa06c;
+  --bubble-mine-lo: #27744d;
+}
+
+/* ===== 主题色换装：深色 ===== */
+html[data-accent='teal'][data-theme='dark'] {
+  --primary: #2cc0ba;
+  --primary-rgb: 44, 192, 186;
+  --primary-hover: #3ecfcc;
+  --primary-weak: #12302e;
+  --primary-border: #1f4a47;
+  --rail-focus: #2cc0ba;
+  --rail-active: #123a37;
+  --surface-selected: #14403d;
+  --surface-pressed: #194946;
+  --bubble-mine: #129d97;
+  --bubble-mine-hi: #2cc0ba;
+  --bubble-mine-lo: #0c807b;
+}
+html[data-accent='rose'][data-theme='dark'] {
+  --primary: #e8709f;
+  --primary-rgb: 232, 112, 159;
+  --primary-hover: #ef85ad;
+  --primary-weak: #3a2030;
+  --primary-border: #553048;
+  --rail-focus: #e8709f;
+  --rail-active: #3a2030;
+  --surface-selected: #452539;
+  --surface-pressed: #522c42;
+  --bubble-mine: #d6407e;
+  --bubble-mine-hi: #e8709f;
+  --bubble-mine-lo: #b9336b;
+}
+html[data-accent='amber'][data-theme='dark'] {
+  --primary: #e0a53c;
+  --primary-rgb: 224, 165, 60;
+  --primary-hover: #e6b355;
+  --primary-weak: #362a13;
+  --primary-border: #514118;
+  --rail-focus: #e0a53c;
+  --rail-active: #3a2f13;
+  --surface-selected: #453919;
+  --surface-pressed: #51431e;
+  --bubble-mine: #d18f1f;
+  --bubble-mine-hi: #e0a53c;
+  --bubble-mine-lo: #a8690f;
+}
+html[data-accent='forest'][data-theme='dark'] {
+  --primary: #4fb98a;
+  --primary-rgb: 79, 185, 138;
+  --primary-hover: #63c79b;
+  --primary-weak: #17301f;
+  --primary-border: #24523a;
+  --rail-focus: #4fb98a;
+  --rail-active: #17301f;
+  --surface-selected: #1c3a27;
+  --surface-pressed: #234a32;
+  --bubble-mine: #359a68;
+  --bubble-mine-hi: #4fb98a;
+  --bubble-mine-lo: #2c7c54;
+}
+
 html[data-rendering='software'] {
   --shadow-soft: 0 1px 3px rgba(29, 45, 68, 0.08);
   --shadow-float: 0 4px 14px rgba(29, 45, 68, 0.14);
@@ -196,4 +317,46 @@ html[data-theme='dark'] ::-webkit-scrollbar-thumb {
 html[data-theme='dark'] ::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.3);
   background-clip: padding-box;
+}
+
+/* ===== 微动效（决议 #327）：尊重系统「减弱动态效果」 ===== */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes iris-pop-in {
+    from { opacity: 0; transform: translateY(4px) scale(0.97); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes iris-breathe {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.45; }
+  }
+  .status-dot.is-online,
+  .status-dot.is-away {
+    animation: iris-breathe 2.4s ease-in-out infinite;
+  }
+}
+
+/* ===== 会话背景（决议 #327）：plain 默认，其余由 ChatPane 覆盖 ===== */
+
+/* ===== 会话背景（决议 #327）：全局规则，作用于聊天滚动区 ===== */
+html[data-chat-bg='dove'] .msgs {
+  background: var(--bg-chat) url('data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20width=%22220%22%20height=%22220%22%20viewBox=%220%200%20256%20256%22%3E%3Cg%20transform=%22translate(30%2030)%20scale(0.76)%22%3E%3Cpath%20fill=%22rgba(88,80,236,0.05)%22%20fill-rule=%22evenodd%22%20d=%22M213.6%20129.3%20L208.5%20148.3%20L203.4%20158.4%20L200.9%20159.7%20L200.9%20162.2%20L184%20185.9%20L177.9%20207.4%20L172.5%20212.4%20L166.9%20217.4%20L160.4%20222.1%20L152.5%20226.5%20L143.6%20230.4%20L133.5%20233.7%20L122.2%20236.3%20L109.6%20238%20L95.5%20238.6%20L79.8%20238%20L62.4%20236.1%20L43.1%20232.7%20L21.8%20227.6%20L21.6%20225.1%20L25.5%20220.9%20L35.1%20214.9%20L47.9%20206.4%20L61.5%20195.2%20L74.3%20181.5%20L84.6%20165.4%20L90.8%20147.1%20L91.4%20126.8%20L84.8%20104.8%20L69.4%2081.4%20L43.4%2057.1%20L4.9%2033.3%20L3.6%2030.5%20L5.4%2028.3%20L63.9%2052.1%20L112.5%2078.7%20L151%20103.6%20L181%20126.9%20L204%20148.6%20L210.9%20129.3%20Z%22/%3E%3C/g%3E%3C/svg%3E') repeat-y center top / 220px auto;
+}
+html[data-theme='dark'][data-chat-bg='dove'] .msgs {
+  background: var(--bg-chat) url('data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20width=%22220%22%20height=%22220%22%20viewBox=%220%200%20256%20256%22%3E%3Cg%20transform=%22translate(30%2030)%20scale(0.76)%22%3E%3Cpath%20fill=%22rgba(255,255,255,0.035)%22%20fill-rule=%22evenodd%22%20d=%22M213.6%20129.3%20L208.5%20148.3%20L203.4%20158.4%20L200.9%20159.7%20L200.9%20162.2%20L184%20185.9%20L177.9%20207.4%20L172.5%20212.4%20L166.9%20217.4%20L160.4%20222.1%20L152.5%20226.5%20L143.6%20230.4%20L133.5%20233.7%20L122.2%20236.3%20L109.6%20238%20L95.5%20238.6%20L79.8%20238%20L62.4%20236.1%20L43.1%20232.7%20L21.8%20227.6%20L21.6%20225.1%20L25.5%20220.9%20L35.1%20214.9%20L47.9%20206.4%20L61.5%20195.2%20L74.3%20181.5%20L84.6%20165.4%20L90.8%20147.1%20L91.4%20126.8%20L84.8%20104.8%20L69.4%2081.4%20L43.4%2057.1%20L4.9%2033.3%20L3.6%2030.5%20L5.4%2028.3%20L63.9%2052.1%20L112.5%2078.7%20L151%20103.6%20L181%20126.9%20L204%20148.6%20L210.9%20129.3%20Z%22/%3E%3C/g%3E%3C/svg%3E') repeat-y center top / 220px auto;
+}
+html[data-chat-bg='dots'] .msgs {
+  background-color: var(--bg-chat);
+  background-image: radial-gradient(rgba(88, 80, 236, 0.10) 1px, transparent 1.4px);
+  background-size: 22px 22px;
+}
+html[data-theme='dark'][data-chat-bg='dots'] .msgs {
+  background-color: var(--bg-chat);
+  background-image: radial-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1.4px);
+  background-size: 22px 22px;
+}
+html[data-chat-bg='aurora'] .msgs {
+  background:
+    radial-gradient(560px 340px at 12% 8%, rgba(88, 80, 236, 0.10), transparent 70%),
+    radial-gradient(520px 380px at 88% 92%, rgba(14, 159, 154, 0.09), transparent 70%),
+    var(--bg-chat);
 }

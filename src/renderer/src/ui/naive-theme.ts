@@ -45,70 +45,92 @@ const componentOverrides: GlobalThemeOverrides = {
   }
 }
 
-export const teahouseLightThemeOverrides: GlobalThemeOverrides = {
-  ...componentOverrides,
-  common: {
-    primaryColor: '#5850ec',
-    primaryColorHover: '#4f46dc',
-    primaryColorPressed: '#4338c9',
-    primaryColorSuppl: '#5850ec',
-    infoColor: '#5850ec',
-    infoColorHover: '#4f46dc',
-    infoColorPressed: '#4338c9',
-    infoColorSuppl: '#5850ec',
-    textColorBase: '#1b1e24',
-    textColor1: '#1b1e24',
-    textColor2: '#5d6470',
-    textColor3: '#878e9a',
-    placeholderColor: '#9aa1ad',
-    borderColor: '#dcdfe6',
-    dividerColor: '#e8eaef',
-    bodyColor: '#ffffff',
-    cardColor: '#ffffff',
-    modalColor: '#ffffff',
-    popoverColor: '#ffffff',
-    inputColor: '#ffffff',
-    hoverColor: '#edeff3',
-    pressedColor: '#e6e8fb',
-    fontFamily,
-    borderRadius: '12px',
-    borderRadiusSmall: '8px',
-    fontSize: '13px',
-    heightSmall: '30px',
-    heightMedium: '34px'
+export interface AccentPalette {
+  primary: string
+  hover: string
+  pressed: string
+}
+
+const INDIGO_LIGHT: AccentPalette = { primary: '#5850ec', hover: '#4f46dc', pressed: '#4338c9' }
+const INDIGO_DARK: AccentPalette = { primary: '#7b76f0', hover: '#8d89f5', pressed: '#6a64e8' }
+
+/** 主题色换装（决议 #327）：naive 组件主色随 accent 联动；深浅分别取色 */
+export function teahouseLightThemeOverrides(
+  accent: AccentPalette = INDIGO_LIGHT
+): GlobalThemeOverrides {
+  const { primary, hover, pressed } = accent
+  return {
+    ...componentOverrides,
+    common: {
+      primaryColor: primary,
+      primaryColorHover: hover,
+      primaryColorPressed: pressed,
+      primaryColorSuppl: primary,
+      infoColor: primary,
+      infoColorHover: hover,
+      infoColorPressed: pressed,
+      infoColorSuppl: primary,
+      textColorBase: '#1b1e24',
+      textColor1: '#1b1e24',
+      textColor2: '#5d6470',
+      textColor3: '#878e9a',
+      placeholderColor: '#9aa1ad',
+      borderColor: '#dcdfe6',
+      dividerColor: '#e8eaef',
+      bodyColor: '#ffffff',
+      cardColor: '#ffffff',
+      modalColor: '#ffffff',
+      popoverColor: '#ffffff',
+      inputColor: '#ffffff',
+      hoverColor: '#edeff3',
+      pressedColor: '#e6e8fb',
+      fontFamily,
+      borderRadius: '12px',
+      borderRadiusSmall: '8px',
+      fontSize: '13px',
+      heightSmall: '30px',
+      heightMedium: '34px'
+    }
   }
 }
 
-export const teahouseDarkThemeOverrides: GlobalThemeOverrides = {
-  ...componentOverrides,
-  common: {
-    primaryColor: '#7b76f0',
-    primaryColorHover: '#8d89f5',
-    primaryColorPressed: '#6a64e8',
-    primaryColorSuppl: '#7b76f0',
-    infoColor: '#7b76f0',
-    infoColorHover: '#8d89f5',
-    infoColorPressed: '#6a64e8',
-    infoColorSuppl: '#7b76f0',
-    textColorBase: '#e9eaef',
-    textColor1: '#e9eaef',
-    textColor2: '#a7abb6',
-    textColor3: '#7f8592',
-    placeholderColor: '#707583',
-    borderColor: '#3a3f4e',
-    dividerColor: '#242836',
-    bodyColor: '#101218',
-    cardColor: '#14161d',
-    modalColor: '#101218',
-    popoverColor: '#1a1d25',
-    inputColor: '#171a22',
-    hoverColor: '#1c1f28',
-    pressedColor: '#262b4a',
-    fontFamily,
-    borderRadius: '12px',
-    borderRadiusSmall: '8px',
-    fontSize: '13px',
-    heightSmall: '30px',
-    heightMedium: '34px'
+export function teahouseDarkThemeOverrides(
+  accent: AccentPalette = INDIGO_DARK
+): GlobalThemeOverrides {
+  const { primary, hover, pressed } = accent
+  return {
+    ...componentOverrides,
+    common: {
+      primaryColor: primary,
+      primaryColorHover: hover,
+      primaryColorPressed: pressed,
+      primaryColorSuppl: primary,
+      infoColor: primary,
+      infoColorHover: hover,
+      infoColorPressed: pressed,
+      infoColorSuppl: primary,
+      textColorBase: '#e9eaef',
+      textColor1: '#e9eaef',
+      textColor2: '#a7abb6',
+      textColor3: '#7f8592',
+      placeholderColor: '#707583',
+      borderColor: '#3a3f4e',
+      dividerColor: '#242836',
+      bodyColor: '#101218',
+      cardColor: '#14161d',
+      modalColor: '#101218',
+      popoverColor: '#1a1d25',
+      inputColor: '#171a22',
+      hoverColor: '#1c1f28',
+      pressedColor: '#262b4a',
+      fontFamily,
+      borderRadius: '12px',
+      borderRadiusSmall: '8px',
+      fontSize: '13px',
+      heightSmall: '30px',
+      heightMedium: '34px'
+    }
   }
 }
+
+export const INDIGO_ACCENTS = { light: INDIGO_LIGHT, dark: INDIGO_DARK }

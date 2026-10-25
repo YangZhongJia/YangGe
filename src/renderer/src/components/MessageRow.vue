@@ -41,6 +41,8 @@ const emit = defineEmits<{
 }>()
 
 const showSeparator = computed(() => shouldShowSeparator(props.msg.ts, props.prevTs))
+/** 微动效（决议 #327）：仅 4 秒内的新消息做入场动画，翻页加载的历史不抖 */
+const isFresh = computed(() => Date.now() - props.msg.ts < 4_000)
 const showGroupSender = computed(
   () =>
     props.isGroupConv &&
@@ -129,7 +131,7 @@ const replyMeta = computed((): ReplyMeta => {
     v-else-if="props.msg.status !== 'recalled'"
     :id="`msg-${props.msg.id}`"
     class="row"
-    :class="[props.msg.isMine ? 'mine' : 'peer', { highlight: props.highlighted }]"
+    :class="[props.msg.isMine ? 'mine' : 'peer', { highlight: props.highlighted, 'row-enter': isFresh }]"
   >
     <AvatarMark
       class="msg-avatar"
@@ -378,10 +380,10 @@ const replyMeta = computed((): ReplyMeta => {
   box-shadow: var(--shadow-soft);
 }
 .row.mine .bubble {
-  background: linear-gradient(180deg, #6a5cff 0%, var(--bubble-mine) 55%, #5244e0 100%);
+  background: linear-gradient(180deg, var(--bubble-mine-hi) 0%, var(--bubble-mine) 55%, var(--bubble-mine-lo) 100%);
   border-color: transparent;
   border-bottom-right-radius: 6px;
-  box-shadow: 0 2px 6px rgba(88, 80, 236, 0.28);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 2px 6px rgba(var(--primary-rgb), 0.28);
   color: #ffffff;
 }
 .row.mine .text-link {
@@ -464,6 +466,17 @@ const replyMeta = computed((): ReplyMeta => {
   .row.highlight,
   .spin {
     animation: none;
+  }
+}
+
+/* 微动效（决议 #327）：新消息入场；尊重系统「减弱动态效果」 */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes msg-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: none; }
+  }
+  .row-enter {
+    animation: msg-in 260ms ease-out;
   }
 }
 </style>

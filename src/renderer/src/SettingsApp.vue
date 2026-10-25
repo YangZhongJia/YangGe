@@ -28,6 +28,7 @@ import {
 import { LANGUAGE_OPTIONS } from '../../shared/i18n'
 import { DEFAULT_TCP_PORT, DEFAULT_UDP_PORT } from '../../shared/protocol'
 import { applyAppearance } from './utils/appearance'
+import { accentPalette, normalizeAccent } from './utils/accents'
 import { formatBytes } from './utils/format'
 import { applyPerformanceProfile } from './utils/performance-profile'
 import {
@@ -249,9 +250,17 @@ const activeNotice = computed(() => (section.value === 'network' ? scanTip.value
 const hasManualPeers = computed(() => (settings.value?.manualPeers.length ?? 0) > 0)
 const hasScanRanges = computed(() => (settings.value?.scanRangeItems.length ?? 0) > 0)
 const hasTransfers = computed(() => transfers.value.length > 0)
-const naiveTheme = computed(() => (settings.value?.theme === 'dark' ? darkTheme : null))
+const effectiveDark = computed(() => {
+  const theme = settings.value?.theme ?? 'light'
+  return theme === 'auto'
+    ? window.matchMedia('(prefers-color-scheme: dark)').matches
+    : theme === 'dark'
+})
+const naiveTheme = computed(() => (effectiveDark.value ? darkTheme : null))
 const naiveThemeOverrides = computed(() =>
-  settings.value?.theme === 'dark' ? teahouseDarkThemeOverrides : teahouseLightThemeOverrides
+  effectiveDark.value
+    ? teahouseDarkThemeOverrides(accentPalette(normalizeAccent(settings.value?.accent), true))
+    : teahouseLightThemeOverrides(accentPalette(normalizeAccent(settings.value?.accent), false))
 )
 const languageOptions = [...LANGUAGE_OPTIONS]
 const fontScaleOptions = [
@@ -598,8 +607,29 @@ async function changeSound(value: string | number | null): Promise<void> {
   }
 }
 
-async function changeTheme(value: 'light' | 'dark'): Promise<void> {
+async function changeTheme(value: 'light' | 'dark' | 'auto'): Promise<void> {
   await saveApp({ theme: value })
+}
+
+// ---------- 主题色换装与会话背景（决议 #327） ----------
+const ACCENT_SWATCHES: Array<{ id: 'indigo' | 'teal' | 'rose' | 'amber' | 'forest'; color: string; label: string }> = [
+  { id: 'indigo', color: '#5850ec', label: '靛蓝' },
+  { id: 'teal', color: '#0e9f9a', label: '松石' },
+  { id: 'rose', color: '#d6407e', label: '玫瑰' },
+  { id: 'amber', color: '#b06f10', label: '琥珀' },
+  { id: 'forest', color: '#2f8a5d', label: '森绿' }
+]
+const BG_SWATCHES: Array<{ id: 'plain' | 'dove' | 'dots' | 'aurora'; label: string }> = [
+  { id: 'plain', label: '素色' },
+  { id: 'dove', label: '飞鸽水印' },
+  { id: 'dots', label: '点阵' },
+  { id: 'aurora', label: '极光' }
+]
+async function changeAccent(value: 'indigo' | 'teal' | 'rose' | 'amber' | 'forest'): Promise<void> {
+  await saveApp({ accent: value })
+}
+async function changeChatBackground(value: 'plain' | 'dove' | 'dots' | 'aurora'): Promise<void> {
+  await saveApp({ chatBackground: value })
 }
 
 async function changeSendKey(value: 'enter' | 'ctrlEnter'): Promise<void> {
@@ -1130,6 +1160,16 @@ async function confirmRemove(cidr: string): Promise<void> {
                 <button
                   type="button"
                   role="radio"
+                  :aria-label="tr('跟随系统主题')"
+                  :aria-checked="settings.theme === 'auto'"
+                  :class="{ on: settings.theme === 'auto' }"
+                  @click="changeTheme('auto')"
+                >
+                  <PantryIcon name="refresh" :size="16" /><span>{{ tr('跟随系统') }}</span>
+                </button>
+                <button
+                  type="button"
+                  role="radio"
                   :aria-label="tr('深色主题')"
                   :aria-checked="settings.theme === 'dark'"
                   :class="{ on: settings.theme === 'dark' }"
@@ -1139,6 +1179,49 @@ async function confirmRemove(cidr: string): Promise<void> {
                 </button>
               </div>
             </div>
+            <label class="setting-line">
+              <div>
+                <strong>{{ tr('主题色') }}</strong>
+                <small>{{ tr('气泡、按钮与状态色整套联动。') }}</small>
+              </div>
+              <div class="accent-row" role="radiogroup" :aria-label="tr('主题色')">
+                <button
+                  v-for="sw in ACCENT_SWATCHES"
+                  :key="sw.id"
+                  type="button"
+                  role="radio"
+                  :aria-checked="settings.accent === sw.id"
+                  :class="{ on: settings.accent === sw.id }"
+                  class="accent-chip"
+                  :aria-label="tr(sw.label)"
+                  @click="changeAccent(sw.id)"
+                >
+                  <span class="accent-dot" :style="{ background: sw.color }"></span>
+                  <span>{{ tr(sw.label) }}</span>
+                </button>
+              </div>
+            </label>
+            <label class="setting-line">
+              <div>
+                <strong>{{ tr('会话背景') }}</strong>
+                <small>{{ tr('只影响聊天区域，随时可换回素色。') }}</small>
+              </div>
+              <div class="accent-row" role="radiogroup" :aria-label="tr('会话背景')">
+                <button
+                  v-for="bg in BG_SWATCHES"
+                  :key="bg.id"
+                  type="button"
+                  role="radio"
+                  :aria-checked="settings.chatBackground === bg.id"
+                  :class="{ on: settings.chatBackground === bg.id }"
+                  class="accent-chip"
+                  :aria-label="tr(bg.label)"
+                  @click="changeChatBackground(bg.id)"
+                >
+                  <span>{{ tr(bg.label) }}</span>
+                </button>
+              </div>
+            </label>
             <label class="setting-line">
               <div>
                 <strong>{{ tr('字体缩放') }}</strong>
@@ -3252,6 +3335,36 @@ async function confirmRemove(cidr: string): Promise<void> {
     transform: none;
   }
 }
+/* ---------- 主题色换装与会话背景（决议 #327） ---------- */
+.accent-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.accent-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font-size: var(--font-sm);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-1);
+  cursor: pointer;
+}
+.accent-chip:hover { background: var(--surface-hover); }
+.accent-chip.on {
+  border-color: var(--primary);
+  background: var(--primary-weak);
+  color: var(--primary);
+}
+.accent-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
 .follow-peer-select {
   max-width: 180px;
   padding: 4px 8px;
