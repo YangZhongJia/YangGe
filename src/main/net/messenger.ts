@@ -286,6 +286,12 @@ export class Messenger extends EventEmitter {
       return
     }
 
+    // 输入中提示（决议 #321）：尽力而为帧，不 ACK 不去重，丢失由接收端超时兜底
+    if (env.type === MSG_TYPES.typing) {
+      if (this.registry.get(env.from)) this.emit('typing', env)
+      return
+    }
+
     // 可靠类型：无条件回 ACK（含重复），让对端停止重传
     if (isReliableControlType(env.type)) {
       // 屏幕授权绑定原有地址；不能先 touch 把不可信来源变成当前地址。
@@ -335,6 +341,8 @@ function isReliableControlType(type: string): boolean {
     type === MSG_TYPES.avatar ||
     type === MSG_TYPES.update ||
     // 共享文件柜控制面（§8.2）：list-ok 常超 UDP 上限，必须能走 TCP 控制帧兜底
-    type === MSG_TYPES.share || type === MSG_TYPES.screen
+    type === MSG_TYPES.share || type === MSG_TYPES.screen ||
+    // 发剪贴板（决议 #321）：需要送达确认，失败即提示，不静默丢
+    type === MSG_TYPES.clipboard
   )
 }

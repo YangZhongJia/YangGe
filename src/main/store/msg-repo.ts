@@ -88,6 +88,7 @@ export class MsgRepo {
   private readonly nextSeqStmt: DatabaseT.Statement
   private readonly pageStmt: DatabaseT.Statement
   private readonly pageFirstStmt: DatabaseT.Statement
+  private readonly listSinceStmt: DatabaseT.Statement
   private readonly imagePreviousStmt: DatabaseT.Statement
   private readonly imageNextStmt: DatabaseT.Statement
   private readonly aroundStmt: DatabaseT.Statement
@@ -113,6 +114,9 @@ export class MsgRepo {
     )
     this.pageFirstStmt = db.prepare(
       'SELECT * FROM messages WHERE conv_id = ? ORDER BY seq DESC LIMIT ?'
+    )
+    this.listSinceStmt = db.prepare(
+      'SELECT * FROM messages WHERE conv_id = ? AND ts >= ? ORDER BY ts ASC, seq ASC LIMIT ?'
     )
     this.imagePreviousStmt = db.prepare(`
       SELECT * FROM messages WHERE conv_id = ? AND seq < ?
@@ -182,6 +186,11 @@ export class MsgRepo {
         : this.pageStmt.all(convId, beforeSeq, limit)
     ) as MsgRow[]
     return rows.reverse()
+  }
+
+  /** 某时间戳之后（含）的顺序消息，用于 AI 群总结等本地分析（决议 #321） */
+  listSince(convId: string, sinceTs: number, limit: number): MsgRow[] {
+    return this.listSinceStmt.all(convId, sinceTs, limit) as MsgRow[]
   }
 
   /** 图片导航按消息顺序向指定方向分页，最近的候选在前。 */

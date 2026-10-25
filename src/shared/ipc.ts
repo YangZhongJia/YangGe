@@ -135,7 +135,13 @@ export const IpcChannels = {
   /** 局域网自更新：向当前最佳更新源请求安装包（决议 #170） */
   updateRequest: 'update:request',
   /** 局域网自更新：安装包已就绪后静默安装并重启（决议 #166 第三步） */
-  updateInstall: 'update:install'
+  updateInstall: 'update:install',
+  /** 输入中提示：渲染层节流后上报（决议 #321） */
+  typingSend: 'typing:send',
+  /** 发剪贴板：把本机剪贴板文本发给对方（决议 #321） */
+  clipboardSend: 'clipboard:send',
+  /** AI 群总结：总结今天该群的本地消息，结果只回请求者（决议 #321） */
+  aiSummarize: 'ai:summarize'
 } as const
 
 /** main → renderer 的事件推送 */
@@ -177,6 +183,8 @@ export const IpcEvents = {
   updateAvailable: 'update:available',
   /** 局域网自更新：安装包接收完成，可一键安装重启（决议 #166 第三步） */
   updatePackageReady: 'update:package-ready',
+  /** 输入中提示：对方开始输入（决议 #321），短时展示由渲染层超时收尾 */
+  typing: 'typing:incoming',
   /** 文件柜窗口已开着时再次请求打开某位同事的柜子（决议 #283） */
   cabinetFocusPeer: 'cabinet:focus-peer'
 } as const
@@ -242,6 +250,19 @@ export interface UpdatePackageReady {
   /** 安装包内解析出的版本（高于本机才推送） */
   version: string
 }
+
+/** 对方开始输入（决议 #321）：渲染层按超时收尾展示 */
+export interface TypingEvent {
+  peerId: string
+}
+
+export type ClipboardSendResult =
+  | { ok: true }
+  | { ok: false; reason: 'empty' | 'too-long' | 'undelivered' | 'invalid' }
+
+export type SummarizeResult =
+  | { ok: true; summary: string }
+  | { ok: false; reason: 'no-ai' | 'empty' | 'failed' | 'invalid' }
 
 export interface NetState {
   ok: boolean
@@ -839,6 +860,14 @@ export interface PantryApi {
   onUpdateAvailable(listener: (info: UpdateAvailability | null) => void): () => void
   /** 局域网自更新：安装包接收完成推送（决议 #166 第三步） */
   onUpdatePackageReady(listener: (info: UpdatePackageReady) => void): () => void
+  /** 输入中提示（决议 #321）：渲染层输入时节流上报；仅单聊 */
+  sendTyping(peerId: string): void
+  /** 发剪贴板（决议 #321）：把本机剪贴板文本发给对方并写系统提示 */
+  sendClipboard(peerId: string): Promise<ClipboardSendResult>
+  /** AI 群总结（决议 #321）：总结今天该群本地消息，仅返回给请求者 */
+  summarizeGroup(convId: string): Promise<SummarizeResult>
+  /** 输入中提示：对方开始输入 */
+  onTyping(listener: (event: TypingEvent) => void): () => void
   /** 按需探活（F-DISC-8）；返回是否已发出 */
   probePeer(nodeId: string): Promise<boolean>
   listConversations(): Promise<ConversationView[]>

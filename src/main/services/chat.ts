@@ -1,20 +1,23 @@
 import { screenRecordText, systemMessage } from '../../i18n/messages'
 import { formatTemplate } from '../../i18n'
 import { parseScreenRecord, type ScreenRecord, type ScreenState } from '../../shared/remote-view'
-import type { SystemMessageKey } from '../../shared/i18n'
-import { randomInt } from 'node:crypto'
+import type { SystemMessage, SystemMessageKey } from '../../shared/i18n'
+import { randomInt, randomUUID } from 'node:crypto'
 import { EventEmitter } from 'node:events'
 import {
+  CLIPBOARD_TEXT_LIMIT,
   MSG_TYPES,
   NUDGE_MAX_PER_WINDOW,
   NUDGE_MIN_INTERVAL_MS,
   NUDGE_RATE_WINDOW_MS,
   RECALL_WINDOW_MS,
   TEXT_TCP_LIMIT,
+  type ClipboardPayload,
   type Envelope,
   type MsgPayload
 } from '../../shared/protocol'
 import type {
+  ClipboardSendResult,
   ConversationView,
   MessageView,
   MsgStatusEvent,
@@ -53,6 +56,8 @@ export interface ChatDeps {
   msgRepo: MsgRepo
   groupRepo?: GroupRepo
   messenger: Messenger
+  /** 对端显示名（备注优先），由 index 注入；系统提示里用到 */
+  nameOf?: (peerId: string) => string
   /** 打开会话时的探活回调（F-DISC-8），由 index 接 discovery.probeNode */
   probe?: (peerId: string) => void
   /** 时钟偏移矫正（决议 #65）：把对方消息显示时间换算到本机钟 */
@@ -208,6 +213,31 @@ export class ChatService extends EventEmitter {
 
     this.insertSystemTip(env.id, convId, this.deps.selfId, 'nudge.sent', env.ts, false)
     return { ok: true }
+  }
+
+  /** 发剪贴板（决议 #321）：可靠控制帧，成功后在本地会话留系统提示；文本由 main 层从剪贴板读取 */
+  async sendClipboard(peerId: string, text: string): Promise<ClipboardSendResult> {
+    if (!peerId || peerId.length > 64) return { ok: false, reason: 'invalid' }
+    if (!text.trim() || Buffer.byteLength(text, 'utf8') > CLIPBOARD_TEXT_LIMIT) {
+      return { ok: false, reason: 'invalid' }
+    }
+    const env = makeEnvelope<ClipboardPayload>(MSG_TYPES.clipboard, this.deps.selfId, { text })
+    const delivered = await this.deps.messenger.sendReliable(peerId, env)
+    if (!delivered) return { ok: false, reason: 'undelivered' }
+    const convId = this.deps.convRepo.ensureSingle(peerId)
+    this.insertSystemTip(env.id, convId, this.deps.selfId, 'clipboard.sent', env.ts, false, {
+      actor: this.deps.nameOf?.(peerId) || peerId
+    })
+    return { ok: true }
+  }
+
+  /** 收到对方剪贴板：写系统提示（剪贴板写入由 main 层完成，这里只负责留痕） */
+  receiveClipboardTip(from: string, actorName: string, ts: number): void {
+    if (!from || from.length > 64) return
+    const convId = this.deps.convRepo.ensureSingle(from)
+    this.insertSystemTip(randomUUID(), convId, from, 'clipboard.received', ts, false, {
+      actor: actorName
+    })
   }
 
   sendPk(peerId: string, game: PkGame): MessageView | null {
@@ -516,7 +546,8 @@ export class ChatService extends EventEmitter {
     senderId: string,
     content: SystemMessageKey,
     ts: number,
-    countUnread: boolean
+    countUnread: boolean,
+    params: SystemMessage['params'] = {}
   ): boolean {
     const inserted = this.deps.msgRepo.insert({
       id,
@@ -524,7 +555,7 @@ export class ChatService extends EventEmitter {
       senderId,
       isMine: false,
       kind: 'system',
-      ...systemMessage(content),
+      ...systemMessage(content, params),
       ts,
       status: 'sent'
     })

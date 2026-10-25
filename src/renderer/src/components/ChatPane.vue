@@ -1188,6 +1188,85 @@ function scheduleClipboardImageFallback(): void {
   }, CLIPBOARD_NATIVE_FALLBACK_DELAY_MS)
 }
 
+// ---------- 输入中提示（决议 #321） ----------
+const nowTick = ref(0)
+let typingTicker: ReturnType<typeof setInterval> | null = null
+onMounted(() => {
+  typingTicker = setInterval(() => { nowTick.value++ }, 800)
+})
+onBeforeUnmount(() => {
+  if (typingTicker) clearInterval(typingTicker)
+  typingTicker = null
+})
+const peerTyping = computed(() => {
+  void nowTick.value
+  const peerId = chatStore.activeConv?.peerId
+  return Boolean(peerId && (chatStore.typingUntil[peerId] ?? 0) > Date.now())
+})
+function onComposerInput(): void {
+  if (isGroup.value || !canSend.value) return
+  chatStore.notifyTyping(chatStore.activeConv?.peerId)
+}
+
+// ---------- 发剪贴板（决议 #321） ----------
+const clipboardSending = ref(false)
+async function sendClipboardNow(): Promise<void> {
+  if (clipboardSending.value || isGroup.value || !canSend.value || !peerOnline.value) return
+  const peerId = chatStore.activeConv?.peerId
+  if (!peerId) return
+  clipboardSending.value = true
+  try {
+    const res = await window.pantry.sendClipboard(peerId)
+    if (res.ok) setNudgeFeedback(tr('剪贴板内容已发送'), 'ok')
+    else if (res.reason === 'empty') setNudgeFeedback(tr('剪贴板里没有文本内容'), 'warn')
+    else if (res.reason === 'too-long') setNudgeFeedback(tr('剪贴板文本过长（上限 16KB）'), 'warn')
+    else setNudgeFeedback(tr('对方离线，发送失败'), 'warn')
+  } catch {
+    setNudgeFeedback(tr('发送失败，请稍后再试'), 'warn')
+  } finally {
+    clipboardSending.value = false
+  }
+}
+
+// ---------- AI 群总结（决议 #321）：结果只在本机弹窗，不进群 ----------
+const aiMenu = ref<{ x: number; y: number } | null>(null)
+const aiSummary = ref<{ state: 'loading' | 'done' | 'error'; text?: string; message?: string } | null>(null)
+function openTranscriptMenu(event: MouseEvent): void {
+  if (!isGroup.value || !canSend.value) return
+  aiMenu.value = clampMenuPosition(event, MSG_MENU_WIDTH, MSG_MENU_ITEM_HEIGHT + MSG_MENU_PADDING)
+}
+watch(aiMenu, (menu) => {
+  if (menu) document.addEventListener('click', closeAiMenu)
+  else document.removeEventListener('click', closeAiMenu)
+})
+function closeAiMenu(): void {
+  aiMenu.value = null
+}
+async function startAiSummary(): Promise<void> {
+  const convId = chatStore.activeConvId
+  aiMenu.value = null
+  if (!convId) return
+  aiSummary.value = { state: 'loading' }
+  try {
+    const res = await window.pantry.summarizeGroup(convId)
+    if (res.ok) aiSummary.value = { state: 'done', text: res.summary }
+    else if (res.reason === 'no-ai') aiSummary.value = { state: 'error', message: tr('先在设置中配置 AI 分身') }
+    else if (res.reason === 'empty') aiSummary.value = { state: 'error', message: tr('今天暂无群消息') }
+    else aiSummary.value = { state: 'error', message: tr('总结失败，请稍后再试') }
+  } catch {
+    aiSummary.value = { state: 'error', message: tr('总结失败，请稍后再试') }
+  }
+}
+async function copyAiSummary(): Promise<void> {
+  const text = aiSummary.value?.text
+  if (!text) return
+  try {
+    await navigator.clipboard.writeText(text)
+  } catch {
+    // 剪贴板不可用时静默失败
+  }
+}
+
 function setNudgeFeedback(text: string, kind: 'ok' | 'warn' = 'ok'): void {
   nudgeFeedback.value = { text, kind }
   if (nudgeFeedbackTimer) clearTimeout(nudgeFeedbackTimer)
@@ -2091,7 +2170,7 @@ async function onDrop(event: DragEvent): Promise<void> {
     />
 
     <div class="body-wrap">
-      <div ref="scrollArea" class="msgs" @scroll="onScroll">
+      <div ref="scrollArea" class="msgs" @scroll="onScroll" @contextmenu.prevent="openTranscriptMenu">
       <div ref="msgsContent" class="msgs-content">
       <div v-if="loadingEarlier" class="sep">{{ tr('加载更早的消息…') }}</div>
       <MessageRow
@@ -2150,6 +2229,37 @@ async function onDrop(event: DragEvent): Promise<void> {
           {{ recallButtonMeta }}
         </span>
       </button>
+    </div>
+
+    <div
+      v-if="aiMenu"
+      class="msg-menu"
+      :style="{ left: `${aiMenu.x}px`, top: `${aiMenu.y}px` }"
+      @click.stop
+    >
+      <button @click="startAiSummary">{{ tr('AI 总结今天的未读') }}</button>
+    </div>
+
+    <div v-if="aiSummary" class="ai-summary-mask" @click.self="aiSummary = null">
+      <div class="ai-summary-card" role="dialog" :aria-label="tr('AI 总结')">
+        <header>
+          <strong>{{ tr('AI 总结今天的未读') }}</strong>
+          <button type="button" class="ai-summary-close" :aria-label="tr('关闭')" @click="aiSummary = null">
+            <PantryIcon name="x" :size="16" />
+          </button>
+        </header>
+        <div v-if="aiSummary.state === 'loading'" class="ai-summary-body is-loading">
+          <span>{{ tr('正在总结…') }}</span>
+        </div>
+        <div v-else-if="aiSummary.state === 'error'" class="ai-summary-body is-error">
+          <span>{{ aiSummary.message }}</span>
+        </div>
+        <div v-else class="ai-summary-body">{{ aiSummary.text }}</div>
+        <footer v-if="aiSummary.state === 'done'">
+          <button type="button" @click="copyAiSummary">{{ tr('复制') }}</button>
+          <button type="button" class="primary" @click="aiSummary = null">{{ tr('关闭') }}</button>
+        </footer>
+      </div>
     </div>
 
     <footer class="input-area">
@@ -2273,6 +2383,20 @@ async function onDrop(event: DragEvent): Promise<void> {
         <span v-if="isGroup && canSend && onlineGroupRecipientCount === 0" class="tool-hint">{{ tr('群成员离线，无法发送图片/文件') }}</span>
         <span v-else-if="isGroup" class="tool-hint">{{ tr('仅在线群成员可接收图片/文件') }}</span>
         <span v-else-if="!peerOnline" class="tool-hint">{{ tr('对方离线，无法发送图片/文件') }}</span>
+        <span v-if="!isGroup && peerTyping" class="typing-line" aria-live="polite">
+          {{ tr('对方正在输入…') }}
+        </span>
+        <span v-if="!isGroup" class="tool-wrap" :data-tip="tr('发送剪贴板内容，对方直接可粘贴')">
+          <button
+            class="tool"
+            type="button"
+            :aria-label="tr('发送剪贴板')"
+            :disabled="!canSend || !peerOnline"
+            @click="sendClipboardNow"
+          >
+            <PantryIcon name="copy" :size="26" />
+          </button>
+        </span>
         <span v-if="nudgeFeedback" class="nudge-feedback" :class="nudgeFeedback.kind">
           {{ nudgeFeedback.text }}
         </span>
@@ -2388,6 +2512,7 @@ async function onDrop(event: DragEvent): Promise<void> {
           :title="tr('可粘贴截图或文件')"
           aria-describedby="composer-send-hint"
           @update:model-value="onWin7EditorValue"
+          @input="onComposerInput"
           @keydown="onKeydown"
           @keyup="syncMentionQuery"
           @mouseup="syncMentionQuery"
@@ -2406,6 +2531,7 @@ async function onDrop(event: DragEvent): Promise<void> {
           :placeholder="inputPlaceholder"
           :title="tr('可粘贴截图或文件')"
           aria-describedby="composer-send-hint"
+          @input="onComposerInput"
           @keydown="onKeydown"
           @keyup="syncMentionQuery"
           @mouseup="syncMentionQuery"
@@ -3808,4 +3934,102 @@ async function onDrop(event: DragEvent): Promise<void> {
   }
 }
 
+/* ---------- 输入中提示（决议 #321） ---------- */
+.typing-line {
+  display: inline-flex;
+  align-items: center;
+  font-size: var(--font-xs);
+  color: var(--primary);
+  opacity: 0.85;
+}
+.typing-line::after {
+  content: '';
+  width: 3px;
+  height: 3px;
+  margin-left: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: typing-blink 1s ease-in-out infinite;
+}
+@keyframes typing-blink {
+  0%, 100% { opacity: 0.2; }
+  50% { opacity: 1; }
+}
+
+/* ---------- AI 总结弹窗（决议 #321） ---------- */
+.ai-summary-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 16, 24, 0.45);
+}
+.ai-summary-card {
+  width: min(460px, calc(100vw - 64px));
+  max-height: min(420px, calc(100vh - 96px));
+  display: flex;
+  flex-direction: column;
+  background: var(--material-strong);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--highlight-edge), var(--shadow-float);
+  overflow: hidden;
+}
+.ai-summary-card header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  font-size: var(--font-md);
+}
+.ai-summary-close {
+  display: inline-flex;
+  padding: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  border-radius: 8px;
+}
+.ai-summary-close:hover { background: var(--surface-hover); }
+.ai-summary-body {
+  padding: 14px 16px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: var(--font-sm);
+  line-height: 1.65;
+  color: var(--text-1);
+}
+.ai-summary-body.is-loading,
+.ai-summary-body.is-error {
+  color: var(--text-2);
+  white-space: normal;
+}
+.ai-summary-body.is-error { color: var(--danger, #d05050); }
+.ai-summary-card footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--line);
+}
+.ai-summary-card footer button {
+  padding: 6px 14px;
+  font-size: var(--font-sm);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-1);
+  cursor: pointer;
+}
+.ai-summary-card footer button:hover { background: var(--surface-hover); }
+.ai-summary-card footer button.primary {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
 </style>

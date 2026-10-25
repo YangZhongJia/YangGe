@@ -400,6 +400,8 @@ describe('未读置读需窗口可见且聚焦（决议 #220）', () => {
         getSettings: vi.fn().mockResolvedValue(null),
         onSettingsUpdated: vi.fn(),
         onConvsUpdated: vi.fn(),
+        onTyping: vi.fn(),
+        sendTyping: vi.fn(),
         onMsgNew: vi.fn((handler: (m: MessageView) => void) => {
           msgNewHandler = handler
         }),
@@ -624,5 +626,33 @@ describe('再次点击会话隐藏内容（#59）', () => {
     await store.openConv('single:node-bob')
     expect(store.activeConvId).toBe('single:node-bob')
     expect(store.hiddenConvId).toBeNull()
+  })
+})
+
+describe('输入中提示发送节流（决议 #321）', () => {
+  afterEach(() => { vi.unstubAllGlobals() })
+
+  it('同一对端 2.5 秒内只上报一次', () => {
+    const sendTyping = vi.fn()
+    vi.stubGlobal('window', { pantry: { sendTyping } })
+    const store = useChatStore()
+
+    store.notifyTyping('node-peer')
+    store.notifyTyping('node-peer')
+    store.notifyTyping('node-peer')
+    expect(sendTyping).toHaveBeenCalledTimes(1)
+    expect(sendTyping).toHaveBeenCalledWith('node-peer')
+
+    store.notifyTyping('node-other')
+    expect(sendTyping).toHaveBeenCalledTimes(2)
+  })
+
+  it('空 peerId 直接忽略', () => {
+    const sendTyping = vi.fn()
+    vi.stubGlobal('window', { pantry: { sendTyping } })
+    const store = useChatStore()
+    store.notifyTyping(undefined)
+    store.notifyTyping('')
+    expect(sendTyping).not.toHaveBeenCalled()
   })
 })

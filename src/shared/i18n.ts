@@ -24,7 +24,9 @@ export const SYSTEM_MESSAGE_TEMPLATES = {
   'group.announcement': '{actor}修改了群公告',
   'group.promoted': '{actor}将{members}设为管理员',
   'group.demoted': '{actor}取消了{members}的管理员身份',
-  'share.uploaded': '{actor} 上传了 {count} 个文件到你的文件柜'
+  'share.uploaded': '{actor} 上传了 {count} 个文件到你的文件柜',
+  'clipboard.sent': '你把剪贴板内容发给了 {actor}',
+  'clipboard.received': '{actor} 发来的剪贴板内容已复制到你的剪贴板'
 } as const
 
 export type SystemMessageKey = keyof typeof SYSTEM_MESSAGE_TEMPLATES

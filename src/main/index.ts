@@ -1,4 +1,4 @@
-import { AiReplier } from './services/ai-replier'
+import { AiReplier, callChatCompletion } from './services/ai-replier'
 import { normalizeAi } from './store/app-state'
 
 /** AI 分身的间接挂载点：chat/groups 先建、AiReplier 后挂（避免循环依赖） */
@@ -76,6 +76,8 @@ import {
   type ShareUploadResult,
   type TableTextMeta,
   type TransferView,
+  type ClipboardSendResult,
+  type SummarizeResult,
   type UpdateAvailability
 } from '../shared/ipc'
 import {
@@ -95,13 +97,16 @@ import {
   SHARE_PATH_MAX,
   SHARE_PUT_MAX_BYTES,
   SHARE_REQ_TIMEOUT,
+  CLIPBOARD_TEXT_LIMIT,
   isAvatarPresetValue,
   isShareMode,
+  type ClipboardPayload,
   type Envelope,
   type SharePayload,
   type Platform,
   type RuntimeArch,
   type ScanRangeSummary,
+  type TypingPayload,
   type UpdateReqPayload
 } from '../shared/protocol'
 import { isAvatarHash } from '../shared/protocol'
@@ -989,6 +994,77 @@ if (!gotLock) {
     void files.offerUpdatePackage(env.from, packagePath)
   }
 
+  /** 输入中提示（决议 #321）：尽力而为帧，按来源节流后推给渲染层展示 */
+  const typingSeen = new Map<string, number>()
+  function handleTypingFrame(env: Envelope<TypingPayload>): void {
+    if (!registry || !appState) return
+    if (env.payload?.to !== appState.nodeId) return
+    if (!registry.get(env.from)) return
+    const now = Date.now()
+    const last = typingSeen.get(env.from) ?? 0
+    if (now - last < 1_500) return
+    typingSeen.set(env.from, now)
+    for (const [id, at] of typingSeen) if (now - at > 30_000) typingSeen.delete(id)
+    mainWindow?.webContents.send(IpcEvents.typing, { peerId: env.from })
+  }
+
+  /** 收到对方剪贴板（决议 #321）：写入本机剪贴板并落系统提示 */
+  function handleClipboardFrame(env: Envelope<ClipboardPayload>): void {
+    if (!registry || !chat) return
+    if (!registry.get(env.from)) return
+    const text = env.payload?.text
+    if (typeof text !== 'string' || !text.trim() || Buffer.byteLength(text, 'utf8') > CLIPBOARD_TEXT_LIMIT) return
+    try {
+      clipboard.writeText(text)
+    } catch {
+      return
+    }
+    chat.receiveClipboardTip(env.from, resolvePeerDisplayName(env.from) || env.from, env.ts)
+  }
+
+  /** AI 群总结（决议 #321）：只取本地记录交大模型，结果仅回给请求者，绝不发进群 */
+  async function summarizeGroupToday(convId: string): Promise<SummarizeResult> {
+    if (!appState || !msgRepoRef) return { ok: false, reason: 'no-ai' }
+    if (!/^group:[A-Za-z0-9-]{1,64}$/.test(convId)) return { ok: false, reason: 'invalid' }
+    const cfg = normalizeAi(appState.config.ai)
+    if (!cfg.enabled || !cfg.baseUrl.trim() || !cfg.model.trim()) return { ok: false, reason: 'no-ai' }
+    const since = new Date()
+    since.setHours(0, 0, 0, 0)
+    const rows = msgRepoRef.listSince(convId, since.getTime(), 400)
+    const lines: string[] = []
+    for (const row of rows) {
+      if (row.status === 'recalled') continue
+      const name = resolvePeerDisplayName(row.sender_id) || registry?.get(row.sender_id)?.profile.nick ||
+        (row.sender_id === appState.nodeId ? appState.profile.nick : '') || '成员'
+      const time = new Date(row.ts)
+      const hhmm = `${String(time.getHours()).padStart(2, '0')}:${String(time.getMinutes()).padStart(2, '0')}`
+      const body = row.kind === 'text' || row.kind === 'group-text'
+        ? row.content
+        : row.kind === 'image' ? '[图片]' : row.kind === 'sticker' ? '[表情]'
+        : row.kind === 'file' ? '[文件]' : row.kind === 'pk' ? '[PK]' : ''
+      if (!body) continue
+      lines.push(`${hhmm} ${name}: ${body}`)
+      if (lines.join('\n').length > 14_000) break
+    }
+    if (lines.length === 0) return { ok: false, reason: 'empty' }
+    const transcript = lines.join('\n')
+    try {
+      const summary = await callChatCompletion(
+        cfg.baseUrl,
+        cfg.apiKey,
+        cfg.model,
+        [
+          { role: 'system', content: '你是群聊记录总结助手。用简体中文把群聊内容总结成要点：按主题分条、每条不超过两句话、保留关键结论和时间点，总长度不超过 200 字。不要添加评价。' },
+          { role: 'user', content: `以下是今天的群聊记录，请总结：\n\n${transcript}` }
+        ],
+        60_000
+      )
+      return { ok: true, summary }
+    } catch {
+      return { ok: false, reason: 'failed' }
+    }
+  }
+
   /**
    * 共享文件柜控制面（§8.2）：应答对端的 list / get，并把 list-ok / deny 交回本机等待中的请求。
    * 权限、路径、限流全部由 ShareService 判定，这里只做转发与超时收口。
@@ -1248,7 +1324,9 @@ if (!gotLock) {
         if (env.type === MSG_TYPES.update) handleUpdateRequest(env as Envelope<UpdateReqPayload>)
         else if (env.type === MSG_TYPES.share) handleShareCtl(env as Envelope<SharePayload>)
         else if (env.type === MSG_TYPES.screen && source) remoteView.service?.receive(env.from, source.address, env.payload as ScreenPayload)
+        else if (env.type === MSG_TYPES.clipboard) handleClipboardFrame(env as Envelope<ClipboardPayload>)
       })
+      messenger.on('typing', (env: Envelope<TypingPayload>) => handleTypingFrame(env))
       remoteView.attach({
         selfId: state.nodeId,
         peer: id => {
@@ -1263,6 +1341,7 @@ if (!gotLock) {
         }
       })
       const chatMessages = new MsgRepo(db)
+      msgRepoRef = chatMessages
       chatMessages.interruptScreenRecords()
       chat = new ChatService({
         selfId: state.nodeId,
@@ -1272,6 +1351,7 @@ if (!gotLock) {
         messenger,
         peerClock,
         aiReplier: aiPortRef,
+        nameOf: resolvePeerDisplayName,
         isOnline: (peerId) => registry?.get(peerId)?.online === true,
         probe: (peerId) => {
           discovery?.probeNode(peerId) // 打开会话 → 探活（F-DISC-8）
@@ -1816,6 +1896,36 @@ if (!gotLock) {
   ipcMain.handle(IpcChannels.updateRequest, (): Promise<boolean> => requestUpdatePackage())
 
   ipcMain.handle(IpcChannels.updateInstall, (): boolean => installReadyUpdate())
+
+  // 输入中提示（决议 #321）：send（udp 尽力而为）；渲染层已节流
+  ipcMain.on(IpcChannels.typingSend, (event, peerId: unknown) => {
+    if (!messenger || !appState) return
+    if (typeof peerId !== 'string' || !peerId || peerId.length > 64) return
+    if (event.sender !== mainWindow?.webContents) return
+    messenger.sendBestEffort(peerId, makeEnvelope<TypingPayload>(MSG_TYPES.typing, appState.nodeId, { to: peerId }))
+  })
+
+  // 发剪贴板（决议 #321）：文本在 main 层读取（沙箱渲染层无剪贴板权限）
+  ipcMain.handle(IpcChannels.clipboardSend, async (event, peerId: unknown): Promise<ClipboardSendResult> => {
+    if (!chat) return { ok: false, reason: 'invalid' }
+    if (typeof peerId !== 'string' || !peerId || peerId.length > 64) return { ok: false, reason: 'invalid' }
+    if (event.sender !== mainWindow?.webContents) return { ok: false, reason: 'invalid' }
+    let text: string
+    try {
+      text = clipboard.readText() ?? ''
+    } catch {
+      return { ok: false, reason: 'empty' }
+    }
+    if (!text.trim()) return { ok: false, reason: 'empty' }
+    if (Buffer.byteLength(text, 'utf8') > CLIPBOARD_TEXT_LIMIT) return { ok: false, reason: 'too-long' }
+    return chat.sendClipboard(peerId, text)
+  })
+
+  // AI 群总结（决议 #321）：结果仅回请求者，不进群
+  ipcMain.handle(IpcChannels.aiSummarize, (_event, convId: unknown): Promise<SummarizeResult> => {
+    if (typeof convId !== 'string') return Promise.resolve({ ok: false, reason: 'invalid' })
+    return summarizeGroupToday(convId)
+  })
 
   ipcMain.handle(IpcChannels.peersProbe, (_event, nodeId: unknown): boolean => {
     if (typeof nodeId !== 'string' || nodeId.length === 0 || nodeId.length > 64) return false

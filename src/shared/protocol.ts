@@ -261,6 +261,12 @@ export const NUDGE_MIN_INTERVAL_MS = TIMINGS.nudgeMinInterval
 export const NUDGE_RATE_WINDOW_MS = TIMINGS.nudgeRateWindow
 export const NUDGE_MAX_PER_WINDOW = TIMINGS.nudgeMaxPerWindow
 
+/** 输入中提示：发送端节流间隔 / 接收端展示时长（决议 #321） */
+export const TYPING_THROTTLE_MS = 2_500
+export const TYPING_SHOW_MS = 4_000
+/** 发剪贴板文本上限：远小于 TEXT_TCP_LIMIT，避免可靠帧过大（决议 #321） */
+export const CLIPBOARD_TEXT_LIMIT = 16_384
+
 /** 用户消息载荷（§7.1）。text=单聊；group-text=群聊；recall=撤回指令；nudge=私聊窗口震动；pk=分歧解决 */
 export type MsgPayload =
   | {
@@ -302,6 +308,16 @@ export type MsgPayload =
       /** 补发标记：消息保持原 id/ts，落在历史正确位置 */
       resend?: boolean
     }
+
+/** 输入中提示（决议 #321）：尽力而为单发，不入聊天、不落库；to=收件人 nodeId */
+export interface TypingPayload {
+  to: string
+}
+
+/** 发剪贴板（决议 #321）：可靠控制帧；接收端写入本地剪贴板并落系统提示 */
+export interface ClipboardPayload {
+  text: string
+}
 
 /** 群元数据（§7.4）：rev 单调递增，冲突按 (rev, updatedTs) 取大（LWW） */
 export interface GroupMeta {
@@ -624,7 +640,9 @@ export const MSG_TYPES = {
   avatar: 'avatar',
   update: 'update',
   share: 'share',
-  screen: 'screen'
+  screen: 'screen',
+  typing: 'typing',
+  clipboard: 'clipboard'
 } as const
 
 export function isAvatarHash(value: unknown): value is string {

@@ -42,6 +42,9 @@ import {
   type StickerView,
   type TableTextMeta,
   type TransferView,
+  type TypingEvent,
+  type ClipboardSendResult,
+  type SummarizeResult,
   type UpdateAvailability,
   type UpdatePackageReady
 } from '../shared/ipc'
@@ -88,6 +91,15 @@ const api: PantryApi = {
   checkUpdate: (): Promise<UpdateAvailability | null> => ipcRenderer.invoke(IpcChannels.updateCheck),
   requestUpdate: (): Promise<boolean> => ipcRenderer.invoke(IpcChannels.updateRequest),
   installUpdate: (): Promise<boolean> => ipcRenderer.invoke(IpcChannels.updateInstall),
+  sendTyping: (peerNodeId: string): void => {
+    if (typeof peerNodeId === 'string' && peerNodeId.length > 0 && peerNodeId.length <= 64) {
+      ipcRenderer.send(IpcChannels.typingSend, peerNodeId)
+    }
+  },
+  sendClipboard: (peerNodeId: string): Promise<ClipboardSendResult> =>
+    ipcRenderer.invoke(IpcChannels.clipboardSend, peerNodeId),
+  summarizeGroup: (convId: string): Promise<SummarizeResult> =>
+    ipcRenderer.invoke(IpcChannels.aiSummarize, convId),
   probePeer: (nodeId: string): Promise<boolean> =>
     ipcRenderer.invoke(IpcChannels.peersProbe, nodeId),
   listConversations: (): Promise<ConversationView[]> => ipcRenderer.invoke(IpcChannels.convList),
@@ -294,6 +306,7 @@ const api: PantryApi = {
     subscribe<UpdateAvailability | null>(IpcEvents.updateAvailable, listener),
   onUpdatePackageReady: (listener) =>
     subscribe<UpdatePackageReady>(IpcEvents.updatePackageReady, listener),
+  onTyping: (listener) => subscribe<TypingEvent>(IpcEvents.typing, listener),
   onMsgNew: (listener) => subscribe<MessageView>(IpcEvents.msgNew, listener),
   onMsgUpdated: (listener) => subscribe<MessageView>(IpcEvents.msgUpdated, listener),
   onMsgStatus: (listener) => subscribe<MsgStatusEvent>(IpcEvents.msgStatus, listener),

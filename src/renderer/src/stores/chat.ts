@@ -12,12 +12,15 @@ import type {
 } from '../../../shared/ipc'
 import type { PkGame } from '../../../shared/pk'
 import { isWindowAttended } from '../utils/window-attention'
+import { TYPING_SHOW_MS, TYPING_THROTTLE_MS } from '../../../shared/protocol'
 import type { PendingAttachment } from '../utils/pending-attachments'
 
 // 主进程聊天数据的投影 + 乐观更新（tech-design §7 状态流）
 let nudgeClearTimer: ReturnType<typeof setTimeout> | null = null
 let nudgeOpenRun = 0
 let navigationRun = 0
+/** 输入中节流时间戳（模块级，避免进入响应式）（决议 #321） */
+const notifyTypingSentAt = new Map<string, number>()
 // 移除聊天的 10 秒撤回窗口（决议 #125）：commit 定时器 + 每秒倒计时
 let removalCommitTimer: ReturnType<typeof setTimeout> | null = null
 let removalTickTimer: ReturnType<typeof setInterval> | null = null
@@ -107,6 +110,9 @@ export const useChatStore = defineStore('chat', {
     lastNudge: null as NudgeEvent | null,
     /** 移除聊天的待删除项（决议 #125）：非空时该会话在列表中隐藏，10 秒倒计时内可撤回 */
     pendingRemoval: null as PendingRemoval | null,
+    /** 输入中提示（决议 #321）：peerId → 展示截止时间戳 */
+    typingUntil: {} as Record<string, number>,
+    typingTimer: null as ReturnType<typeof setInterval> | null,
     initialized: false
   }),
   getters: {
@@ -147,6 +153,18 @@ export const useChatStore = defineStore('chat', {
 
       window.pantry.onConvsUpdated((convs) => {
         this.convs = convs
+      })
+      // 输入中提示（决议 #321）：收到即刷新截止时间，由本地定时器超时收尾
+      window.pantry.onTyping(({ peerId }) => {
+        this.typingUntil[peerId] = Date.now() + TYPING_SHOW_MS
+        if (!this.typingTimer) {
+          this.typingTimer = setInterval(() => {
+            const now = Date.now()
+            for (const id of Object.keys(this.typingUntil)) {
+              if (this.typingUntil[id] <= now) delete this.typingUntil[id]
+            }
+          }, 1_000)
+        }
       })
       window.pantry.onMsgNew((msg) => {
         if (this.messages[msg.convId]) this.appendConversationMessage(msg.convId, msg)
@@ -489,6 +507,15 @@ export const useChatStore = defineStore('chat', {
       const earlier = await window.pantry.pageMessages(convId, before, 50)
       if (run !== navigationRun || this.activeConvId !== convId || this.messages[convId] !== list) return 0
       return this.prependEarlierMessages(convId, earlier)
+    },
+
+    /** 输入中提示（决议 #321）：仅单聊，2.5 秒节流；提示帧不入聊天 */
+    notifyTyping(peerId: string | undefined): void {
+      if (!peerId) return
+      const now = Date.now()
+      if (now - (notifyTypingSentAt.get(peerId) ?? 0) < TYPING_THROTTLE_MS) return
+      notifyTypingSentAt.set(peerId, now)
+      window.pantry.sendTyping(peerId)
     },
 
     async send(text: string, mentions: string[] = [], replyTo?: string): Promise<boolean> {

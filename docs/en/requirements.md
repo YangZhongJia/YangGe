@@ -293,3 +293,12 @@ Official repository, download, issue and source links remain skyjt/teahouse; for
 ## Decision #319: Confirm pasted attachments (Issue #45)
 
 2026-10-04, v0.61.2: Pasted images and files enter a composer preview before any path grant or send. Users can append, remove, cancel, or explicitly send with optional text. Pending paths are deduplicated; successful items are removed and failed items retained. Conversation changes clear attachments and invalidate asynchronous preparation; remaining batch items stop. Rich text and table behavior remain unchanged. Encryption, drag/drop, picker, capture and issues #51/#53 are outside this patch. The user approved release after reviewing the real UI.
+
+## Decision #321: Typing indicator / Clipboard send / AI group summary (2026-10-25)
+
+- **Typing indicator**: single-chat composing sends a best-effort UDP `typing` frame (no ACK, no dedup), throttled to one per 2.5s; receivers show it for 4s. It never enters chat history and legacy peers ignore it.
+- **Clipboard send**: a new composer button in single chats sends clipboard text over a reliable `clipboard` control frame (UDP ACK with TCP fallback). The receiver writes it into the local clipboard and stores a system tip with the sender's name; the sender stores a tip too. Text is capped at 16KB with explicit empty/oversized/offline feedback. Images keep using the existing paste/capture path.
+- **AI group summary**: right-click in a group chat offers "AI summary of today's unread". Only local messages of today (max 400 rows / 14K chars) are sent to the configured LLM; the result is shown in a local dialog and never posted to the group. Missing AI config, no messages and call failures produce explicit messages.
+- **Contacts**: grouped by company/dept/team is an existing capability (F-DISC-4); no code change in this round.
+
+Typing/clipboard ride new Messenger message types (forward compatible); the summary reuses the AI avatar's OpenAI-compatible config and a new `listSince` local query. Service, renderer throttle and E2E tests included. Version number to be recorded with the next release.

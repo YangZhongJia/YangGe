@@ -2,7 +2,7 @@ import type { ScreenRecord, ScreenState } from '../../shared/remote-view'
 import { screenRecordText } from '../../i18n/messages'
 import { EventEmitter } from 'node:events'
 import { describe, expect, it } from 'vitest'
-import type { Envelope, GroupMeta, MsgPayload } from '../../shared/protocol'
+import { MSG_TYPES, type ClipboardPayload, type Envelope, type GroupMeta, type MsgPayload } from '../../shared/protocol'
 import type { ConversationView } from '../../shared/ipc'
 import { ChatService } from './chat'
 import type { Messenger, SendOutcome } from '../net/messenger'
@@ -421,6 +421,55 @@ describe('ChatService 私聊窗口震动', () => {
       content: '对方发来一次窗口震动'
     })
     expect(convRepo.unread).toHaveLength(0)
+  })
+})
+
+describe('ChatService 发剪贴板（决议 #321）', () => {
+  function buildChat(messenger: FakeMessenger, msgRepo = new FakeMsgRepo(), convRepo = new FakeConvRepo()): ChatService {
+    return new ChatService({
+      selfId: 'node-self',
+      convRepo: convRepo as unknown as ConvRepo,
+      msgRepo: msgRepo as unknown as MsgRepo,
+      groupRepo: new FakeGroupRepo() as unknown as GroupRepo,
+      messenger: messenger as unknown as Messenger
+    })
+  }
+
+  it('发送走可靠通道并写系统提示', async () => {
+    const messenger = new FakeMessenger()
+    const msgRepo = new FakeMsgRepo()
+    const chat = buildChat(messenger, msgRepo)
+
+    await expect(chat.sendClipboard('node-peer', '你好，这是剪贴板内容')).resolves.toEqual({ ok: true })
+    expect(messenger.reliableSent).toHaveLength(1)
+    const env = messenger.reliableSent[0].env as unknown as Envelope<ClipboardPayload>
+    expect(env.type).toBe(MSG_TYPES.clipboard)
+    expect(env.payload.text).toBe('你好，这是剪贴板内容')
+    expect(msgRepo.inserted.some((m) => m.kind === 'system' && m.content.includes('剪贴板'))).toBe(true)
+  })
+
+  it('空文本 / 超长文本 / 对端不可达都拒绝且不写提示', async () => {
+    const messenger = new FakeMessenger()
+    messenger.reliableResult = false
+    const msgRepo = new FakeMsgRepo()
+    const chat = buildChat(messenger, msgRepo)
+
+    await expect(chat.sendClipboard('node-peer', '   ')).resolves.toEqual({ ok: false, reason: 'invalid' })
+    await expect(chat.sendClipboard('node-peer', 'x'.repeat(16 * 1024 + 1))).resolves.toEqual({ ok: false, reason: 'invalid' })
+    await expect(chat.sendClipboard('node-peer', '正常内容')).resolves.toEqual({ ok: false, reason: 'undelivered' })
+    expect(msgRepo.inserted).toHaveLength(0)
+  })
+
+  it('接收端写收到的系统提示并带对方名字', () => {
+    const msgRepo = new FakeMsgRepo()
+    const chat = buildChat(new FakeMessenger(), msgRepo)
+
+    chat.receiveClipboardTip('node-peer', '贾洋', 12345)
+    expect(msgRepo.inserted).toHaveLength(1)
+    const tip = msgRepo.inserted[0]
+    expect(tip.kind).toBe('system')
+    expect(tip.content).toContain('贾洋')
+    expect(tip.content).toContain('剪贴板')
   })
 })
 
