@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { AI_REPLY_PREFIX, buildLlmMessages, shouldAutoReply } from './ai-replier'
+import { AI_REPLY_PREFIX, buildLlmMessages, shouldAutoReply, stripAiPrefix } from './ai-replier'
 import type { AiReplierConfig } from '../store/app-state'
 
 const cfg = (over: Partial<AiReplierConfig> = {}): AiReplierConfig => ({
@@ -54,5 +54,25 @@ describe('AI 分身提示词组装', () => {
   it('无人设时使用默认助手提示', () => {
     const msgs = buildLlmMessages('', 'A', 'B', [])
     expect(msgs[0].content).toContain('办公助手')
+  })
+})
+
+describe('AI 代回前缀剥离（防双前缀）', () => {
+  it('剥掉开头单个或多个前缀', () => {
+    expect(stripAiPrefix('[AI 代回] 收到')).toBe('收到')
+    expect(stripAiPrefix('[AI 代回] [AI 代回] 收到')).toBe('收到')
+    expect(stripAiPrefix('  [AI 代回]\n[AI 代回] 好')).toBe('好')
+  })
+
+  it('无前缀文本原样返回（仅去首尾空白）', () => {
+    expect(stripAiPrefix(' 今天下午两点 ')).toBe('今天下午两点')
+    expect(stripAiPrefix('[人工] 不是 AI 前缀')).toBe('[人工] 不是 AI 前缀')
+  })
+
+  it('历史里的前缀在组装提示词时被剥掉，避免模型模仿', () => {
+    const msgs = buildLlmMessages('', 'A', 'B', [
+      { sender: 'A', isMine: true, text: AI_REPLY_PREFIX + '收到' }
+    ])
+    expect(msgs[1].content).toBe('收到')
   })
 })

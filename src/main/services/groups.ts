@@ -277,7 +277,11 @@ export class GroupsService extends EventEmitter {
       }
     }
     const row = this.deps.msgRepo.get(env.id)
-    return row ? msgRowToView(row) : null
+    const view = row ? msgRowToView(row) : null
+    // 与单聊 sendText 同口径：AI 代回等主进程后台发送依赖 message 事件实时上屏，
+    // 手动发送的渲染层插入与 onMsgNew 追加均按消息 id 去重
+    if (view) this.emit('message', view)
+    return view
   }
 
   sendPk(groupId: string, game: PkGame): MessageView | null {

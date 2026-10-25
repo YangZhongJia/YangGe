@@ -101,7 +101,11 @@ export function screenRecordText(s: ScreenRecord, translate: Translate = tr): st
     case 'permission-denied': return translate('屏幕协助未获得录屏权限')
     case 'capture-failed':
     case 'capture-ended': return translate('屏幕采集已停止或不可用，请重新请求')
-    case 'timeout': return translate('屏幕协助超时，连接已结束')
+    case 'timeout':
+      // 连接阶段超时（从未进入协助中）几乎都是防火墙拦截新建入站 TCP：聊天走 UDP 不受影响
+      return translate(s.startedAt === undefined
+        ? '屏幕连接超时：常见原因是 Windows 防火墙拦截（聊天不受影响），重新运行阳鸽安装包即可自动放行'
+        : '屏幕协助超时，连接已结束')
     case 'disconnected': return translate('屏幕连接已断开，请重新请求')
     case 'locked': return translate('因锁屏或锁屏检测失效，屏幕协助已结束')
     case 'suspended': return translate('因电脑休眠，屏幕协助已结束')

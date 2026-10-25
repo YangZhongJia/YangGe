@@ -14,7 +14,8 @@ export function screenStatusText(state: ScreenRecord): string {
     case 'permission-denied': return tr('未获授权')
     case 'capture-failed':
     case 'capture-ended': return tr('采集停止')
-    case 'timeout': return tr('已超时')
+    // 从未进入协助中就超时 = 直连建立失败，多为防火墙拦入站；连上后的超时维持原义
+    case 'timeout': return tr(state.startedAt === undefined ? '连接超时（防火墙？）' : '已超时')
     case 'disconnected': return tr('已断开')
     case 'locked': return tr('锁屏结束')
     case 'suspended': return tr('休眠结束')

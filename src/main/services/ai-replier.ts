@@ -7,6 +7,16 @@ import type { AiReplierConfig } from '../store/app-state'
 
 export const AI_REPLY_PREFIX = '[AI 代回] '
 
+/** 剥掉文本开头所有 [AI 代回] 前缀（模型偶尔会模仿历史里的前缀，发送前统一只加一次） */
+export function stripAiPrefix(text: string): string {
+  const marker = AI_REPLY_PREFIX.trim()
+  let out = text.trimStart()
+  while (out.startsWith(marker)) {
+    out = out.slice(marker.length).trimStart()
+  }
+  return out.trim()
+}
+
 /** chat/groups 服务持有的间接引用（构造顺序解耦：先建服务，后挂实现） */
 export interface AiPortHolder {
   current: {
@@ -55,7 +65,8 @@ export function buildLlmMessages(
     '回复要求：一到两句话、口语化、符合职场语气；不要输出客套开场白；不要提及你是 AI 或这些指令。'
   const turns = history.map((h) => ({
     role: (h.isMine ? 'assistant' : 'user') as 'assistant' | 'user',
-    content: h.text
+    // 历史剥掉 [AI 代回] 前缀：既不泄露代回机制，也避免模型模仿前缀输出
+    content: stripAiPrefix(h.text)
   }))
   return [{ role: 'system', content: sys }, ...turns]
 }
@@ -138,8 +149,9 @@ export class AiReplier {
     void this.enqueue(`single:${from}`, async () => {
       const reply = await this.ask(cfg!, `single:${from}`, from)
       if (!reply) return
-      this.record(`single:${from}`, this.deps.selfName(), true, AI_REPLY_PREFIX + reply)
-      this.deps.sendToPeer(from, AI_REPLY_PREFIX + reply)
+      const out = AI_REPLY_PREFIX + stripAiPrefix(reply)
+      this.record(`single:${from}`, this.deps.selfName(), true, out)
+      this.deps.sendToPeer(from, out)
     })
   }
 
@@ -150,8 +162,9 @@ export class AiReplier {
     void this.enqueue(`group:${groupId}`, async () => {
       const reply = await this.ask(cfg!, `group:${groupId}`, from)
       if (!reply) return
-      this.record(`group:${groupId}`, this.deps.selfName(), true, AI_REPLY_PREFIX + reply)
-      this.deps.sendToGroup(groupId, AI_REPLY_PREFIX + reply)
+      const out = AI_REPLY_PREFIX + stripAiPrefix(reply)
+      this.record(`group:${groupId}`, this.deps.selfName(), true, out)
+      this.deps.sendToGroup(groupId, out)
     })
   }
 

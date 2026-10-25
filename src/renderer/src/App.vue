@@ -103,7 +103,7 @@ async function requestUpdatePackage(): Promise<void> {
   updateRequestMsg.value = ''
   try {
     const ok = await window.pantry.requestUpdate()
-    updateRequestMsg.value = ok ? tr('请求已发出。') : tr('请求未送达，请稍后重试。')
+    updateRequestMsg.value = ok ? tr('请求已发出。安装包将自动保存到「阳鸽数据目录 / data / updates」，下载完成后双击运行即可升级。') : tr('请求未送达，请稍后重试。')
   } catch {
     updateRequestMsg.value = tr('请求更新失败，请稍后重试。')
   } finally {

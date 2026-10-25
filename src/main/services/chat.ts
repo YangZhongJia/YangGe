@@ -188,7 +188,11 @@ export class ChatService extends EventEmitter {
     })
 
     const row = this.deps.msgRepo.get(env.id)
-    return row ? toMsgView(row) : null
+    const view = row ? toMsgView(row) : null
+    // 统一推送 message 事件：主进程后台发送（AI 代回）没有渲染层乐观插入，
+    // 依赖此事件实时上屏；手动发送的渲染层插入与 onMsgNew 追加均按消息 id 去重
+    if (view) this.emit('message', view)
+    return view
   }
 
   /** 私聊窗口震动：可靠即时动作，不离线补发；发送成功后写本地系统提示（决议 #109/#110）。 */
