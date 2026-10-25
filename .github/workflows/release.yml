@@ -685,10 +685,10 @@ jobs:
           if gh release view "$CURRENT_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$CURRENT_TAG" "${files[@]}" --repo "$GITHUB_REPOSITORY" --clobber
             gh release edit "$CURRENT_TAG" --repo "$GITHUB_REPOSITORY" \
-              --title "茶话间 · Teahouse ${CURRENT_TAG}" \
+              --title "阳鸽 · YangGe ${CURRENT_TAG}" \
               --notes-file release-notes.md
           else
             gh release create "$CURRENT_TAG" "${files[@]}" --repo "$GITHUB_REPOSITORY" --verify-tag \
-              --title "茶话间 · Teahouse ${CURRENT_TAG}" \
+              --title "阳鸽 · YangGe ${CURRENT_TAG}" \
               --notes-file release-notes.md
           fi

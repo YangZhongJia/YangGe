@@ -26,7 +26,7 @@ describe('checkVersionConsistency', () => {
     const root = fixture()
     const artifacts = join(root, 'artifacts', 'linux')
     mkdirSync(artifacts, { recursive: true })
-    writeFileSync(join(artifacts, 'Teahouse-1.2.3-linux-amd64.deb'), 'deb')
+    writeFileSync(join(artifacts, 'YangGe-1.2.3-linux-amd64.deb'), 'deb')
     writeFileSync(join(artifacts, 'SHA256SUMS.txt'), 'sum')
 
     expect(
@@ -60,12 +60,12 @@ describe('checkVersionConsistency', () => {
     const root = fixture()
     const artifacts = join(root, 'artifacts', 'windows')
     mkdirSync(artifacts, { recursive: true })
-    writeFileSync(join(artifacts, 'Teahouse-1.2.2-win-x64-setup.exe'), 'exe')
+    writeFileSync(join(artifacts, 'YangGe-1.2.2-win-x64-setup.exe'), 'exe')
 
     const result = checkVersionConsistency({ root, artifactsDir: join(root, 'artifacts'), env: {} })
 
     expect(result.errors).toEqual([
-      '产物文件名 Teahouse-1.2.2-win-x64-setup.exe 未使用版本前缀 Teahouse-1.2.3-'
+      '产物文件名 YangGe-1.2.2-win-x64-setup.exe 未使用版本前缀 YangGe-1.2.3-'
     ])
   })
 })

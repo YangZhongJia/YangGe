@@ -42,7 +42,7 @@ if [ -z "$native" ]; then
 fi
 node scripts/check-native-glibc.cjs "$native"
 
-deb=$(ls release/Teahouse-*-linux-arm64.deb)
+deb=$(ls release/YangGe-*-linux-arm64.deb)
 mkdir -p /tmp/deb-verify
 data=$(ar t "$deb" | grep '^data\.tar')
 ar p "$deb" "$data" > "/tmp/deb-verify/$data"
@@ -59,7 +59,7 @@ echo "deb 校验通过：无硬链接、无中文路径"
 
 cd release
 shopt -s nullglob
-files=(Teahouse-*-linux-arm64.deb Teahouse-*-linux-arm64.AppImage)
+files=(YangGe-*-linux-arm64.deb YangGe-*-linux-arm64.AppImage)
 if [ "${#files[@]}" -lt 2 ]; then
   ls -la
   echo "Linux arm64 产物数量不足，期望 deb 与 AppImage 各一个。" >&2

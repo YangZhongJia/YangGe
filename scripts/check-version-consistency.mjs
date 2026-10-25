@@ -39,9 +39,9 @@ export function checkVersionConsistency({ root = process.cwd(), artifactsDir, en
   }
 
   if (artifactsDir) {
-    const expectedPrefix = `Teahouse-${version}-`
+    const expectedPrefix = `YangGe-${version}-`
     for (const name of collectFiles(resolve(artifactsDir))) {
-      if (name.startsWith('Teahouse-') && !name.startsWith(expectedPrefix)) {
+      if (name.startsWith('YangGe-') && !name.startsWith(expectedPrefix)) {
         errors.push(`产物文件名 ${name} 未使用版本前缀 ${expectedPrefix}`)
       }
     }
