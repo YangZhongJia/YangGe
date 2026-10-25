@@ -439,6 +439,7 @@ async function saveAi(): Promise<void> {
 async function saveApp(patch: AppSettingsPatch, tip = tr('已保存')): Promise<void> {
   const next = await window.pantry.saveAppSettings(patch)
   syncForm(next)
+  applyAppearance(next) // 设置窗口自身的配色/背景即时生效（主窗口由 onSettingsUpdated 驱动）
   flashSaved(tip)
 }
 
