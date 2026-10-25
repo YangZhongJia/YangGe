@@ -1560,7 +1560,7 @@ async function confirmRemove(cidr: string): Promise<void> {
                 <dt>{{ tr('分享') }}</dt>
                 <dd>
                   <div class="share-pack">
-                    <select v-model:value="sharePeerId" class="share-peer-select" :aria-label="tr('选择同事')">
+                    <select v-model="sharePeerId" class="share-peer-select" :aria-label="tr('选择同事')">
                       <option value="" disabled>{{ tr('选择同事') }}</option>
                       <option v-for="p in shareTargets" :key="p.nodeId" :value="p.nodeId">
                         {{ p.nick }}
