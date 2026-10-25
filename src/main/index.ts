@@ -125,7 +125,7 @@ import {
 } from './store/app-state'
 import { refreshTrayLanguage, setupTray, stopTrayUnreadFlash, updateTrayUnread } from './windows/tray'
 import { WindowDragController } from './windows/window-drag'
-import { syncSettingsWindowLanguage, openSettingsWindow, syncSettingsWindowZoom } from './windows/settings-window'
+import { syncSettingsWindowLanguage, openSettingsWindow, syncSettingsWindowZoom, getSettingsWindow } from './windows/settings-window'
 import {
   closeCaptureWindow,
   openCaptureWindow,
@@ -1908,9 +1908,14 @@ if (!gotLock) {
 
   // 发剪贴板（决议 #321）：文本在 main 层读取（沙箱渲染层无剪贴板权限）
   ipcMain.handle(IpcChannels.clipboardSend, async (event, peerId: unknown): Promise<ClipboardSendResult> => {
-    if (!chat) return { ok: false, reason: 'invalid' }
+    if (!chat || !registry) return { ok: false, reason: 'invalid' }
     if (typeof peerId !== 'string' || !peerId || peerId.length > 64) return { ok: false, reason: 'invalid' }
     if (event.sender !== mainWindow?.webContents) return { ok: false, reason: 'invalid' }
+    // 旧版本不认识 clipboard 报文会静默丢弃：提前识别并给出升级提示
+    const peerRecord = registry.get(peerId)
+    if (peerRecord && compareSemver(peerRecord.profile.ver, '1.5.0') < 0) {
+      return { ok: false, reason: 'peer-version' }
+    }
     let text: string
     try {
       text = clipboard.readText() ?? ''
@@ -1938,9 +1943,11 @@ if (!gotLock) {
     return view ? { ok: true } : { ok: false, reason: 'offline' }
   })
 
-  // 分享阳鸽：复制当前版本下载链接
+  // 分享阳鸽：复制当前版本下载链接（按钮在设置窗口，主窗口与设置窗口都放行）
   ipcMain.handle(IpcChannels.appShareCopyLink, async (event): Promise<void> => {
-    if (!appState || event.sender !== mainWindow?.webContents) return
+    if (!appState) return
+    const allowed = [mainWindow?.webContents, getSettingsWindow()?.webContents]
+    if (!allowed.includes(event.sender)) return
     try {
       clipboard.writeText(`https://github.com/YangZhongJia/YangGe/releases/tag/v${appState.profile.ver}`)
     } catch {

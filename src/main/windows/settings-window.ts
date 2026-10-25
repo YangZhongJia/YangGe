@@ -58,6 +58,11 @@ function notifySettingsWindowState(parent: BrowserWindow | null, open: boolean):
   parent.webContents.send(IpcEvents.settingsWindowState, open)
 }
 
+/** 供 main 校验来自设置窗口的 IPC 发送方（决议 #322） */
+export function getSettingsWindow(): BrowserWindow | null {
+  return win && !win.isDestroyed() ? win : null
+}
+
 export function syncSettingsWindowLanguage(): void {
   win?.setTitle(tr('设置 - 阳鸽'))
 }

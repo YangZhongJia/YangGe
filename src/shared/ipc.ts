@@ -262,7 +262,7 @@ export interface TypingEvent {
 
 export type ClipboardSendResult =
   | { ok: true }
-  | { ok: false; reason: 'empty' | 'too-long' | 'undelivered' | 'invalid' }
+  | { ok: false; reason: 'empty' | 'too-long' | 'undelivered' | 'invalid' | 'peer-version' }
 
 export type SummarizeResult =
   | { ok: true; summary: string }

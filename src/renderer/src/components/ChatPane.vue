@@ -1220,6 +1220,7 @@ async function sendClipboardNow(): Promise<void> {
     if (res.ok) setNudgeFeedback(tr('剪贴板内容已发送'), 'ok')
     else if (res.reason === 'empty') setNudgeFeedback(tr('剪贴板里没有文本内容'), 'warn')
     else if (res.reason === 'too-long') setNudgeFeedback(tr('剪贴板文本过长（上限 16KB）'), 'warn')
+    else if (res.reason === 'peer-version') setNudgeFeedback(tr('对方阳鸽版本过低，请对方先升级到 1.5.0 以上'), 'warn')
     else setNudgeFeedback(tr('对方离线，发送失败'), 'warn')
   } catch {
     setNudgeFeedback(tr('发送失败，请稍后再试'), 'warn')

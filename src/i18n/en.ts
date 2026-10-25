@@ -1076,6 +1076,7 @@ const english: Record<string, string> = {
   "剪贴板内容已发送": "Clipboard content sent",
   "剪贴板里没有文本内容": "No text content in the clipboard",
   "剪贴板文本过长（上限 16KB）": "Clipboard text too long (16KB limit)",
+  "对方阳鸽版本过低，请对方先升级到 1.5.0 以上": "The peer's YangGe is too old; ask them to upgrade to 1.5.0+ first",
   "对方离线，发送失败": "Peer is offline; send failed",
   "发送失败，请稍后再试": "Send failed. Please try again later.",
   "AI 总结今天的未读": "AI summary of today's unread",
