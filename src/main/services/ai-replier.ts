@@ -7,6 +7,27 @@ import type { AiReplierConfig } from '../store/app-state'
 
 export const AI_REPLY_PREFIX = '[AI 代回] '
 
+/** 润色模式（决议 #324）：polish 提示词集中在这里，供单测 */
+export type PolishMode = 'formal' | 'concise' | 'zh2en' | 'en2zh'
+
+export function isPolishMode(value: unknown): value is PolishMode {
+  return value === 'formal' || value === 'concise' || value === 'zh2en' || value === 'en2zh'
+}
+
+const POLISH_PROMPTS: Record<PolishMode, string> = {
+  formal: '把下面的文字改写得更正式、更专业，保持原意与关键信息，直接返回改写结果，不要任何解释或前后缀。',
+  concise: '把下面的文字改写得更简短扼要，删除客套与重复，保留关键信息，直接返回改写结果，不要任何解释或前后缀。',
+  zh2en: '把下面的文字翻译成地道、专业的英文，只返回译文，不要任何解释或前后缀。',
+  en2zh: '把下面的文字翻译成通顺的简体中文，只返回译文，不要任何解释或前后缀。'
+}
+
+export function buildPolishMessages(mode: PolishMode, text: string): Array<{ role: 'system' | 'user'; content: string }> {
+  return [
+    { role: 'system', content: POLISH_PROMPTS[mode] },
+    { role: 'user', content: text }
+  ]
+}
+
 /** 剥掉文本开头所有 [AI 代回] 前缀（模型偶尔会模仿历史里的前缀，发送前统一只加一次） */
 export function stripAiPrefix(text: string): string {
   const marker = AI_REPLY_PREFIX.trim()

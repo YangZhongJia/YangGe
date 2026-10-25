@@ -117,9 +117,9 @@ function lastSeenLabel(peer: PeerView): string {
         <div class="identity">
           <div class="identity-row">
             <h2>{{ displayName }}</h2>
-            <span class="status-pill" :class="{ on: peer.online }">
+            <span class="status-pill" :class="{ on: peer.online, away: peer.online && peer.away }">
               <span class="status-dot"></span>
-              {{ peer.online ? tr('在线') : tr('离线') }}
+              {{ peer.online ? (peer.away ? tr('离开') : tr('在线')) : tr('离线') }}
             </span>
           </div>
           <p v-if="peer.remark" class="raw-nick">{{ tr('昵称：{0}', { 0: peer.nick }) }}</p>
@@ -258,6 +258,10 @@ h2 {
   font-size: 12px;
   white-space: nowrap;
   flex-shrink: 0;
+}
+.status-pill.away,
+.status-pill.away .status-dot {
+  background: var(--away);
 }
 .status-pill.on {
   color: var(--online);

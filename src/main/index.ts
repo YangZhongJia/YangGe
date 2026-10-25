@@ -1,5 +1,5 @@
-import { AiReplier, callChatCompletion } from './services/ai-replier'
-import { normalizeAi } from './store/app-state'
+import { AiReplier, buildPolishMessages, callChatCompletion, isPolishMode } from './services/ai-replier'
+import { normalizeAi, normalizeClipboardFollow } from './store/app-state'
 
 /** AI 分身的间接挂载点：chat/groups 先建、AiReplier 后挂（避免循环依赖） */
 const aiPortRef: {
@@ -20,6 +20,7 @@ import {
   ipcMain,
   nativeImage,
   Notification,
+  powerMonitor,
   protocol,
   screen,
   shell,
@@ -77,6 +78,8 @@ import {
   type TableTextMeta,
   type TransferView,
   type ClipboardSendResult,
+  type PolishResult,
+  type ReminderInput,
   type SharePackageResult,
   type SummarizeResult,
   type UpdateAvailability
@@ -843,6 +846,7 @@ if (!gotLock) {
       platform: record.profile.platform,
       ip: record.ip,
       online: record.online,
+      away: record.online ? record.away === true : undefined,
       lastSeen: record.lastSeen,
       ver: record.profile.ver,
       caps: Array.isArray(record.profile.caps) ? record.profile.caps : []
@@ -1009,7 +1013,8 @@ if (!gotLock) {
     mainWindow?.webContents.send(IpcEvents.typing, { peerId: env.from })
   }
 
-  /** 收到对方剪贴板（决议 #321）：写入本机剪贴板并落系统提示 */
+  /** 收到对方剪贴板（决议 #321）：写入本机剪贴板；手动发送落系统提示，跟随推送静默（决议 #326） */
+  let followReceivedText: string | null = null
   function handleClipboardFrame(env: Envelope<ClipboardPayload>): void {
     if (!registry || !chat) return
     if (!registry.get(env.from)) return
@@ -1020,7 +1025,60 @@ if (!gotLock) {
     } catch {
       return
     }
+    followReceivedText = text
+    if (env.payload?.silent) return
     chat.receiveClipboardTip(env.from, resolvePeerDisplayName(env.from) || env.from, env.ts)
+  }
+
+  /** 剪贴板跟随（决议 #326）：本机剪贴板文本变化即推给目标同事；写回内容不回推，防乒乓 */
+  let followSentText: string | null = null
+  let followTimer: ReturnType<typeof setInterval> | null = null
+  function setupClipboardFollow(): void {
+    if (followTimer) return
+    followTimer = setInterval(() => {
+      const cfg = appState?.config.clipboardFollow
+      if (!cfg?.enabled || !cfg.peerId) return
+      if (!registry?.get(cfg.peerId)?.online) return
+      let text: string
+      try {
+        text = clipboard.readText() ?? ''
+      } catch {
+        return
+      }
+      if (!text.trim() || text === followSentText || text === followReceivedText) return
+      if (Buffer.byteLength(text, 'utf8') > CLIPBOARD_TEXT_LIMIT) return
+      followSentText = text
+      void chat?.sendClipboard(cfg.peerId, text, { silent: true })
+    }, 1_500)
+    followTimer.unref?.()
+  }
+
+  /** 自动离开状态（决议 #323）：锁屏或闲置 10 分钟即广播 away，恢复活动自动解除 */
+  let awayActive = false
+  let awayTimer: ReturnType<typeof setInterval> | null = null
+  function setupAwayStatus(): void {
+    if (awayTimer) return
+    const IDLE_AWAY_MS = 600_000
+    const evaluate = (): void => {
+      let locked = false
+      let idle = 0
+      try {
+        locked = powerMonitor.getSystemIdleState(1) === 'locked'
+        idle = powerMonitor.getSystemIdleTime() * 1000
+      } catch {
+        return // 个别平台取不到就维持现状
+      }
+      const shouldAway = locked || idle >= IDLE_AWAY_MS
+      if (shouldAway !== awayActive) {
+        awayActive = shouldAway
+        discovery?.setAway(shouldAway)
+      }
+    }
+    powerMonitor.on('lock-screen', () => { awayActive = true; discovery?.setAway(true) })
+    powerMonitor.on('unlock-screen', evaluate)
+    evaluate()
+    awayTimer = setInterval(evaluate, 30_000)
+    awayTimer.unref?.()
   }
 
   /** AI 群总结（决议 #321）：只取本地记录交大模型，结果仅回给请求者，绝不发进群 */
@@ -1283,6 +1341,8 @@ if (!gotLock) {
     // 时钟偏移矫正（决议 #65）：发现层观测各节点时钟差，chat/groups 显示时矫正到本机钟
     const peerClock = new PeerClock()
     discovery = new Discovery({ udp, registry, profile: state.profile, manualPeers: allManual, peerClock })
+    setupAwayStatus()
+    setupClipboardFollow()
     rangeSync = new RangeSync({
       udp,
       registry,
@@ -1943,6 +2003,65 @@ if (!gotLock) {
     return view ? { ok: true } : { ok: false, reason: 'offline' }
   })
 
+  // AI 润色（决议 #324）：改写输入框选中文本 / 全文，结果仅回请求者
+  ipcMain.handle(IpcChannels.aiPolish, async (_event, payload: unknown): Promise<PolishResult> => {
+    if (!appState) return { ok: false, reason: 'no-ai' }
+    if (typeof payload !== 'object' || payload === null) return { ok: false, reason: 'invalid' }
+    const { text, mode } = payload as { text?: unknown; mode?: unknown }
+    if (typeof text !== 'string' || !text.trim() || text.length > 4096) return { ok: false, reason: 'invalid' }
+    if (!isPolishMode(mode)) return { ok: false, reason: 'invalid' }
+    const cfg = normalizeAi(appState.config.ai)
+    if (!cfg.enabled || !cfg.baseUrl.trim() || !cfg.model.trim()) return { ok: false, reason: 'no-ai' }
+    try {
+      const polished = await callChatCompletion(
+        cfg.baseUrl,
+        cfg.apiKey,
+        cfg.model,
+        buildPolishMessages(mode, text),
+        60_000
+      )
+      return { ok: true, text: polished }
+    } catch {
+      return { ok: false, reason: 'failed' }
+    }
+  })
+
+  // 消息稍后提醒（决议 #325）：内存态定时器，应用退出即失效；到点弹系统通知
+  const reminders = new Map<string, { convId: string; timer: ReturnType<typeof setTimeout> }>()
+  function fireReminder(msgId: string, input: ReminderInput): void {
+    reminders.delete(msgId)
+    if (!Notification.isSupported()) return
+    const icon = systemNotificationIcon()
+    const notification = new Notification({
+      title: tr('消息提醒'),
+      body: input.preview,
+      ...(icon ? { icon } : {})
+    })
+    notification.on('click', () => {
+      showMainWindow()
+      mainWindow?.webContents.send(IpcEvents.openConv, input.convId)
+    })
+    notification.show()
+  }
+  ipcMain.handle(IpcChannels.reminderAdd, (_event, input: unknown): { ok: true } | { ok: false; reason: string } => {
+    if (typeof input !== 'object' || input === null) return { ok: false, reason: 'invalid' }
+    const item = input as Partial<ReminderInput>
+    if (typeof item.msgId !== 'string' || !item.msgId || item.msgId.length > 64) return { ok: false, reason: 'invalid' }
+    if (typeof item.convId !== 'string' || !item.convId || item.convId.length > 128) return { ok: false, reason: 'invalid' }
+    if (typeof item.remindAt !== 'number' || !Number.isFinite(item.remindAt)) return { ok: false, reason: 'invalid' }
+    const preview = typeof item.preview === 'string' ? item.preview.slice(0, 120) : ''
+    const msgId = item.msgId
+    const convId = item.convId
+    const remindAt = item.remindAt
+    const existing = reminders.get(msgId)
+    if (existing) clearTimeout(existing.timer)
+    if (remindAt <= Date.now()) return { ok: true } // 已过期：直接吞掉，不弹
+    const timer = setTimeout(() => fireReminder(msgId, { msgId, convId, remindAt, preview }),
+      Math.min(remindAt - Date.now(), 2 ** 31 - 1))
+    reminders.set(msgId, { convId, timer })
+    return { ok: true }
+  })
+
   // 分享阳鸽：复制当前版本下载链接（按钮在设置窗口，主窗口与设置窗口都放行）
   ipcMain.handle(IpcChannels.appShareCopyLink, async (event): Promise<void> => {
     if (!appState) return
@@ -2065,6 +2184,7 @@ if (!gotLock) {
       fileDir: c?.fileDir ?? '',
       defaultFileDir: defaultFileDir(),
       ai: normalizeAi(c?.ai),
+      clipboardFollow: normalizeClipboardFollow(c?.clipboardFollow),
       notifications: c?.notifications !== false,
       manualPeers: c?.manualPeers ?? [],
       scanRanges: c?.scanRanges ?? [],
@@ -2744,6 +2864,9 @@ if (!gotLock) {
       const previousScanRanges = new Set(appState.config.scanRanges)
       if (typeof p.notifications === 'boolean') clean.notifications = p.notifications
       if (p.ai && typeof p.ai === 'object') clean.ai = normalizeAi(p.ai)
+    if (p.clipboardFollow && typeof p.clipboardFollow === 'object') {
+      clean.clipboardFollow = normalizeClipboardFollow(p.clipboardFollow)
+    }
       if (Array.isArray(p.manualPeers)) {
         clean.manualPeers = p.manualPeers
           .filter((s): s is string => typeof s === 'string')

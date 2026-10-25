@@ -41,6 +41,7 @@ export interface ConfigFile {
   notifications: boolean
   /** AI 分身（大模型代回，默认关闭） */
   ai: AiReplierConfig
+  clipboardFollow: ClipboardFollowConfig
   /** 手动添加的节点（"ip" 或 "ip:port"），启动时逐个探测（F-DISC-2 第一板斧） */
   manualPeers: string[]
   /** 网段扫描 CIDR 列表（F-DISC-2 第二板斧） */
@@ -230,6 +231,7 @@ export function saveAppSettings(
       ConfigFile,
       | 'notifications'
       | 'ai'
+      | 'clipboardFollow'
       | 'manualPeers'
       | 'scanRanges'
       | 'udpPort'
@@ -254,6 +256,7 @@ export function saveAppSettings(
   if (!state.config.ignoredScanRanges) state.config.ignoredScanRanges = {}
   if (patch.notifications !== undefined) state.config.notifications = patch.notifications
   if (patch.ai !== undefined) state.config.ai = normalizeAi(patch.ai)
+  if (patch.clipboardFollow !== undefined) state.config.clipboardFollow = normalizeClipboardFollow(patch.clipboardFollow)
   if (patch.manualPeers !== undefined) state.config.manualPeers = patch.manualPeers
   if (patch.scanRanges !== undefined) {
     const now = Date.now()
@@ -370,6 +373,24 @@ export const DEFAULT_AI_REPLIER: AiReplierConfig = {
   replyGroup: true
 }
 
+export interface ClipboardFollowConfig {
+  /** 剪贴板跟随开关（决议 #326，默认关） */
+  enabled: boolean
+  /** 跟随目标（单聊同事 nodeId）；空 = 未选 */
+  peerId: string
+}
+
+export const DEFAULT_CLIPBOARD_FOLLOW: ClipboardFollowConfig = { enabled: false, peerId: '' }
+
+export function normalizeClipboardFollow(raw: unknown): ClipboardFollowConfig {
+  if (!raw || typeof raw !== 'object') return { ...DEFAULT_CLIPBOARD_FOLLOW }
+  const r = raw as Record<string, unknown>
+  return {
+    enabled: typeof r.enabled === 'boolean' ? r.enabled : false,
+    peerId: typeof r.peerId === 'string' && r.peerId.length <= 64 ? r.peerId : ''
+  }
+}
+
 export function normalizeAi(raw: unknown): AiReplierConfig {
   if (!raw || typeof raw !== 'object') return { ...DEFAULT_AI_REPLIER }
   const r = raw as Record<string, unknown>
@@ -423,6 +444,7 @@ export function loadAppState(
       fileDir: '',
       notifications: true,
       ai: { ...DEFAULT_AI_REPLIER },
+      clipboardFollow: { ...DEFAULT_CLIPBOARD_FOLLOW },
       manualPeers: [],
       scanRanges: [],
       scanRangeSources: {},

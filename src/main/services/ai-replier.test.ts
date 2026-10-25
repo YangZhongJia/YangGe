@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { AI_REPLY_PREFIX, buildLlmMessages, shouldAutoReply, stripAiPrefix } from './ai-replier'
+import { AI_REPLY_PREFIX, buildLlmMessages, buildPolishMessages, isPolishMode, shouldAutoReply, stripAiPrefix } from './ai-replier'
 import type { AiReplierConfig } from '../store/app-state'
 
 const cfg = (over: Partial<AiReplierConfig> = {}): AiReplierConfig => ({
@@ -74,5 +74,18 @@ describe('AI 代回前缀剥离（防双前缀）', () => {
       { sender: 'A', isMine: true, text: AI_REPLY_PREFIX + '收到' }
     ])
     expect(msgs[1].content).toBe('收到')
+  })
+})
+
+describe('AI 润色模式（决议 #324）', () => {
+  it('四种模式分别给出对应系统提示', () => {
+    expect(isPolishMode('formal')).toBe(true)
+    expect(isPolishMode('en2zh')).toBe(true)
+    expect(isPolishMode('other')).toBe(false)
+    expect(buildPolishMessages('formal', '你好')[0].content).toContain('更正式')
+    expect(buildPolishMessages('concise', '你好')[0].content).toContain('更简短')
+    expect(buildPolishMessages('zh2en', '你好')[0].content).toContain('英文')
+    expect(buildPolishMessages('en2zh', 'hello')[0].content).toContain('简体中文')
+    expect(buildPolishMessages('zh2en', '会议改到三点')[1]).toEqual({ role: 'user', content: '会议改到三点' })
   })
 })

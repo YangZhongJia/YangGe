@@ -275,6 +275,7 @@ onMounted(async () => {
   applyPerformanceProfile(info.value)
   await reload()
   await reloadShareTargets()
+  await reloadOnlinePeers()
   stopSettings = window.pantry.onSettingsUpdated((s) => {
     if (settings.value && settings.value.language !== s.language) {
       settings.value = s
@@ -553,6 +554,30 @@ async function toggleCloseToTray(value: boolean): Promise<void> {
 
 async function toggleMessagePreview(value: boolean): Promise<void> {
   await saveApp({ showMessagePreview: value })
+}
+
+// ---------- 剪贴板跟随（决议 #326） ----------
+const onlinePeers = ref<Array<{ nodeId: string; nick: string }>>([])
+async function reloadOnlinePeers(): Promise<void> {
+  try {
+    const peers = await window.pantry.getPeers()
+    onlinePeers.value = (peers ?? []).filter((x) => x.online).map((x) => ({ nodeId: x.nodeId, nick: x.nick }))
+  } catch {
+    onlinePeers.value = []
+  }
+}
+async function toggleClipboardFollow(value: boolean): Promise<void> {
+  await reloadOnlinePeers()
+  const current = settings.value?.clipboardFollow ?? { enabled: false, peerId: '' }
+  let peerId = current.peerId
+  if (value && !peerId && onlinePeers.value.length === 1) peerId = onlinePeers.value[0].nodeId
+  await saveApp({ clipboardFollow: { enabled: value, peerId } })
+  await reload()
+}
+async function changeFollowPeer(peerId: string): Promise<void> {
+  if (!settings.value?.clipboardFollow.enabled) return
+  await saveApp({ clipboardFollow: { enabled: true, peerId } })
+  await reload()
 }
 
 async function toggleDirectFileReceive(value: boolean): Promise<void> {
@@ -1151,6 +1176,26 @@ async function confirmRemove(cidr: string): Promise<void> {
                 <small>{{ tr('关闭后通知只显示会话名称。') }}</small>
               </div>
               <NSwitch :value="settings.showMessagePreview" @update:value="toggleMessagePreview" />
+            </div>
+            <div class="setting-line">
+              <div>
+                <strong>{{ tr('剪贴板跟随') }}</strong>
+                <small>{{ tr('开启后，本机剪贴板的文本变化会自动同步给所选同事（双方需 1.5.0+）。') }}</small>
+              </div>
+              <NSwitch
+                :value="settings.clipboardFollow.enabled"
+                @update:value="toggleClipboardFollow"
+              />
+            </div>
+            <div v-if="settings.clipboardFollow.enabled" class="setting-line">
+              <div>
+                <strong>{{ tr('跟随目标') }}</strong>
+                <small>{{ tr('仅在线同事可选；写回的内容不会回传，避免循环。') }}</small>
+              </div>
+              <select class="follow-peer-select" :value="settings.clipboardFollow.peerId" @change="changeFollowPeer(($event.target as HTMLSelectElement).value)">
+                <option value="" disabled>{{ tr('选择同事') }}</option>
+                <option v-for="p in onlinePeers" :key="p.nodeId" :value="p.nodeId">{{ p.nick }}</option>
+              </select>
             </div>
             <label class="setting-line">
               <div>
@@ -3207,6 +3252,16 @@ async function confirmRemove(cidr: string): Promise<void> {
     transform: none;
   }
 }
+.follow-peer-select {
+  max-width: 180px;
+  padding: 4px 8px;
+  font-size: var(--font-sm);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-1);
+}
+
 /* ---------- 分享阳鸽（决议 #322） ---------- */
 .share-pack {
   display: inline-flex;

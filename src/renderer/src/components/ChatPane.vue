@@ -324,6 +324,7 @@ const peerName = computed(() => {
 })
 const peerIp = computed(() => peer.value?.ip ?? '')
 const peerOnline = computed(() => peer.value?.online ?? false)
+const peerAway = computed(() => peer.value?.online === true && peer.value?.away === true)
 /** 群：成员才可发；单聊：文本随时可发（离线走补发） */
 const canSend = computed(() => (isGroup.value ? (group.value?.amMember ?? false) : true))
 const onlineGroupRecipientCount = computed(() => {
@@ -1208,6 +1209,58 @@ function onComposerInput(): void {
   chatStore.notifyTyping(chatStore.activeConv?.peerId)
 }
 
+// ---------- AI 改写（决议 #324） ----------
+const aiScope = ref<HTMLElement | null>(null)
+const aiPolishOpen = ref(false)
+const aiPolishBusy = ref(false)
+const aiPolishHint = ref('')
+const aiPolishUndo = ref<string | null>(null)
+function composerTargetText(): { text: string; start: number; end: number } {
+  const draftText = draft.value
+  const textarea = inputEl.value
+  const start = textarea && !props.win7ImeCompat ? textarea.selectionStart ?? 0 : 0
+  const end = textarea && !props.win7ImeCompat ? textarea.selectionEnd ?? 0 : 0
+  if (end > start) return { text: draftText.slice(start, end), start, end }
+  return { text: draftText, start: 0, end: draftText.length }
+}
+async function runPolish(mode: 'formal' | 'concise' | 'zh2en' | 'en2zh'): Promise<void> {
+  if (aiPolishBusy.value) return
+  const target = composerTargetText()
+  if (!target.text.trim()) {
+    aiPolishHint.value = tr('先在输入框写点内容')
+    return
+  }
+  aiPolishBusy.value = true
+  aiPolishHint.value = tr('正在改写…')
+  try {
+    const res = await window.pantry.polishText(target.text, mode)
+    if (res.ok) {
+      aiPolishUndo.value = draft.value
+      draft.value = draft.value.slice(0, target.start) + res.text + draft.value.slice(target.end)
+      aiPolishHint.value = tr('已改写')
+    } else if (res.reason === 'no-ai') aiPolishHint.value = tr('先在设置中配置 AI 分身')
+    else aiPolishHint.value = tr('改写失败，请稍后再试')
+  } catch {
+    aiPolishHint.value = tr('改写失败，请稍后再试')
+  } finally {
+    aiPolishBusy.value = false
+  }
+}
+function undoPolish(): void {
+  if (aiPolishUndo.value === null) return
+  draft.value = aiPolishUndo.value
+  aiPolishUndo.value = null
+  aiPolishHint.value = tr('已撤销')
+}
+watch(aiPolishOpen, (open) => {
+  if (open) document.addEventListener('click', closeAiPolish)
+  else document.removeEventListener('click', closeAiPolish)
+})
+function closeAiPolish(event: MouseEvent): void {
+  if (aiScope.value && event.composedPath().includes(aiScope.value)) return
+  aiPolishOpen.value = false
+}
+
 // ---------- 发剪贴板（决议 #321） ----------
 const clipboardSending = ref(false)
 async function sendClipboardNow(): Promise<void> {
@@ -1600,6 +1653,30 @@ function openMessageMenu(event: MouseEvent, msg: MessageView): void {
     itemCount * MSG_MENU_ITEM_HEIGHT + MSG_MENU_PADDING
   )
   msgMenu.value = { ...pos, msg }
+}
+
+// ---------- 消息稍后提醒（决议 #325） ----------
+function canRemindMessage(msg: MessageView): boolean {
+  return msg.status !== 'recalled' && msg.kind === 'text' &&
+    Boolean(msg.text.trim())
+}
+function nextMorning9(): number {
+  const t = new Date()
+  t.setDate(t.getDate() + 1)
+  t.setHours(9, 0, 0, 0)
+  return t.getTime()
+}
+async function remindSelected(remindAt: number): Promise<void> {
+  const msg = msgMenu.value?.msg
+  msgMenu.value = null
+  if (!msg || !canRemindMessage(msg)) return
+  const preview = `${senderName(msg)}：${msg.text}`.slice(0, 120)
+  try {
+    await window.pantry.addReminder({ msgId: msg.id, convId: msg.convId, remindAt, preview })
+    setNudgeFeedback(tr('已设置提醒'), 'ok')
+  } catch {
+    setNudgeFeedback(tr('设置失败，请稍后再试'), 'warn')
+  }
 }
 
 async function copySelectedMessage(): Promise<void> {
@@ -2052,13 +2129,13 @@ async function onDrop(event: DragEvent): Promise<void> {
             :avatar="peer.avatar"
             :avatar-hash="peer.avatarHash"
             :name="peerName"
-            :presence="peerOnline ? 'online' : 'offline'"
+            :presence="peerAway ? 'away' : peerOnline ? 'online' : 'offline'"
           />
           <span class="title-text">
             <span class="title">{{ peerName }}</span>
             <span class="subtitle">
-              <span class="state-word" :class="{ on: peerOnline }">{{
-                peerOnline ? tr('在线') : tr('离线')
+              <span class="state-word" :class="{ on: peerOnline, away: peerAway }">{{
+                peerAway ? tr('离开') : peerOnline ? tr('在线') : tr('离线')
               }}</span>
               <template v-if="peerIp"> · {{ peerIp }}</template>
             </span>
@@ -2219,6 +2296,12 @@ async function onDrop(event: DragEvent): Promise<void> {
       <button v-if="canCopyMessage(msgMenu.msg)" @click="copySelectedMessage">{{ tr('复制') }}</button>
       <button v-if="canForwardMessage(msgMenu.msg)" @click="forwardSelectedMessage">{{ tr('转发') }}</button>
       <button v-if="canQuoteMessage(msgMenu.msg) && isGroup && !msgMenu.msg.isMine" @click="quoteSelectedMessage">{{ tr('引用回复') }}</button>
+      <button v-if="canRemindMessage(msgMenu.msg)" @click="remindSelected(60 * 60 * 1000)">
+        {{ tr('1 小时后提醒我') }}
+      </button>
+      <button v-if="canRemindMessage(msgMenu.msg)" @click="remindSelected(nextMorning9())">
+        {{ tr('明早 9:00 提醒我') }}
+      </button>
       <button
         v-if="isRecallableKind(msgMenu.msg)"
         class="danger recall-action"
@@ -2397,6 +2480,37 @@ async function onDrop(event: DragEvent): Promise<void> {
           >
             <PantryIcon name="copy" :size="26" />
           </button>
+        </span>
+        <span ref="aiScope" class="ai-scope">
+          <div v-if="aiPolishOpen" class="ai-polish-pop" role="menu">
+            <div class="ai-polish-head">{{ tr('AI 改写') }}</div>
+            <button type="button" role="menuitem" :disabled="aiPolishBusy" @click="runPolish('formal')">{{ tr('更正式') }}</button>
+            <button type="button" role="menuitem" :disabled="aiPolishBusy" @click="runPolish('concise')">{{ tr('更简短') }}</button>
+            <button type="button" role="menuitem" :disabled="aiPolishBusy" @click="runPolish('zh2en')">{{ tr('中译英') }}</button>
+            <button type="button" role="menuitem" :disabled="aiPolishBusy" @click="runPolish('en2zh')">{{ tr('英译中') }}</button>
+            <div v-if="aiPolishHint" class="ai-polish-hint" aria-live="polite">
+              <span>{{ aiPolishHint }}</span>
+              <button
+                v-if="aiPolishUndo"
+                type="button"
+                role="menuitem"
+                @click="undoPolish"
+              >{{ tr('撤销') }}</button>
+            </div>
+          </div>
+          <span class="tool-wrap" :data-tip="tr('AI 改写：正式 / 简短 / 中英互译')">
+            <button
+              class="tool"
+              type="button"
+              :aria-label="tr('AI 改写')"
+              aria-haspopup="menu"
+              :aria-expanded="aiPolishOpen ? 'true' : 'false'"
+              :disabled="!canSend"
+              @click="aiPolishOpen = !aiPolishOpen"
+            >
+              <PantryIcon name="edit" :size="24" />
+            </button>
+          </span>
         </span>
         <span v-if="nudgeFeedback" class="nudge-feedback" :class="nudgeFeedback.kind">
           {{ nudgeFeedback.text }}
@@ -3457,6 +3571,9 @@ async function onDrop(event: DragEvent): Promise<void> {
 .state-word {
   color: var(--text-3);
 }
+.state-word.away {
+  color: var(--away);
+}
 .state-word.on {
   color: var(--online);
 }
@@ -3933,6 +4050,55 @@ async function onDrop(event: DragEvent): Promise<void> {
   .jump-latest:active {
     transform: none;
   }
+}
+
+/* ---------- AI 改写弹层（决议 #324） ---------- */
+.ai-scope { position: relative; }
+.ai-polish-pop {
+  position: absolute;
+  bottom: 44px;
+  left: 0;
+  min-width: 148px;
+  box-sizing: border-box;
+  background: var(--material-strong);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--highlight-edge), var(--shadow-float);
+  padding: 5px;
+  z-index: 20;
+}
+.ai-polish-head {
+  padding: 4px 10px 6px;
+  font-size: var(--font-xs);
+  color: var(--text-3);
+}
+.ai-polish-pop button {
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  font-size: var(--font-sm);
+  color: var(--text-1);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.ai-polish-pop button:hover:not(:disabled) { background: var(--surface-hover); }
+.ai-polish-pop button:disabled { opacity: 0.5; cursor: default; }
+.ai-polish-hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 10px 6px;
+  font-size: var(--font-xs);
+  color: var(--text-2);
+}
+.ai-polish-hint button {
+  width: auto;
+  padding: 2px 8px;
+  color: var(--primary);
 }
 
 /* ---------- 输入中提示（决议 #321） ---------- */

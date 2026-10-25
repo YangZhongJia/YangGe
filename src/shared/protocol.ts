@@ -221,6 +221,8 @@ export interface ProfilePayload {
 export interface PresencePayload {
   seq: number
   profileRev: number
+  /** 离开状态（锁屏 / 闲置）：true=离开；缺省=在线。旧端忽略（决议 #323） */
+  away?: boolean
 }
 
 /** exit 载荷（空对象） */
@@ -317,6 +319,8 @@ export interface TypingPayload {
 /** 发剪贴板（决议 #321）：可靠控制帧；接收端写入本地剪贴板并落系统提示 */
 export interface ClipboardPayload {
   text: string
+  /** 剪贴板跟随模式的自动推送：接收端只写剪贴板，不落系统提示（决议 #326） */
+  silent?: boolean
 }
 
 /** 群元数据（§7.4）：rev 单调递增，冲突按 (rev, updatedTs) 取大（LWW） */

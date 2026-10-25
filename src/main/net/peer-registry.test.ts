@@ -215,3 +215,24 @@ describe('PeerRegistry 节点状态', () => {
     ])
   })
 })
+
+describe('离开状态（决议 #323）', () => {
+  it('setAway 更新记录并触发 updated；离线时自动清除', () => {
+    const registry = new PeerRegistry('node-self')
+    registry.touch('node-bob', '127.0.0.1', 10001, profile('node-bob', 'Bob'))
+    const updates: number[] = []
+    registry.on('updated', () => updates.push(1))
+
+    registry.setAway('node-bob', true)
+    expect(registry.get('node-bob')?.away).toBe(true)
+    registry.setAway('node-bob', true)
+    expect(updates.length).toBe(1) // 同值不重复触发
+
+    registry.setAway('node-bob', false)
+    expect(registry.get('node-bob')?.away).toBe(false)
+
+    registry.markOffline('node-bob')
+    registry.setAway('node-bob', true) // 离线节点不接受 away
+    expect(registry.get('node-bob')?.away).toBe(false)
+  })
+})

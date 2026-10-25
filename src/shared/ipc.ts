@@ -145,7 +145,11 @@ export const IpcChannels = {
   /** 分享阳鸽：把本机自留的安装包发给同事（决议 #322） */
   appSharePackage: 'app:share-package',
   /** 分享阳鸽：复制当前版本的 GitHub Release 链接（决议 #322） */
-  appShareCopyLink: 'app:share-copy-link'
+  appShareCopyLink: 'app:share-copy-link',
+  /** AI 润色：改写输入框文本（决议 #324） */
+  aiPolish: 'ai:polish',
+  /** 消息稍后提醒（决议 #325） */
+  reminderAdd: 'reminder:add'
 } as const
 
 /** main → renderer 的事件推送 */
@@ -230,6 +234,8 @@ export interface PeerView {
   platform: Platform
   ip: string
   online: boolean
+  /** 离开状态（锁屏 / 闲置，决议 #323）；仅 online 时有意义 */
+  away?: boolean
   lastSeen: number
   /** 应用版本（决议 #166，自更新版本比对依据） */
   ver: string
@@ -271,6 +277,19 @@ export type SummarizeResult =
 export type SharePackageResult =
   | { ok: true }
   | { ok: false; reason: 'no-package' | 'offline' | 'failed' | 'invalid' }
+
+export type PolishMode = 'formal' | 'concise' | 'zh2en' | 'en2zh'
+
+export type PolishResult =
+  | { ok: true; text: string }
+  | { ok: false; reason: 'no-ai' | 'failed' | 'invalid' }
+
+export interface ReminderInput {
+  msgId: string
+  convId: string
+  remindAt: number
+  preview: string
+}
 
 export interface NetState {
   ok: boolean
@@ -610,6 +629,7 @@ export interface SettingsView {
   defaultFileDir: string
   /** AI 分身配置 */
   ai: AiReplierSettings
+  clipboardFollow: { enabled: boolean; peerId: string }
   notifications: boolean
   manualPeers: string[]
   scanRanges: string[]
@@ -782,6 +802,7 @@ export interface AppSettingsPatch {
   fontScale?: SettingsView['fontScale']
   showMessagePreview?: boolean
   ai?: AiReplierSettings
+  clipboardFollow?: { enabled: boolean; peerId: string }
   allowDirectFileSend?: boolean
   sound?: SettingsView['sound']
   sendKey?: SettingsView['sendKey']
@@ -880,6 +901,10 @@ export interface PantryApi {
   sharePackageTo(peerId: string): Promise<SharePackageResult>
   /** 分享阳鸽：复制当前版本的下载链接 */
   copyReleaseLink(): Promise<void>
+  /** AI 润色（决议 #324）：改写文本，结果仅回请求者 */
+  polishText(text: string, mode: PolishMode): Promise<PolishResult>
+  /** 消息稍后提醒（决议 #325）：到点弹系统通知，点击直达会话 */
+  addReminder(input: ReminderInput): Promise<{ ok: true }>
   /** 按需探活（F-DISC-8）；返回是否已发出 */
   probePeer(nodeId: string): Promise<boolean>
   listConversations(): Promise<ConversationView[]>

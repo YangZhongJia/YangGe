@@ -302,3 +302,14 @@ Official repository, download, issue and source links remain skyjt/teahouse; for
 - **Contacts**: grouped by company/dept/team is an existing capability (F-DISC-4); no code change in this round.
 
 Typing/clipboard ride new Messenger message types (forward compatible); the summary reuses the AI avatar's OpenAI-compatible config and a new `listSince` local query. Service, renderer throttle and E2E tests included. Version number to be recorded with the next release.
+
+
+## Decisions #322–#326: Share app / Auto-away / AI polish / Message reminders / Clipboard follow (2026-10-25)
+
+- **#322 Share app**: Settings → About gains a "Share" action that sends the self-retained installer (decision #166) to an online peer over the existing P2P file channel, plus a "copy download link" fallback. Sender checks accept both main and settings windows.
+- **#323 Auto-away**: presence frames carry an optional `away` flag (ignored by legacy peers); locking the screen or 10 minutes of idle broadcasts away, activity clears it. Peers/contacts show an amber "away" state; in-memory only.
+- **#324 AI polish**: a composer popover rewrites the selected text or whole draft (more formal / shorter / zh↔en) via the AI avatar's OpenAI-compatible config, with undo. Results never leave the requester.
+- **#325 Message reminders**: message context menu offers "remind in 1 hour / tomorrow 9:00"; a system notification fires at the time and clicking it opens the conversation. In-memory timers, last-set-wins per message.
+- **#326 Clipboard follow**: with the toggle on and a target peer chosen, local clipboard text changes (1.5s debounce) sync via silent `clipboard` frames (no chat tips); dual cursors prevent ping-pong; 16KB cap and online checks match manual sends.
+
+All five are renderer+main collaborations reusing existing transports and the AI channel; no new external requests. Unit tests and two-instance E2E cover polish, follow, reminders and away plumbing. Version recorded with the release.

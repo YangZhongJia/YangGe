@@ -340,9 +340,19 @@ export class Discovery {
     return makeEnvelope<ProfilePayload>(MSG_TYPES.entry, this.selfId, { profile: this.profile })
   }
 
+  private away = false
+
+  /** 离开状态（决议 #323）：变更后立即广播一次，后续心跳继续携带 */
+  setAway(value: boolean): void {
+    if (this.away === value) return
+    this.away = value
+    this.sendPresence()
+  }
+
   private sendPresence(): void {
     this.presenceSeq += 1
     const payload: PresencePayload = { seq: this.presenceSeq, profileRev: this.profile.profileRev }
+    if (this.away) payload.away = true
     const env = makeEnvelope(MSG_TYPES.presence, this.selfId, payload)
     this.udp.broadcast(env)
     // 跨网段在线节点单播心跳（protocol §6.2）；同网段节点会重复收到，靠去重无害
@@ -385,6 +395,7 @@ export class Discovery {
         const presence = env.payload as PresencePayload
         const knownRev = this.registry.profileRevOf(env.from)
         const touched = this.registry.touch(env.from, rinfo.address, rinfo.port)
+        this.registry.setAway(env.from, presence.away === true)
         if (touched) this.peerClock?.observe(env.from, env.ts, Date.now())
         const peer = this.registry.get(env.from)
         if ((touched && presence.profileRev !== knownRev) || !peer || (!peer.online && !touched)) {

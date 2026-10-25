@@ -44,6 +44,9 @@ import {
   type TransferView,
   type TypingEvent,
   type ClipboardSendResult,
+  type PolishMode,
+  type PolishResult,
+  type ReminderInput,
   type SharePackageResult,
   type SummarizeResult,
   type UpdateAvailability,
@@ -104,6 +107,10 @@ const api: PantryApi = {
   sharePackageTo: (peerNodeId: string): Promise<SharePackageResult> =>
     ipcRenderer.invoke(IpcChannels.appSharePackage, peerNodeId),
   copyReleaseLink: (): Promise<void> => ipcRenderer.invoke(IpcChannels.appShareCopyLink),
+  polishText: (text: string, mode: PolishMode): Promise<PolishResult> =>
+    ipcRenderer.invoke(IpcChannels.aiPolish, { text, mode }),
+  addReminder: (input: ReminderInput): Promise<{ ok: true }> =>
+    ipcRenderer.invoke(IpcChannels.reminderAdd, input),
   probePeer: (nodeId: string): Promise<boolean> =>
     ipcRenderer.invoke(IpcChannels.peersProbe, nodeId),
   listConversations: (): Promise<ConversationView[]> => ipcRenderer.invoke(IpcChannels.convList),

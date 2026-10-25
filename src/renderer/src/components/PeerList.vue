@@ -134,7 +134,7 @@ function displayName(peer: PeerView): string {
           @click="onRowClick(row)"
           @dblclick="onRowDoubleClick(row)"
           :aria-expanded="row.kind === 'group' ? !collapsed.has(row.key) : undefined"
-          :aria-label="row.peer ? `${displayName(row.peer)}，${row.peer.online ? tr('在线') : tr('离线')}，${row.peer.ip}` : undefined"
+          :aria-label="row.peer ? `${displayName(row.peer)}，${row.peer.online ? (row.peer.away ? tr('离开') : tr('在线')) : tr('离线')}，${row.peer.ip}` : undefined"
         >
           <template v-if="row.kind === 'group'">
             <span class="arrow" aria-hidden="true">{{ collapsed.has(row.key) ? '▸' : '▾' }}</span>
@@ -149,6 +149,7 @@ function displayName(peer: PeerView): string {
               :avatar-hash="row.peer!.avatarHash"
               :name="displayName(row.peer!)"
               :offline="!row.peer!.online"
+              :presence="row.peer!.online ? (row.peer!.away ? 'away' : 'online') : 'offline'"
             />
             <span class="peer-main">
               <span class="peer-name" :class="{ dim: !row.peer!.online }">

@@ -215,15 +215,20 @@ export class ChatService extends EventEmitter {
     return { ok: true }
   }
 
-  /** 发剪贴板（决议 #321）：可靠控制帧，成功后在本地会话留系统提示；文本由 main 层从剪贴板读取 */
-  async sendClipboard(peerId: string, text: string): Promise<ClipboardSendResult> {
+  /** 发剪贴板（决议 #321）：可靠控制帧，成功后在本地会话留系统提示；文本由 main 层从剪贴板读取。
+   *  silent=true 为剪贴板跟随自动推送（决议 #326）：双方都不落系统提示 */
+  async sendClipboard(peerId: string, text: string, opts: { silent?: boolean } = {}): Promise<ClipboardSendResult> {
     if (!peerId || peerId.length > 64) return { ok: false, reason: 'invalid' }
     if (!text.trim() || Buffer.byteLength(text, 'utf8') > CLIPBOARD_TEXT_LIMIT) {
       return { ok: false, reason: 'invalid' }
     }
-    const env = makeEnvelope<ClipboardPayload>(MSG_TYPES.clipboard, this.deps.selfId, { text })
+    const env = makeEnvelope<ClipboardPayload>(MSG_TYPES.clipboard, this.deps.selfId, {
+      text,
+      ...(opts.silent ? { silent: true } : {})
+    })
     const delivered = await this.deps.messenger.sendReliable(peerId, env)
     if (!delivered) return { ok: false, reason: 'undelivered' }
+    if (opts.silent) return { ok: true }
     const convId = this.deps.convRepo.ensureSingle(peerId)
     this.insertSystemTip(env.id, convId, this.deps.selfId, 'clipboard.sent', env.ts, false, {
       actor: this.deps.nameOf?.(peerId) || peerId

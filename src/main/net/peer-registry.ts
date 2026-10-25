@@ -10,6 +10,8 @@ export interface PeerRecord {
   udpPort: number
   lastSeen: number
   online: boolean
+  /** 离开状态（锁屏 / 闲置，决议 #323）；仅在线时有意义，不入持久化 */
+  away?: boolean
 }
 
 /**
@@ -109,8 +111,18 @@ export class PeerRegistry extends EventEmitter {
     const record = this.peers.get(nodeId)
     if (record && record.online) {
       record.online = false
+      record.away = false
       this.emit('updated')
     }
+  }
+
+  /** 离开状态（决议 #323）：presence 心跳携带，仅内存态 */
+  setAway(nodeId: string, away: boolean): void {
+    const record = this.peers.get(nodeId)
+    if (!record || !record.online) return
+    if (record.away === away) return
+    record.away = away
+    this.emit('updated')
   }
 
   /** 心跳超时离线判定（protocol §6.2），由 Discovery 周期调用 */
