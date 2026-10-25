@@ -1,7 +1,7 @@
 {
   "name": "yangge",
   "productName": "阳鸽",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "阳鸽（YangGe）—— 纯内网、基于 IP 的局域网即时通讯与文件传输工具（衍生自开源项目 Teahouse，GPL-3.0）",
   "license": "GPL-3.0-only",
   "private": true,
