@@ -9,7 +9,7 @@
 <p><b>Chat and transfer files across a LAN, with no Internet connection or server (original Iris indigo UI)</b></p>
 
 > **Fork notice**: YangGe is a secondary-development fork of the open-source [Teahouse](https://github.com/skyjt/teahouse) project (GPL-3.0-only).
-> Fork changes: the original Iris indigo UI theme (graphite neutrals, indigo accent, solid indigo bubbles), rebranding to YangGe, and packaging trimmed to Windows x64 only.
+> It goes far beyond a rebrand: rebuilt brand & UI, new features (AI avatar, clipboard send, typing indicator, AI group summary), one-click LAN self-update, multi-platform packaging with CI auto-release — see the [fork content](#fork-contentwhat-yangge-changes-upstream) for the full list. Thanks to the upstream authors.
 
 <p>
   <a href="https://github.com/skyjt/teahouse/releases/latest">
@@ -55,16 +55,40 @@ Moving a file or sending a short message inside an office network should be effo
 ## Features
 
 - **Zero-configuration peer discovery** — UDP broadcast discovers online peers on the same subnet automatically. Peers communicate directly without deploying a central server or manually configuring IP addresses.
-- **Cross-subnet communication & LAN self-updates** — Supports manual peer IP addition and CIDR subnet scanning; saved scan ranges are shared among online peers at a low rate; provides a global subnet scan trigger with real-time progress; supports P2P package requests for LAN-based self-updating.
+- **Cross-subnet communication & LAN self-updates** — Supports manual peer IP addition and CIDR subnet scanning; saved scan ranges are shared among online peers at a low rate; provides a global subnet scan trigger with real-time progress; supports P2P package requests for LAN-based self-updating. Installers self-retain their package (the first upgraded machine becomes the update source), and after pulling a package one click installs silently and restarts.
 - **Messaging & group collaboration** — Direct chats and multi-user discussion groups; text, local images, pasted screenshots, Twemoji SVG graphics, and custom sticker collections; delivery acknowledgments, offline queuing with automatic retry upon reconnection, 2-minute message recall, message forwarding, quote replies with jump-to-source navigation, and @ mentions in groups; synchronized group descriptions (≤200 characters) and announcements (≤1024 characters); window nudge alerts.
 - **High-speed P2P file transfers** — Direct TCP peer-to-peer transfers maximize LAN physical bandwidth; supports single files, multi-file selections, and full directory trees; resume interrupted transfers and review comprehensive transfer history; 24-hour expiration window closes outdated transfers automatically.
 - **Shared file cabinet (third main tab)** — Built natively into the third tab of the main window; publish a local folder with configurable global permissions (disabled, read-only, read-write) and granular per-peer grants; browse colleagues' shared cabinets with breadcrumb navigation and pagination; multi-select download and save-as; drag-and-drop upload of files or folders into dedicated subdirectories to avoid overwriting existing data; aggregate recent upload activity.
 - **Standalone image viewer & offline OCR** — Independent image viewer with smooth zooming, double-click mouse-anchored zooming, rotation, and window centering; browse chat image history seamlessly using previous/next navigation buttons; built-in PaddleOCR (PP-OCRv6 tiny + onnxruntime-web WASM) fully offline text recognition engine; directly select, drag across lines, and copy text on top of the original image, plus one-click copy of all recognized text; session-level in-memory caching restores the text selection layer instantly.
+- **Cross-machine clipboard** — send your clipboard text to a peer with one click in a single chat; the peer can paste it immediately, with automatic audit tips on both sides. Live "typing…" indicator while the peer is composing.
+- **AI group summary (optional)** — right-click in a group to summarize today's messages into key points, shown locally only and never posted to the group. Pairs with the AI avatar.
 - **Built-in screenshot utility** — One-key global shortcut capture; rectangular selection, pencil, arrows, mosaic, and in-place single-line text annotations; includes a magnifier and coordinate/color inspector; compatible with Linux Wayland and X11 environments.
 - **View-only screen assistance** — Request from a private chat; the peer consents and selects a screen each time. An independent viewer provides Auto and 3/5/10 fps modes with immediate stop. Plaintext LAN transport; local loopback and synthetic Electron capture are validated, while physical-screen permissions and target performance remain pending. See [technical boundaries](docs/en/tech-design.md#remote-view).
 - **Local history & full-text search** — Powered by SQLite WAL mode and FTS full-text index; quickly search contacts, groups, and message history globally or filter within a specific chat; supports local backup export and device migration.
 - **Bilingual interface switching** — Native support for Simplified Chinese and English; switch instantly across all active windows via Settings → General → Language; fresh installations initialize automatically based on system locale.
 - **LAN security boundary** — Globally appends `--no-proxy-server` at startup to bypass any system or environment proxies; zero external network requests, zero telemetry, and zero remote CDN dependencies; context isolation and Chromium sandboxing enabled in renderers; strict network packet allowlist validation; destination path traversal sanitization; inline chat images bounded to ≤8192px and ≤32 megapixels; strict log sanitization keeping message bodies and file contents out of logs.
+
+## Fork content (what YangGe changes upstream)
+
+**Brand & UI**
+
+- New brand "YangGe" with an original "ribbon dove" mark: app icons, tray (color + macOS template), installer, notifications and in-app brand bitmap all redrawn; the icon pipeline is scripted from a single 1024px master (ico/icns/Linux sizes).
+- **Original Iris indigo UI**: graphite neutrals, indigo accent, solid indigo bubbles with directional corners, floating composer, reworked nav rail; light & dark themes.
+
+**New features**
+
+- **AI avatar**: auto-replies to single chats and group mentions via any OpenAI-compatible LLM (LAN Ollama/vLLM or cloud API), with anti-loop guard, cooldown and serial queue. Off by default.
+- **AI group summary**: right-click to summarize today's group messages; local dialog only, never posted to the group.
+- **Clipboard send**: one-click cross-machine clipboard text sharing.
+- **Typing indicator**: live "typing…" in single chats.
+- **One-click LAN self-update**: completes upstream decision #166 — installers self-retain to become update sources; after pulling a package, one click installs silently and restarts. Zero servers, zero internet.
+
+**Fixes & engineering**
+
+- WeChat-style notification policy: a focused window suppresses toasts only for the conversation you are looking at.
+- Installers add firewall rules automatically (idempotent, zero UAC on silent upgrades), fixing screen-assist timeouts caused by inbound blocks after rebranding.
+- Restored macOS (arm64/x64 dmg) and Linux (deb/AppImage) packaging; five-platform CI builds and tag-triggered releases with checksums.
+- 1033+ automated tests maintained; key chains (self-update, notifications, AI, clipboard, typing) covered by unit and real-instance E2E tests.
 
 ## Platform support
 
