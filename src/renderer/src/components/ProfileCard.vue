@@ -259,14 +259,15 @@ h2 {
   white-space: nowrap;
   flex-shrink: 0;
 }
-.status-pill.away,
-.status-pill.away .status-dot {
-  background: var(--away);
-}
 .status-pill.on {
   color: var(--online);
   background: var(--online-weak);
   border-color: transparent;
+}
+.status-pill.away,
+.status-pill.away .status-dot {
+  color: var(--away);
+  background: var(--away);
 }
 .status-dot {
   width: 6px;

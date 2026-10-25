@@ -3571,11 +3571,11 @@ async function onDrop(event: DragEvent): Promise<void> {
 .state-word {
   color: var(--text-3);
 }
-.state-word.away {
-  color: var(--away);
-}
 .state-word.on {
   color: var(--online);
+}
+.state-word.away {
+  color: var(--away);
 }
 .peer-profile-popover {
   position: absolute;

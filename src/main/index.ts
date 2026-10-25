@@ -1030,15 +1030,21 @@ if (!gotLock) {
     chat.receiveClipboardTip(env.from, resolvePeerDisplayName(env.from) || env.from, env.ts)
   }
 
-  /** 剪贴板跟随（决议 #326）：本机剪贴板文本变化即推给目标同事；写回内容不回推，防乒乓 */
+  /** 剪贴板跟随（决议 #326）：本机剪贴板文本变化即推给目标同事；写回内容不回推，防乒乓。
+   *  切换目标后清空已发游标，当前剪贴板内容会立即同步给新目标。 */
   let followSentText: string | null = null
+  let followTarget: string | null = null
   let followTimer: ReturnType<typeof setInterval> | null = null
   function setupClipboardFollow(): void {
     if (followTimer) return
     followTimer = setInterval(() => {
       const cfg = appState?.config.clipboardFollow
-      if (!cfg?.enabled || !cfg.peerId) return
+      if (!cfg?.enabled || !cfg.peerId || !chat) return
       if (!registry?.get(cfg.peerId)?.online) return
+      if (followTarget !== cfg.peerId) {
+        followTarget = cfg.peerId
+        followSentText = null
+      }
       let text: string
       try {
         text = clipboard.readText() ?? ''
@@ -1984,6 +1990,7 @@ if (!gotLock) {
     }
     if (!text.trim()) return { ok: false, reason: 'empty' }
     if (Buffer.byteLength(text, 'utf8') > CLIPBOARD_TEXT_LIMIT) return { ok: false, reason: 'too-long' }
+    followSentText = text // 手动发送后跟随不再重复推同一段内容
     return chat.sendClipboard(peerId, text)
   })
 
@@ -2027,7 +2034,7 @@ if (!gotLock) {
   })
 
   // 消息稍后提醒（决议 #325）：内存态定时器，应用退出即失效；到点弹系统通知
-  const reminders = new Map<string, { convId: string; timer: ReturnType<typeof setTimeout> }>()
+  const reminders = new Map<string, { convId: string; remindAt: number; timer: ReturnType<typeof setTimeout> }>()
   function fireReminder(msgId: string, input: ReminderInput): void {
     reminders.delete(msgId)
     if (!Notification.isSupported()) return
@@ -2053,12 +2060,19 @@ if (!gotLock) {
     const msgId = item.msgId
     const convId = item.convId
     const remindAt = item.remindAt
+    if (reminders.size >= 100 && !reminders.has(msgId)) {
+      const oldest = [...reminders.entries()].sort((a, b) => a[1].remindAt - b[1].remindAt)[0]
+      if (oldest) {
+        clearTimeout(oldest[1].timer)
+        reminders.delete(oldest[0])
+      }
+    }
     const existing = reminders.get(msgId)
     if (existing) clearTimeout(existing.timer)
     if (remindAt <= Date.now()) return { ok: true } // 已过期：直接吞掉，不弹
     const timer = setTimeout(() => fireReminder(msgId, { msgId, convId, remindAt, preview }),
       Math.min(remindAt - Date.now(), 2 ** 31 - 1))
-    reminders.set(msgId, { convId, timer })
+    reminders.set(msgId, { convId, remindAt, timer })
     return { ok: true }
   })
 
