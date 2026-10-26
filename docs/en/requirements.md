@@ -313,3 +313,8 @@ Typing/clipboard ride new Messenger message types (forward compatible); the summ
 - **#326 Clipboard follow**: with the toggle on and a target peer chosen, local clipboard text changes (1.5s debounce) sync via silent `clipboard` frames (no chat tips); dual cursors prevent ping-pong; 16KB cap and online checks match manual sends.
 
 All five are renderer+main collaborations reusing existing transports and the AI channel; no new external requests. Unit tests and two-instance E2E cover polish, follow, reminders and away plumbing. Version recorded with the release.
+
+
+## Decision #328: Startup cleanup of stale installers (2026-10-25)
+
+The self-retain mechanism (#166/#322) accumulates old installers (~80MB each) in `data/updates` on every machine as versions advance. On startup the app scans the directory and deletes YangGe installers whose version is strictly lower than the running one (both setup and portable names); the current version (update-source copy) and any newer package (pulled, pending install) are kept, unrelated files untouched. Best-effort main-process cleanup, silently skipped when the directory is missing. Pure helper `staleUpdatePackages` with unit tests; real-instance verification of all three file classes. Version recorded with the release.

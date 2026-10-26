@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { afterEach, describe, it, expect } from 'vitest'
 import {
   findLocalUpdatePackage,
+  staleUpdatePackages,
   matchesUpdatePackageName,
   pickUpdateSource,
   shouldServeUpdateRequest,
@@ -175,5 +176,26 @@ describe('安装包文件名解析版本（决议 #166 第三步）', () => {
     expect(updatePackageVersionFromName('YangGe-1.3.3-win-x64-setup.exe.bak')).toBe(null)
     expect(updatePackageVersionFromName('报告.pdf')).toBe(null)
     expect(updatePackageVersionFromName('YangGe-1.3.3-win-x64-setup (2).exe')).toBe(null)
+  })
+})
+
+describe('旧安装包启动清理（决议 #328）', () => {
+  it('只挑出版本低于当前的安装包；当前/更高/未知文件保留', () => {
+    expect(staleUpdatePackages([
+      'YangGe-1.3.3-win-x64-setup.exe',
+      'YangGe-1.8.0-win-x64-setup.exe',
+      'YangGe-2.0.0-win-x64-setup.exe',
+      'YangGe-1.7.1-win-x64-portable.exe',
+      '随手记.txt',
+      'YangGe-1.8.0-win-x64-setup.exe.blockmap'
+    ], '1.8.0')).toEqual([
+      'YangGe-1.3.3-win-x64-setup.exe',
+      'YangGe-1.7.1-win-x64-portable.exe'
+    ])
+  })
+
+  it('空目录与全保留场景返回空', () => {
+    expect(staleUpdatePackages([], '1.8.0')).toEqual([])
+    expect(staleUpdatePackages(['YangGe-1.8.0-win-x64-setup.exe'], '1.8.0')).toEqual([])
   })
 })

@@ -167,10 +167,21 @@ export function matchesUpdatePackageName(
   return false
 }
 
-const WIN_SETUP_PACKAGE_RE = /^YangGe-(\d+(?:\.\d+)+[^\\/]*)-win-(x64|ia32|arm64)-setup\.exe$/
+const WIN_SETUP_PACKAGE_RE = /^YangGe-(\d+(?:\.\d+)+[^\\/]*)-win-(x64|ia32|arm64)-(setup|portable)\.exe$/
 
 /** 从安装包文件名解析版本号（决议 #166 第三步：收包后提示可安装）；非安装包名返回 null。 */
 export function updatePackageVersionFromName(name: string): string | null {
   const match = WIN_SETUP_PACKAGE_RE.exec(name)
   return match ? match[1] : null
+}
+
+/** 启动清理（决议 #328）：返回应删除的过期安装包名——版本严格低于当前版本的才算过期，
+ *  当前版本（更新源自留）与更高版本（已拉取待装）一律保留；非安装包文件不动。 */
+export function staleUpdatePackages(names: string[], currentVersion: string): string[] {
+  const stale: string[] = []
+  for (const name of names) {
+    const version = updatePackageVersionFromName(name)
+    if (version && compareSemver(version, currentVersion) < 0) stale.push(name)
+  }
+  return stale
 }

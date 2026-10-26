@@ -33,6 +33,7 @@ import {
   constants as fsConstants,
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   rmSync,
   statSync,
@@ -197,6 +198,7 @@ import { applyWindowZoom } from './util/window-zoom'
 import {
   findLocalUpdatePackage,
   pickUpdateSource,
+  staleUpdatePackages,
   shouldServeUpdateRequest,
   updatePackageVersionFromName,
   UpdateRequestGate
@@ -1565,6 +1567,17 @@ if (!gotLock) {
       chat.prune() // 启动清理（过期队列/去重窗口），之后每小时一次
       pruneTimer = setInterval(() => chat?.prune(), 3_600_000)
       pruneTimer.unref?.()
+      // 旧安装包清理（决议 #328）：低于当前版本的更新包不再有用，当前/更高版本保留
+      try {
+        if (appState) {
+          const updates = updatesDir()
+          for (const stale of staleUpdatePackages(readdirSync(updates), appState.profile.ver)) {
+            rmSync(join(updates, stale), { force: true })
+          }
+        }
+      } catch {
+        // 目录不存在等：清理是尽力而为
+      }
     } else {
       tcpStatus = 'unavailable'
       diagnostics.record('network.listen', { kind: 'tcp', port: tcpPort, status: 'unavailable' })
