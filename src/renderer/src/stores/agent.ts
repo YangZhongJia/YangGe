@@ -4,6 +4,12 @@ import type {
   AgentPermissionRequestView,
   AgentSessionUpdate,
   AgentSessionView,
+  AgentTaskCreateInput,
+  AgentTaskDetailView,
+  AgentTaskDiffView,
+  AgentTaskEventView,
+  AgentTaskPermissionRequestEvent,
+  AgentTaskView,
   AgentUpdateEvent,
   AgentView
 } from '../../../shared/ipc'
@@ -67,7 +73,15 @@ export const useAgentStore = defineStore('agent', {
     busy: false,
     scanning: false,
     initialized: false,
-    error: ''
+    error: '',
+    tasks: [] as AgentTaskView[],
+    activeTaskId: null as string | null,
+    taskDetails: {} as Record<string, AgentTaskDetailView>,
+    taskDiff: null as AgentTaskDiffView | null,
+    taskPermissions: [] as AgentTaskPermissionRequestEvent[],
+    taskBusy: false,
+    taskInitialized: false,
+    taskError: ''
   }),
   getters: {
     activeSession(state): AgentSessionView | null {
@@ -84,6 +98,17 @@ export const useAgentStore = defineStore('agent', {
     canSend(state): boolean {
       const active = state.sessions.find((session) => session.id === state.activeSessionId)
       return active?.status === 'idle' && !state.busy
+    },
+    activeTask(state): AgentTaskView | null {
+      return state.tasks.find((task) => task.id === state.activeTaskId) ?? null
+    },
+    activeTaskDetail(state): AgentTaskDetailView | null {
+      return state.activeTaskId ? state.taskDetails[state.activeTaskId] ?? null : null
+    },
+    activeTaskPermission(state): AgentTaskPermissionRequestEvent | null {
+      return state.taskPermissions.find((event) => event.taskId === state.activeTaskId) ??
+        state.taskPermissions[0] ??
+        null
     }
   },
   actions: {
@@ -136,6 +161,226 @@ export const useAgentStore = defineStore('agent', {
           (session) => session.status !== 'closed' && session.status !== 'failed'
         )
         this.activeSessionId = firstLive?.id ?? sessions[0]?.id ?? null
+      }
+    },
+
+    async initTasks(): Promise<void> {
+      if (this.taskInitialized) return
+      this.taskInitialized = true
+      window.pantry.onAgentTaskUpdated((task) => this.applyTaskUpdate(task))
+      window.pantry.onAgentTaskEvent((event) => this.applyTaskEvent(event))
+      window.pantry.onAgentTaskPermissionRequest((event) => {
+        if (!this.taskPermissions.some((item) => item.request.requestId === event.request.requestId)) {
+          this.taskPermissions.push(event)
+        }
+      })
+      window.pantry.onAgentTaskPermissionResolved((event) => {
+        this.taskPermissions = this.taskPermissions.filter(
+          (item) => item.request.requestId !== event.requestId
+        )
+      })
+      window.pantry.onAgentTaskError((event) => {
+        this.taskError = event.message
+      })
+      await this.refreshTasks()
+    },
+
+    async refreshTasks(): Promise<void> {
+      this.taskError = ''
+      try {
+        const tasks = await window.pantry.listAgentTasks()
+        this.tasks = tasks
+        const activeExists = this.activeTaskId
+          ? tasks.some((task) => task.id === this.activeTaskId)
+          : false
+        if (!activeExists) this.activeTaskId = tasks[0]?.id ?? null
+        if (this.activeTaskId) await this.loadTaskDetail(this.activeTaskId)
+      } catch (error) {
+        this.taskError = error instanceof Error ? error.message : String(error)
+      }
+    },
+
+    async createTask(input: AgentTaskCreateInput): Promise<void> {
+      if (this.taskBusy) return
+      this.taskBusy = true
+      this.taskError = ''
+      try {
+        const result = await window.pantry.createAgentTask(input)
+        if (!result.ok) {
+          this.taskError = result.error
+          return
+        }
+        this.upsertTask(result.value)
+        this.activeTaskId = result.value.id
+        this.taskDiff = null
+        await this.loadTaskDetail(result.value.id)
+      } catch (error) {
+        this.taskError = error instanceof Error ? error.message : String(error)
+      } finally {
+        this.taskBusy = false
+      }
+    },
+
+    async selectTask(taskId: string): Promise<void> {
+      this.activeTaskId = taskId
+      this.taskDiff = null
+      this.taskError = ''
+      await this.loadTaskDetail(taskId)
+    },
+
+    async loadTaskDetail(taskId: string): Promise<void> {
+      const detail = await window.pantry.getAgentTask(taskId)
+      if (detail) this.taskDetails[taskId] = detail
+    },
+
+    async loadTaskEvents(taskId: string): Promise<void> {
+      const events = await window.pantry.listAgentTaskEvents(taskId)
+      const detail = this.taskDetails[taskId]
+      if (detail) detail.events = events
+    },
+
+    async startTask(taskId: string): Promise<void> {
+      await this.runTaskStateAction(taskId, () => window.pantry.startAgentTask(taskId))
+    },
+
+    async approvePlan(taskId: string): Promise<void> {
+      await this.runTaskStateAction(taskId, () => window.pantry.approveAgentTaskPlan(taskId))
+    },
+
+    async pauseTask(taskId: string): Promise<void> {
+      await this.runTaskStateAction(taskId, () => window.pantry.pauseAgentTask(taskId))
+    },
+
+    async resumeTask(taskId: string): Promise<void> {
+      await this.runTaskStateAction(taskId, () => window.pantry.resumeAgentTask(taskId))
+    },
+
+    async cancelTask(taskId: string): Promise<void> {
+      await this.runTaskStateAction(taskId, () => window.pantry.cancelAgentTask(taskId))
+    },
+
+    async loadTaskDiff(taskId: string): Promise<void> {
+      this.taskBusy = true
+      this.taskError = ''
+      try {
+        const result = await window.pantry.getAgentTaskDiff(taskId)
+        if (!result.ok) {
+          this.taskError = result.error
+          return
+        }
+        this.taskDiff = result.value
+      } catch (error) {
+        this.taskError = error instanceof Error ? error.message : String(error)
+      } finally {
+        this.taskBusy = false
+      }
+    },
+
+    async applyTask(taskId: string): Promise<void> {
+      this.taskBusy = true
+      this.taskError = ''
+      try {
+        const result = await window.pantry.applyAgentTask(taskId)
+        if (!result.ok) {
+          this.taskError = result.error
+          return
+        }
+        this.taskError = ''
+      } catch (error) {
+        this.taskError = error instanceof Error ? error.message : String(error)
+      } finally {
+        this.taskBusy = false
+      }
+    },
+
+    async removeTaskWorktree(taskId: string): Promise<void> {
+      this.taskBusy = true
+      this.taskError = ''
+      try {
+        const result = await window.pantry.removeAgentTaskWorktree(taskId)
+        if (!result.ok) {
+          this.taskError = result.error
+          return
+        }
+        this.taskDiff = null
+      } catch (error) {
+        this.taskError = error instanceof Error ? error.message : String(error)
+      } finally {
+        this.taskBusy = false
+      }
+    },
+
+    async respondTaskPermission(
+      taskId: string,
+      requestId: string,
+      decision: AgentPermissionDecision
+    ): Promise<void> {
+      const result = await window.pantry.respondAgentTaskPermission(
+        taskId,
+        requestId,
+        decision
+      )
+      if (!result.ok) {
+        this.taskError = result.error
+        return
+      }
+      this.taskPermissions = this.taskPermissions.filter(
+        (item) => item.request.requestId !== requestId
+      )
+    },
+
+    applyTaskUpdate(task: AgentTaskView): void {
+      this.upsertTask(task)
+      const detail = this.taskDetails[task.id]
+      if (detail) detail.task = task
+      if (task.id === this.activeTaskId) {
+        void this.loadTaskDetail(task.id).catch((error) => {
+          this.taskError = error instanceof Error ? error.message : String(error)
+        })
+      }
+    },
+
+    applyTaskEvent(event: AgentTaskEventView): void {
+      const detail = this.taskDetails[event.taskId]
+      if (detail && !detail.events.some((item) => item.id === event.id)) {
+        detail.events.push(event)
+        detail.events.sort((left, right) => left.createdAt - right.createdAt)
+      }
+    },
+
+    upsertTask(task: AgentTaskView): void {
+      const index = this.tasks.findIndex((item) => item.id === task.id)
+      if (index === -1) this.tasks.unshift(task)
+      else this.tasks[index] = task
+      this.tasks.sort((left, right) => right.updatedAt - left.updatedAt)
+    },
+
+    async runTaskStateAction(
+      taskId: string,
+      action: () => Promise<{
+        ok: true
+        value: AgentTaskView
+      } | {
+        ok: false
+        error: string
+      }>
+    ): Promise<void> {
+      if (this.taskBusy) return
+      this.taskBusy = true
+      this.taskError = ''
+      try {
+        const result = await action()
+        if (!result.ok) {
+          this.taskError = result.error
+          return
+        }
+        this.applyTaskUpdate(result.value)
+        this.taskDiff = null
+        await this.loadTaskDetail(taskId)
+      } catch (error) {
+        this.taskError = error instanceof Error ? error.message : String(error)
+      } finally {
+        this.taskBusy = false
       }
     },
 
