@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { tr, language } from './utils/i18n'
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
+import type { Component } from 'vue'
 import { darkTheme, dateZhCN, dateEnUS, enUS, NButton, NConfigProvider, NInput, zhCN } from 'naive-ui'
 import type {
   AppInfo,
@@ -32,7 +33,6 @@ import { isPlainEscape } from './utils/escape'
 import AvatarMark from './components/AvatarMark.vue'
 import CabinetList from './components/CabinetList.vue'
 import CabinetPane from './components/CabinetPane.vue'
-import AgentPane from './components/AgentPane.vue'
 import { useCabinetStore } from './stores/cabinet'
 import { randomQuote } from './utils/quotes'
 import doveMarkUrl from './assets/brand/yangge-mark.svg?url'
@@ -42,6 +42,27 @@ import { accentPalette, normalizeAccent } from './utils/accents'
 type Tab = 'chat' | 'contacts' | 'cabinet' | 'agent'
 
 const tab = ref<Tab>('chat')
+// Agent 面板较重（权限弹窗/转录样式）；首次切到 Agent 页签时再加载，
+// 避免进入 App.vue 的静态 CSS 闭包，也避免 App 内再套 defineAsyncComponent 影响五入口 manifest。
+const AgentPane = shallowRef<Component | null>(null)
+let agentPaneRequested = false
+watch(
+  tab,
+  (next) => {
+    const loaded: Component | null = AgentPane.value
+    if (next !== 'agent' || loaded || agentPaneRequested) return
+    agentPaneRequested = true
+    void import('./components/AgentPane.vue')
+      .then((module) => {
+        AgentPane.value = module.default
+      })
+      .catch(() => {
+        agentPaneRequested = false
+      })
+  },
+  { immediate: true }
+)
+
 const searchQuery = ref('')
 const selectedPeerId = ref<string | null>(null)
 const showGroupCreator = ref(false)
@@ -691,7 +712,7 @@ onUnmounted(() => {
     </aside>
 
     <main class="content">
-      <AgentPane v-if="tab === 'agent'" />
+      <component :is="AgentPane" v-if="tab === 'agent' && AgentPane" />
       <CabinetPane v-else-if="tab === 'cabinet'" />
       <ProfileCard
         v-else-if="tab === 'contacts' && selectedPeer"
