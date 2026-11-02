@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import Database from 'better-sqlite3'
 import { openDatabase } from './db'
-import { MIGRATIONS, applyMigrations } from './migrations'
+import { LATEST_VERSION, MIGRATIONS, applyMigrations } from './migrations'
 import { PeersRepo } from './peers-repo'
 import { ConvRepo } from './conv-repo'
 import { MsgRepo, msgRowToView } from './msg-repo'
@@ -128,7 +128,7 @@ try {
   screenDb.close()
 
   // 1. 迁移就位
-  assert.equal(db.pragma('user_version', { simple: true }), 16, '迁移版本应为 16')
+  assert.equal(db.pragma('user_version', { simple: true }), LATEST_VERSION, `迁移版本应为 ${LATEST_VERSION}`)
   assert.equal(db.pragma('journal_mode', { simple: true }), 'wal', '应为 WAL 模式')
   const messageIndexes = new Set(
     (
@@ -170,7 +170,11 @@ try {
     ''
   )
   applyMigrations(legacyDb)
-  assert.equal(legacyDb.pragma('user_version', { simple: true }), 16, 'v10 数据库应迁移至 v16')
+  assert.equal(
+    legacyDb.pragma('user_version', { simple: true }),
+    LATEST_VERSION,
+    `v10 数据库应迁移至 v${LATEST_VERSION}`
+  )
   const migratedGroup = new GroupRepo(legacyDb).get('g-v10')
   assert.equal(migratedGroup?.ownerId, 'node-creator', '旧群优先以仍在群内的创建者作为群主')
   assert.deepEqual(migratedGroup?.adminIds, [], '旧群管理员默认应为空')
@@ -180,7 +184,11 @@ try {
   for (let index = 0; index < 11; index += 1) legacyV11.exec(MIGRATIONS[index])
   legacyV11.pragma('user_version = 11')
   applyMigrations(legacyV11)
-  assert.equal(legacyV11.pragma('user_version', { simple: true }), 16, 'v11 数据库应迁移至 v16')
+  assert.equal(
+    legacyV11.pragma('user_version', { simple: true }),
+    LATEST_VERSION,
+    `v11 数据库应迁移至 v${LATEST_VERSION}`
+  )
   const peerColumns = legacyV11.pragma('table_info(peers)') as Array<{ name: string }>
   const groupColumns = legacyV11.pragma('table_info(groups)') as Array<{ name: string }>
   assert.equal(peerColumns.some((column) => column.name === 'avatar_hash'), true)
@@ -196,7 +204,11 @@ try {
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run('legacy-transfer', 'legacy-message', 'node-bob', 'out', '{}', 'offering', 0, 10, 1)
   applyMigrations(legacyV12)
-  assert.equal(legacyV12.pragma('user_version', { simple: true }), 16, 'v12 数据库应迁移至 v16')
+  assert.equal(
+    legacyV12.pragma('user_version', { simple: true }),
+    LATEST_VERSION,
+    `v12 数据库应迁移至 v${LATEST_VERSION}`
+  )
   const legacyTransfer = legacyV12
     .prepare('SELECT expires_at FROM transfers WHERE transfer_id = ?')
     .get('legacy-transfer') as { expires_at: number }
@@ -213,7 +225,11 @@ try {
   for (let index = 0; index < 13; index += 1) legacyV13.exec(MIGRATIONS[index])
   legacyV13.pragma('user_version = 13')
   applyMigrations(legacyV13)
-  assert.equal(legacyV13.pragma('user_version', { simple: true }), 16, 'v13 数据库应迁移至 v16')
+  assert.equal(
+    legacyV13.pragma('user_version', { simple: true }),
+    LATEST_VERSION,
+    `v13 数据库应迁移至 v${LATEST_VERSION}`
+  )
   const v14Grants = new ShareGrantsRepo(legacyV13)
   assert.equal(v14Grants.list().length, 0, '升级到 v14 不得凭空产生例外')
   legacyV13.close()

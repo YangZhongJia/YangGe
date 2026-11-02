@@ -265,9 +265,12 @@ export const MIGRATIONS: ReadonlyArray<string> = [
   `
 ]
 
+/** 当前最新迁移版本；新增迁移后自动跟随，调用方不要写死版本号。 */
+export const LATEST_VERSION = MIGRATIONS.length
+
 export function applyMigrations(db: DatabaseT.Database): void {
   const current = db.pragma('user_version', { simple: true }) as number
-  for (let v = current; v < MIGRATIONS.length; v++) {
+  for (let v = current; v < LATEST_VERSION; v++) {
     db.exec('BEGIN')
     try {
       db.exec(MIGRATIONS[v])
