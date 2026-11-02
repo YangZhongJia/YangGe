@@ -36,6 +36,7 @@ import {
   type ImageViewerNavigation,
   type MessageView,
   type MsgStatusEvent,
+  type MainWindowShownEvent,
   type NetState,
   type NudgeEvent,
   type NudgeResult,
@@ -80,6 +81,28 @@ const captureInitReplay = createCaptureInitReplay()
 ipcRenderer.on(IpcEvents.captureInit, (_event, pngBytes: ArrayBuffer) => {
   captureInitReplay.publish(pngBytes)
 })
+
+// 首次 ready-to-show 的窗口事件可能早于 App 订阅，缓存最后一条；订阅时补发一次。
+const mainWindowShownListeners = new Set<(event: MainWindowShownEvent) => void>()
+let pendingMainWindowShown: MainWindowShownEvent | null = null
+ipcRenderer.on(IpcEvents.mainWindowShown, (_event, payload: MainWindowShownEvent) => {
+  if (mainWindowShownListeners.size === 0) {
+    pendingMainWindowShown = payload
+    return
+  }
+  for (const listener of mainWindowShownListeners) listener(payload)
+})
+function subscribeMainWindowShown(listener: (event: MainWindowShownEvent) => void): () => void {
+  mainWindowShownListeners.add(listener)
+  if (pendingMainWindowShown) {
+    const pending = pendingMainWindowShown
+    pendingMainWindowShown = null
+    queueMicrotask(() => {
+      if (mainWindowShownListeners.has(listener)) listener(pending)
+    })
+  }
+  return () => mainWindowShownListeners.delete(listener)
+}
 
 // 渲染进程一切能力的唯一入口（tech-design §2 安全基线：sandbox + contextBridge）
 const api: PantryApi = {
@@ -351,6 +374,7 @@ const api: PantryApi = {
   onSettingsWindowState: (listener) =>
     subscribe<boolean>(IpcEvents.settingsWindowState, listener),
   onCabinetFocusPeer: (listener) => subscribe<string>(IpcEvents.cabinetFocusPeer, listener),
+  onMainWindowShown: (listener) => subscribeMainWindowShown(listener),
   onScanProgress: (listener) => subscribe<ScanProgressView>(IpcEvents.netScanProgress, listener),
   onClipboardPasteImage: (listener): (() => void) =>
     subscribe<void>(IpcEvents.clipboardPasteImage, listener),

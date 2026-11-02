@@ -562,6 +562,10 @@ async function toggleCloseToTray(value: boolean): Promise<void> {
   await saveApp({ closeToTray: value })
 }
 
+async function toggleStartupMotion(value: boolean): Promise<void> {
+  await saveApp({ startupMotion: value })
+}
+
 async function toggleMessagePreview(value: boolean): Promise<void> {
   await saveApp({ showMessagePreview: value })
 }
@@ -648,6 +652,7 @@ async function resetAppSettings(): Promise<void> {
       hideOnCapture: true,
       autoLaunch: true,
       closeToTray: true,
+      startupMotion: true,
       theme: 'light',
       fontScale: 100,
       showMessagePreview: true,
@@ -1121,6 +1126,14 @@ async function confirmRemove(cidr: string): Promise<void> {
                 <small>{{ tr('点关闭按钮时保持在线，仍可接收消息。') }}</small>
               </div>
               <NSwitch :value="settings.closeToTray" @update:value="toggleCloseToTray" />
+            </div>
+            <div class="setting-line">
+              <div>
+                <strong>{{ tr('启动动效') }}</strong>
+                <small>{{ tr('启动或从托盘唤起时播放一次飞鸽粒子动效。') }}</small>
+                <small>{{ tr('系统开启“减少动态效果”时仅显示静态图标。') }}</small>
+              </div>
+              <NSwitch :value="settings.startupMotion" @update:value="toggleStartupMotion" />
             </div>
           </div>
 
