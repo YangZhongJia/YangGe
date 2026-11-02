@@ -32,13 +32,14 @@ import { isPlainEscape } from './utils/escape'
 import AvatarMark from './components/AvatarMark.vue'
 import CabinetList from './components/CabinetList.vue'
 import CabinetPane from './components/CabinetPane.vue'
+import AgentPane from './components/AgentPane.vue'
 import { useCabinetStore } from './stores/cabinet'
 import { randomQuote } from './utils/quotes'
 import doveMarkUrl from './assets/brand/yangge-mark.svg?url'
 import { teahouseDarkThemeOverrides, teahouseLightThemeOverrides } from './ui/naive-theme'
 import { accentPalette, normalizeAccent } from './utils/accents'
 
-type Tab = 'chat' | 'contacts' | 'cabinet'
+type Tab = 'chat' | 'contacts' | 'cabinet' | 'agent'
 
 const tab = ref<Tab>('chat')
 const searchQuery = ref('')
@@ -523,6 +524,18 @@ onUnmounted(() => {
       >
         <RailNavIcon name="contacts" />
       </button>
+      <button
+        type="button"
+        class="rail-btn rail-hint"
+        :class="{ active: tab === 'agent', 'show-hint': activeRailHint === 'agent' }"
+        :data-label="tr('Agent')"
+        :aria-label="tr('Agent')"
+        @pointermove="scheduleRailHint('agent')"
+        @pointerleave="hideRailHint('agent')"
+        @click="activateTab('agent', $event)"
+      >
+        <RailNavIcon name="agent" />
+      </button>
       <div class="spacer"></div>
       <button
         v-if="updateStore.available"
@@ -638,7 +651,7 @@ onUnmounted(() => {
       </NButton>
     </div>
 
-    <aside class="list">
+    <aside v-if="tab !== 'agent'" class="list">
       <div v-if="tab !== 'cabinet'" class="search-box">
         <NInput
           v-model:value="searchQuery"
@@ -678,7 +691,8 @@ onUnmounted(() => {
     </aside>
 
     <main class="content">
-      <CabinetPane v-if="tab === 'cabinet'" />
+      <AgentPane v-if="tab === 'agent'" />
+      <CabinetPane v-else-if="tab === 'cabinet'" />
       <ProfileCard
         v-else-if="tab === 'contacts' && selectedPeer"
         :peer="selectedPeer"
