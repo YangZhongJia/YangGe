@@ -14,6 +14,14 @@ import {
   type AgentScanResult,
   type AgentSessionView,
   type AgentStatusEvent,
+  type AgentTaskCreateInput,
+  type AgentTaskDetailView,
+  type AgentTaskDiffView,
+  type AgentTaskErrorEvent,
+  type AgentTaskEventView,
+  type AgentTaskPermissionRequestEvent,
+  type AgentTaskPermissionResolvedEvent,
+  type AgentTaskView,
   type AgentUpdateEvent,
   type AgentView,
   type AppInfo,
@@ -417,7 +425,47 @@ const api: PantryApi = {
   onAgentPermissionResolved: (listener) =>
     subscribe<AgentPermissionResolvedEvent>(IpcEvents.agentPermissionResolved, listener),
   onAgentExit: (listener) => subscribe<AgentExitEvent>(IpcEvents.agentExit, listener),
-  onAgentError: (listener) => subscribe<AgentErrorEvent>(IpcEvents.agentError, listener)
+  onAgentError: (listener) => subscribe<AgentErrorEvent>(IpcEvents.agentError, listener),
+  listAgentTasks: (limit?: number): Promise<AgentTaskView[]> =>
+    ipcRenderer.invoke(IpcChannels.agentTaskList, limit),
+  createAgentTask: (input: AgentTaskCreateInput): Promise<AgentResult<AgentTaskView>> =>
+    ipcRenderer.invoke(IpcChannels.agentTaskCreate, input),
+  getAgentTask: (taskId: string): Promise<AgentTaskDetailView | null> =>
+    ipcRenderer.invoke(IpcChannels.agentTaskGet, taskId),
+  startAgentTask: (taskId: string): Promise<AgentResult<AgentTaskView>> =>
+    ipcRenderer.invoke(IpcChannels.agentTaskStart, taskId),
+  approveAgentTaskPlan: (taskId: string): Promise<AgentResult<AgentTaskView>> =>
+    ipcRenderer.invoke(IpcChannels.agentTaskApprovePlan, taskId),
+  pauseAgentTask: (taskId: string): Promise<AgentResult<AgentTaskView>> =>
+    ipcRenderer.invoke(IpcChannels.agentTaskPause, taskId),
+  resumeAgentTask: (taskId: string): Promise<AgentResult<AgentTaskView>> =>
+    ipcRenderer.invoke(IpcChannels.agentTaskResume, taskId),
+  cancelAgentTask: (taskId: string): Promise<AgentResult<AgentTaskView>> =>
+    ipcRenderer.invoke(IpcChannels.agentTaskCancel, taskId),
+  listAgentTaskEvents: (taskId: string, limit?: number): Promise<AgentTaskEventView[]> =>
+    ipcRenderer.invoke(IpcChannels.agentTaskEvents, taskId, limit),
+  getAgentTaskDiff: (taskId: string): Promise<AgentResult<AgentTaskDiffView>> =>
+    ipcRenderer.invoke(IpcChannels.agentTaskDiff, taskId),
+  applyAgentTask: (taskId: string): Promise<AgentResult<null>> =>
+    ipcRenderer.invoke(IpcChannels.agentTaskApply, taskId),
+  removeAgentTaskWorktree: (taskId: string): Promise<AgentResult<null>> =>
+    ipcRenderer.invoke(IpcChannels.agentTaskRemoveWorktree, taskId),
+  respondAgentTaskPermission: (
+    taskId: string,
+    requestId: string,
+    decision: AgentPermissionDecision
+  ): Promise<AgentResult<null>> =>
+    ipcRenderer.invoke(IpcChannels.agentTaskPermissionRespond, taskId, requestId, decision),
+  onAgentTaskUpdated: (listener) =>
+    subscribe<AgentTaskView>(IpcEvents.agentTaskUpdated, listener),
+  onAgentTaskEvent: (listener) =>
+    subscribe<AgentTaskEventView>(IpcEvents.agentTaskEvent, listener),
+  onAgentTaskPermissionRequest: (listener) =>
+    subscribe<AgentTaskPermissionRequestEvent>(IpcEvents.agentTaskPermissionRequest, listener),
+  onAgentTaskPermissionResolved: (listener) =>
+    subscribe<AgentTaskPermissionResolvedEvent>(IpcEvents.agentTaskPermissionResolved, listener),
+  onAgentTaskError: (listener) =>
+    subscribe<AgentTaskErrorEvent>(IpcEvents.agentTaskError, listener)
 }
 
 contextBridge.exposeInMainWorld('pantry', api)

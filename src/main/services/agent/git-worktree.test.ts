@@ -98,6 +98,12 @@ describe('GitTaskWorkspace', () => {
     expect(patchText).toContain('GIT binary patch')
     expect(patchText).toContain('new file.txt')
     expect(patchText).toContain('delete.txt')
+    await expect(service.listChangedFiles('changes-task')).resolves.toEqual([
+      'asset.bin',
+      'delete.txt',
+      'edit.txt',
+      'new dir/new file.txt'
+    ])
 
     await service.apply('changes-task', root)
     expect(await readFile(join(root, 'edit.txt'), 'utf8')).toBe('after\n')

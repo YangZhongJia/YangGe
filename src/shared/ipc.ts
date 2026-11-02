@@ -162,7 +162,20 @@ export const IpcChannels = {
   agentPrompt: 'agent:prompt',
   agentCancel: 'agent:cancel',
   agentPermissionRespond: 'agent:permission-respond',
-  agentAuditList: 'agent:audit-list'
+  agentAuditList: 'agent:audit-list',
+  agentTaskList: 'agent-task:list',
+  agentTaskCreate: 'agent-task:create',
+  agentTaskGet: 'agent-task:get',
+  agentTaskStart: 'agent-task:start',
+  agentTaskApprovePlan: 'agent-task:approve-plan',
+  agentTaskPause: 'agent-task:pause',
+  agentTaskResume: 'agent-task:resume',
+  agentTaskCancel: 'agent-task:cancel',
+  agentTaskEvents: 'agent-task:events',
+  agentTaskDiff: 'agent-task:diff',
+  agentTaskApply: 'agent-task:apply',
+  agentTaskRemoveWorktree: 'agent-task:remove-worktree',
+  agentTaskPermissionRespond: 'agent-task:permission-respond'
 } as const
 
 /** main → renderer 的事件推送 */
@@ -215,6 +228,11 @@ export const IpcEvents = {
   agentPermissionResolved: 'agent:permission-resolved',
   agentExit: 'agent:exit',
   agentError: 'agent:error',
+  agentTaskUpdated: 'agent-task:updated',
+  agentTaskEvent: 'agent-task:event',
+  agentTaskPermissionRequest: 'agent-task:permission-request',
+  agentTaskPermissionResolved: 'agent-task:permission-resolved',
+  agentTaskError: 'agent-task:error',
   /** 主窗首次显示 / 从托盘、最小化恢复：渲染层据此播放一次启动动效 */
   mainWindowShown: 'ui:main-window-shown'
 } as const
@@ -515,6 +533,37 @@ export interface AgentTaskEventView {
   agentId: string | null
   text: string
   createdAt: number
+}
+
+export interface AgentTaskDetailView {
+  task: AgentTaskView
+  steps: AgentTaskStepView[]
+  events: AgentTaskEventView[]
+}
+
+export interface AgentTaskDiffView {
+  taskId: string
+  patch: string
+  changedFiles: string[]
+  bytes: number
+  truncated: boolean
+}
+
+export interface AgentTaskPermissionRequestEvent {
+  taskId: string
+  request: AgentPermissionRequestView
+}
+
+export interface AgentTaskPermissionResolvedEvent {
+  taskId: string
+  requestId: string
+  outcome: 'selected' | 'cancelled'
+  optionId: string | null
+}
+
+export interface AgentTaskErrorEvent {
+  taskId: string
+  message: string
 }
 
 export interface RepositoryState {
@@ -1433,4 +1482,30 @@ export interface PantryApi {
   onAgentPermissionResolved(listener: (event: AgentPermissionResolvedEvent) => void): () => void
   onAgentExit(listener: (event: AgentExitEvent) => void): () => void
   onAgentError(listener: (event: AgentErrorEvent) => void): () => void
+  listAgentTasks(limit?: number): Promise<AgentTaskView[]>
+  createAgentTask(input: AgentTaskCreateInput): Promise<AgentResult<AgentTaskView>>
+  getAgentTask(taskId: string): Promise<AgentTaskDetailView | null>
+  startAgentTask(taskId: string): Promise<AgentResult<AgentTaskView>>
+  approveAgentTaskPlan(taskId: string): Promise<AgentResult<AgentTaskView>>
+  pauseAgentTask(taskId: string): Promise<AgentResult<AgentTaskView>>
+  resumeAgentTask(taskId: string): Promise<AgentResult<AgentTaskView>>
+  cancelAgentTask(taskId: string): Promise<AgentResult<AgentTaskView>>
+  listAgentTaskEvents(taskId: string, limit?: number): Promise<AgentTaskEventView[]>
+  getAgentTaskDiff(taskId: string): Promise<AgentResult<AgentTaskDiffView>>
+  applyAgentTask(taskId: string): Promise<AgentResult<null>>
+  removeAgentTaskWorktree(taskId: string): Promise<AgentResult<null>>
+  respondAgentTaskPermission(
+    taskId: string,
+    requestId: string,
+    decision: AgentPermissionDecision
+  ): Promise<AgentResult<null>>
+  onAgentTaskUpdated(listener: (task: AgentTaskView) => void): () => void
+  onAgentTaskEvent(listener: (event: AgentTaskEventView) => void): () => void
+  onAgentTaskPermissionRequest(
+    listener: (event: AgentTaskPermissionRequestEvent) => void
+  ): () => void
+  onAgentTaskPermissionResolved(
+    listener: (event: AgentTaskPermissionResolvedEvent) => void
+  ): () => void
+  onAgentTaskError(listener: (event: AgentTaskErrorEvent) => void): () => void
 }

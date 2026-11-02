@@ -177,6 +177,20 @@ export class GitTaskWorkspace {
     )
   }
 
+  async listChangedFiles(taskId: string): Promise<string[]> {
+    const workspace = this.resolveWorkspace(taskId)
+    await runGit(workspace.worktreePath, ['add', '--intent-to-add', '--', '.'])
+    const output = await runGit(workspace.worktreePath, [
+      'diff',
+      '--name-only',
+      '-z',
+      '--no-ext-diff',
+      workspace.baseCommit,
+      '--'
+    ])
+    return output.split('\0').filter(Boolean)
+  }
+
   async apply(taskId: string, repoPath: string): Promise<void> {
     const workspace = this.resolveWorkspace(taskId)
     const state = await this.inspectRepository(repoPath)

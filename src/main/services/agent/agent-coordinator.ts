@@ -5,11 +5,15 @@ import {
   type AgentCoordinatorPlan,
   type AgentCoordinatorPlanStep,
   type AgentPermissionDecision,
+  type AgentPermissionRequestView,
   type AgentResult,
   type AgentRunResult,
   type AgentSessionView,
   type AgentTaskCreateInput,
+  type AgentTaskErrorEvent,
   type AgentTaskEventView,
+  type AgentTaskPermissionRequestEvent,
+  type AgentTaskPermissionResolvedEvent,
   type AgentTaskStepView,
   type AgentTaskView,
   type AgentView,
@@ -46,6 +50,7 @@ export interface AgentCoordinatorRuntime {
 export interface TaskWorkspaceService {
   create(taskId: string, repoPath: string): Promise<TaskWorkspace>
   buildPatch(taskId: string): Promise<Buffer>
+  listChangedFiles(taskId: string): Promise<string[]>
   apply(taskId: string, repoPath: string): Promise<void>
   remove(taskId: string): Promise<void>
 }
@@ -54,6 +59,7 @@ export interface AgentCoordinatorOptions {
   store: AgentTaskStore
   agents: AgentCoordinatorRuntime
   workspaces: TaskWorkspaceService
+  emit?: (channel: string, payload: unknown) => void
   now?: () => number
   id?: () => string
 }
@@ -253,6 +259,7 @@ export class AgentCoordinator {
   private readonly store: AgentTaskStore
   private readonly agents: AgentCoordinatorRuntime
   private readonly workspaces: TaskWorkspaceService
+  private readonly emitTask: (channel: string, payload: unknown) => void
   private readonly now: () => number
   private readonly id: () => string
   private readonly contexts = new Map<string, ActiveAgentRun>()
@@ -266,6 +273,7 @@ export class AgentCoordinator {
     this.store = options.store
     this.agents = options.agents
     this.workspaces = options.workspaces
+    this.emitTask = options.emit ?? (() => {})
     this.now = options.now ?? (() => Date.now())
     this.id = options.id ?? (() => randomUUID())
     this.unsubscribe = this.agents.subscribe((channel, payload) => {
@@ -496,6 +504,56 @@ export class AgentCoordinator {
     } catch (error) {
       return fail(error)
     }
+  }
+
+  async removeWorktree(taskId: string): Promise<AgentResult<null>> {
+    try {
+      const task = this.requireTask(taskId)
+      if (ACTIVE_TASK_STATUSES.has(task.status) || this.operations.has(taskId)) {
+        throw new Error('task_is_active')
+      }
+      await this.workspaces.remove(taskId)
+      this.appendEvent(task, 'system', '任务 worktree 已清理，任务记录与历史保留', null, null, 0)
+      return ok(null)
+    } catch (error) {
+      return fail(error)
+    }
+  }
+
+  recoverInterruptedTasks(): number {
+    let recovered = 0
+    for (const task of this.store.listTasks(200)) {
+      if (!ACTIVE_TASK_STATUSES.has(task.status)) continue
+      const now = this.now()
+      for (const step of this.store.listSteps(task.id)) {
+        if (step.status !== 'running' && step.status !== 'awaiting_approval') continue
+        this.store.updateStep(step.id, {
+          status: 'queued',
+          sessionId: null,
+          runId: null,
+          error: null,
+          updatedAt: now
+        })
+      }
+      const failed = this.store.updateTask(task.id, {
+        status: 'failed',
+        error: 'application_interrupted',
+        updatedAt: now
+      })
+      if (!failed) continue
+      this.appendRecoveryEvent(failed)
+      recovered += 1
+    }
+    return recovered
+  }
+
+  checkpointAndDispose(): void {
+    if (this.disposed) return
+    this.recoverInterruptedTasks()
+    for (const sessions of this.activeSessions.values()) {
+      for (const sessionId of sessions) this.agents.cancel(sessionId)
+    }
+    this.dispose()
   }
 
   dispose(): void {
@@ -821,7 +879,7 @@ export class AgentCoordinator {
       .update(`${task.id}:${stepId ?? ''}:${kind}:${sequence}`)
       .digest('hex')
       .slice(0, 32)
-    this.store.appendEvent({
+    const event: AgentTaskEventView = {
       id: `evt_${stable}`,
       taskId: task.id,
       stepId,
@@ -829,7 +887,18 @@ export class AgentCoordinator {
       agentId,
       text: truncateUtf8(text, MAX_EVENT_BYTES),
       createdAt: this.now()
-    })
+    }
+    this.store.appendEvent(event)
+    const latest = this.store.getTask(task.id)
+    if (latest) this.emitTask(IpcEvents.agentTaskUpdated, latest)
+    this.emitTask(IpcEvents.agentTaskEvent, event)
+    if (kind === 'error') {
+      const failure: AgentTaskErrorEvent = {
+        taskId: task.id,
+        message: event.text
+      }
+      this.emitTask(IpcEvents.agentTaskError, failure)
+    }
   }
 
   private launch(taskId: string, run: () => Promise<void>): void {
@@ -838,11 +907,12 @@ export class AgentCoordinator {
       .catch(async (error) => {
         const task = this.store.getTask(taskId)
         if (!task || task.status === 'cancelled' || task.status === 'paused') return
-        this.store.updateTask(taskId, {
+        const failed = this.store.updateTask(taskId, {
           status: 'failed',
           error: errorText(error),
           updatedAt: this.now()
         })
+        if (failed) this.appendEvent(failed, 'error', errorText(error), null, null, 0)
       })
       .finally(() => {
         this.operations.delete(taskId)
@@ -878,11 +948,30 @@ export class AgentCoordinator {
         taskId: context.taskId,
         sessionId
       })
+      const request = payload as unknown as AgentPermissionRequestView
+      const taskRequest: AgentTaskPermissionRequestEvent = {
+        taskId: context.taskId,
+        request
+      }
+      this.emitTask(IpcEvents.agentTaskPermissionRequest, taskRequest)
       return
     }
     if (channel === IpcEvents.agentPermissionResolved) {
       const requestId = payload['requestId']
-      if (typeof requestId === 'string') this.pendingPermissions.delete(requestId)
+      if (typeof requestId === 'string') {
+        const pending = this.pendingPermissions.get(requestId)
+        this.pendingPermissions.delete(requestId)
+        if (pending) {
+          const outcome = payload['outcome'] === 'selected' ? 'selected' : 'cancelled'
+          const resolved: AgentTaskPermissionResolvedEvent = {
+            taskId: pending.taskId,
+            requestId,
+            outcome,
+            optionId: typeof payload['optionId'] === 'string' ? payload['optionId'] : null
+          }
+          this.emitTask(IpcEvents.agentTaskPermissionResolved, resolved)
+        }
+      }
     }
   }
 

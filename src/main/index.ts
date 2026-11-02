@@ -1,7 +1,11 @@
 import { AiReplier, buildPolishMessages, callChatCompletion, isPolishMode } from './services/ai-replier'
 import { normalizeAi, normalizeClipboardFollow } from './store/app-state'
 import { AcpAgentService } from './services/agent/agent-service'
+import { AgentCoordinator } from './services/agent/agent-coordinator'
+import { AgentTaskIpcController } from './services/agent/agent-task-ipc'
+import { GitTaskWorkspace } from './services/agent/git-worktree'
 import { AgentRepo } from './store/agent-repo'
+import { AgentTaskRepo } from './store/agent-task-repo'
 
 /** AI 分身的间接挂载点：chat/groups 先建、AiReplier 后挂（避免循环依赖） */
 const aiPortRef: {
@@ -336,6 +340,8 @@ if (!gotLock) {
   let shareGrantsRepo: ShareGrantsRepo | null = null
   let share: ShareService | null = null
   let agentService: AcpAgentService | null = null
+  let agentCoordinator: AgentCoordinator | null = null
+  let agentTaskController: AgentTaskIpcController | null = null
   let capturing = false
   let pruneTimer: ReturnType<typeof setInterval> | null = null
   let avatarPruneTimer: ReturnType<typeof setTimeout> | null = null
@@ -1399,6 +1405,41 @@ if (!gotLock) {
         },
         diagnostics: (event, data, error) => diagnostics.record(event, data, error)
       })
+      const taskRepo = new AgentTaskRepo(db)
+      const taskWorkspaces = new GitTaskWorkspace(
+        join(app.getPath('userData'), 'data', 'agent-worktrees'),
+        (taskId) => {
+          const task = taskRepo.getTask(taskId)
+          return task
+            ? {
+                repoRoot: task.repoPath,
+                sourceBranch: task.sourceBranch,
+                baseCommit: task.baseCommit,
+                worktreePath: task.worktreePath,
+                taskBranch: task.taskBranch
+              }
+            : null
+        }
+      )
+      agentCoordinator = new AgentCoordinator({
+        store: taskRepo,
+        agents: agentService,
+        workspaces: taskWorkspaces,
+        emit: (channel, payload) => mainWindow?.webContents.send(channel, payload)
+      })
+      agentTaskController = new AgentTaskIpcController({
+        store: taskRepo,
+        coordinator: agentCoordinator,
+        workspaces: taskWorkspaces
+      })
+      const recoveredTasks = agentTaskController.recoverInterrupted()
+      if (recoveredTasks > 0) {
+        diagnostics.record('agent.state', {
+          status: 'recovered',
+          kind: 'task',
+          count: recoveredTasks
+        })
+      }
       registry.seed(peersRepo.loadAll()) // 历史联系人以离线态回灌（F-DISC-7）
       for (const [id, remark] of peersRepo.loadRemarks()) remarks.set(id, remark)
 
@@ -2238,6 +2279,90 @@ if (!gotLock) {
     return agentService?.listAudit(safeLimit) ?? []
   })
 
+  ipcMain.handle(IpcChannels.agentTaskList, (_event, limit: unknown) =>
+    agentTaskController?.list(limit) ?? []
+  )
+
+  ipcMain.handle(IpcChannels.agentTaskCreate, (_event, input: unknown) =>
+    agentTaskController?.create(input) ?? {
+      ok: false,
+      error: 'Agent 任务存储不可用'
+    }
+  )
+
+  ipcMain.handle(IpcChannels.agentTaskGet, (_event, taskId: unknown) =>
+    agentTaskController?.get(taskId) ?? null
+  )
+
+  ipcMain.handle(IpcChannels.agentTaskStart, (_event, taskId: unknown) =>
+    agentTaskController?.start(taskId) ?? {
+      ok: false,
+      error: 'Agent 任务存储不可用'
+    }
+  )
+
+  ipcMain.handle(IpcChannels.agentTaskApprovePlan, (_event, taskId: unknown) =>
+    agentTaskController?.approvePlan(taskId) ?? {
+      ok: false,
+      error: 'Agent 任务存储不可用'
+    }
+  )
+
+  ipcMain.handle(IpcChannels.agentTaskPause, (_event, taskId: unknown) =>
+    agentTaskController?.pause(taskId) ?? {
+      ok: false,
+      error: 'Agent 任务存储不可用'
+    }
+  )
+
+  ipcMain.handle(IpcChannels.agentTaskResume, (_event, taskId: unknown) =>
+    agentTaskController?.resume(taskId) ?? {
+      ok: false,
+      error: 'Agent 任务存储不可用'
+    }
+  )
+
+  ipcMain.handle(IpcChannels.agentTaskCancel, (_event, taskId: unknown) =>
+    agentTaskController?.cancel(taskId) ?? {
+      ok: false,
+      error: 'Agent 任务存储不可用'
+    }
+  )
+
+  ipcMain.handle(IpcChannels.agentTaskEvents, (_event, taskId: unknown, limit: unknown) =>
+    agentTaskController?.events(taskId, limit) ?? []
+  )
+
+  ipcMain.handle(IpcChannels.agentTaskDiff, (_event, taskId: unknown) =>
+    agentTaskController?.diff(taskId) ?? {
+      ok: false,
+      error: 'Agent 任务存储不可用'
+    }
+  )
+
+  ipcMain.handle(IpcChannels.agentTaskApply, (_event, taskId: unknown) =>
+    agentTaskController?.apply(taskId) ?? {
+      ok: false,
+      error: 'Agent 任务存储不可用'
+    }
+  )
+
+  ipcMain.handle(IpcChannels.agentTaskRemoveWorktree, (_event, taskId: unknown) =>
+    agentTaskController?.removeWorktree(taskId) ?? {
+      ok: false,
+      error: 'Agent 任务存储不可用'
+    }
+  )
+
+  ipcMain.handle(
+    IpcChannels.agentTaskPermissionRespond,
+    (_event, taskId: unknown, requestId: unknown, decision: unknown) =>
+      agentTaskController?.respondPermission(taskId, requestId, decision) ?? {
+        ok: false,
+        error: 'Agent 任务存储不可用'
+      }
+  )
+
   ipcMain.handle(IpcChannels.convList, () => chat?.listConversations() ?? [])
 
   ipcMain.handle(IpcChannels.convOpen, (_event, peerId: unknown) => {
@@ -2349,7 +2474,7 @@ if (!gotLock) {
         : 'indigo',
       chatBackground: (['plain', 'dove', 'dots', 'aurora'] as const).includes(c?.chatBackground as never)
         ? (c?.chatBackground as 'plain' | 'dove' | 'dots' | 'aurora')
-        : 'plain',
+        : 'dots',
       notifications: c?.notifications !== false,
       manualPeers: c?.manualPeers ?? [],
       scanRanges: c?.scanRanges ?? [],
@@ -3735,7 +3860,10 @@ if (!gotLock) {
     if (pruneTimer) clearInterval(pruneTimer)
     if (persistTimer) clearTimeout(persistTimer)
     if (avatarPruneTimer) clearTimeout(avatarPruneTimer)
-    // 先收口 Agent 子进程树（taskkill /T），再关 DB；否则落库回调会踩到已关闭的连接。
+    // 先 checkpoint 协调任务，再收口 Agent 子进程树并关 DB，避免退出后任务显示为仍在运行。
+    agentCoordinator?.checkpointAndDispose()
+    agentCoordinator = null
+    agentTaskController = null
     agentService?.dispose()
     agentService = null
     void files?.stop()

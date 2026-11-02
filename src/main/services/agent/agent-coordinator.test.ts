@@ -219,6 +219,10 @@ class MemoryWorkspace {
     return Buffer.from(this.patch)
   }
 
+  async listChangedFiles(): Promise<string[]> {
+    return ['a']
+  }
+
   async apply(taskId: string): Promise<void> {
     this.applyCalls.push(taskId)
   }
@@ -389,15 +393,17 @@ function harness() {
   const store = new MemoryTaskStore()
   const agents = new MemoryAgents()
   const workspaces = new MemoryWorkspace()
+  const emitted: Array<{ channel: string; payload: unknown }> = []
   let sequence = 0
   const coordinator = new AgentCoordinator({
     store,
     agents,
     workspaces,
+    emit: (channel, payload) => emitted.push({ channel, payload }),
     now: () => 100,
     id: () => `generated-${++sequence}`
   })
-  return { store, agents, workspaces, coordinator }
+  return { store, agents, workspaces, coordinator, emitted }
 }
 
 async function createTask(
@@ -629,5 +635,83 @@ describe('AgentCoordinator', () => {
     store.updateTask(created.id, { status: 'completed' })
     expect(value(await coordinator.apply(created.id))).toBeNull()
     expect(workspaces.applyCalls).toEqual([created.id])
+  })
+
+  it('recovers tasks interrupted by a previous process without claiming a live session', async () => {
+    const { coordinator, store } = harness()
+    const created = await createTask(coordinator)
+    store.updateTask(created.id, { status: 'running' })
+    const step: AgentTaskStepView = {
+      id: 'step-task_1',
+      taskId: created.id,
+      ordinal: 0,
+      role: 'implement',
+      agentId: IMPLEMENTER,
+      title: '实现',
+      input: '实现',
+      expectedOutput: '完成',
+      dependsOn: [],
+      status: 'running',
+      attempt: 1,
+      sessionId: 'dead-session',
+      runId: null,
+      result: '',
+      error: null,
+      createdAt: 1,
+      updatedAt: 1
+    }
+    store.createStep(step)
+
+    expect(coordinator.recoverInterruptedTasks()).toBe(1)
+    expect(store.getTask(created.id)?.status).toBe('failed')
+    expect(store.listSteps(created.id)[0]).toMatchObject({
+      status: 'queued',
+      sessionId: null,
+      runId: null
+    })
+    expect(store.listEvents(created.id).some((event) => event.kind === 'recovery')).toBe(true)
+  })
+
+  it('removes worktrees only after a task is no longer active', async () => {
+    const { coordinator, store, workspaces } = harness()
+    const created = await createTask(coordinator)
+    store.updateTask(created.id, { status: 'running' })
+    await expect(coordinator.removeWorktree(created.id)).resolves.toEqual({
+      ok: false,
+      error: 'task_is_active'
+    })
+    expect(workspaces.removeCalls).toHaveLength(0)
+
+    store.updateTask(created.id, { status: 'completed' })
+    await expect(coordinator.removeWorktree(created.id)).resolves.toEqual({
+      ok: true,
+      value: null
+    })
+    expect(workspaces.removeCalls).toEqual([created.id])
+  })
+
+  it('emits task updates and task-scoped permission prompts', async () => {
+    const { coordinator, store, agents, emitted } = harness()
+    agents.queue(COORDINATOR, JSON.stringify(plan(plan().steps.slice(0, 2))))
+    const release = agents.blockNext(IMPLEMENTER, 'implementation')
+    agents.queue(REVIEWER, 'approved')
+    const created = await createTask(coordinator)
+    value(await coordinator.start(created.id))
+    await waitFor(() => store.getTask(created.id)?.status === 'awaiting_approval', 'approval')
+    value(await coordinator.approvePlan(created.id))
+    await waitFor(() => agents.prompts.some((prompt) => prompt.agentId === IMPLEMENTER), 'implement')
+    const sessionId = agents.currentSessionFor(IMPLEMENTER)!
+    agents.requestPermission(sessionId, 'permission-emitted')
+
+    expect(emitted.some((event) => event.channel === IpcEvents.agentTaskUpdated)).toBe(true)
+    expect(emitted.some((event) => event.channel === IpcEvents.agentTaskEvent)).toBe(true)
+    expect(emitted.find((event) =>
+      event.channel === IpcEvents.agentTaskPermissionRequest
+    )?.payload).toMatchObject({
+      taskId: created.id,
+      request: { requestId: 'permission-emitted' }
+    })
+    release()
+    await waitFor(() => store.getTask(created.id)?.status === 'completed', 'completion')
   })
 })
