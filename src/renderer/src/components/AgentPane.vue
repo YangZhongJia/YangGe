@@ -185,7 +185,10 @@ onMounted(() => {
         </template>
       </div>
 
-      <div v-if="active" class="composer">
+      <div
+        v-if="active && active.status !== 'closed' && active.status !== 'failed'"
+        class="composer"
+      >
         <textarea
           v-model="draft"
           rows="2"

@@ -10,6 +10,7 @@ import {
   resolvePermissionOutcome,
   type AcpPermissionOutcome
 } from './acp-client'
+import { buildCmdInvocation } from './agent-process'
 import type { AgentPermissionOptionView } from '../../../shared/ipc'
 
 const MOCK_AGENT = fileURLToPath(new URL('../../../../scripts/acp-mock-agent.mjs', import.meta.url))
@@ -51,6 +52,12 @@ describe('JsonLineDecoder', () => {
 
   it('只声明读取能力，不声明 terminal/writeTextFile', () => {
     expect(ACP_CLIENT_CAPABILITIES).toEqual({ fs: { readTextFile: true } })
+  })
+
+  it('Windows cmd 包装器给整条命令再加一层引号', () => {
+    expect(buildCmdInvocation('C:\\Program Files\\agent.cmd', ['--version'])).toBe(
+      '""C:\\Program Files\\agent.cmd" "--version""'
+    )
   })
 })
 

@@ -29,7 +29,8 @@ function quoteCmdToken(token: string): string {
 }
 
 export function buildCmdInvocation(command: string, args: string[]): string {
-  return [quoteCmdToken(command), ...args.map(quoteCmdToken)].join(' ')
+  // cmd /s /c 需要最外层再包一对引号，否则带空格的命令路径会被拆成两个参数。
+  return `"${[quoteCmdToken(command), ...args.map(quoteCmdToken)].join(' ')}"`
 }
 
 export function spawnAgentProcess(spec: AgentSpawnSpec): ChildProcessWithoutNullStreams {
