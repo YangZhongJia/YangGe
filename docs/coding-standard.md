@@ -1,7 +1,5 @@
 # 编码规范（可检查项）
 
-> **简体中文** · [English](en/coding-standard.md)
-
 本文件只写能判定对错的规则。每条末尾标注检查方式：能机检的给命令或测试文件名，不能机检的写 review 时要看什么。
 优先级：三条红线（[AGENTS.md](../AGENTS.md)）> 本文件 > 既有代码风格 > 个人偏好。教训来源见 [LESSONS.md](../LESSONS.md)。
 

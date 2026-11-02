@@ -13,11 +13,13 @@
 
 ## AI 维护治理
 
-| 中文文档 | 职责 | 英文版本 |
-|---|---|---|
-| [AGENTS.md](../AGENTS.md) | 仓库路由、技术栈与三条红线（只做导航） | [AGENTS](../AGENTS.en.md) |
-| [LESSONS.md](../LESSONS.md) | 带证据的教训队列与晋升规则 | [Lessons](../LESSONS.en.md) |
-| [编码规范](coding-standard.md) | 按决策时刻组织的可检查规则 | [Coding standard](en/coding-standard.md) |
+治理文档只维护中文，不参与中英配对校验。
+
+| 文档 | 职责 |
+|---|---|
+| [AGENTS.md](../AGENTS.md) | 仓库路由、技术栈与三条红线（只做导航） |
+| [LESSONS.md](../LESSONS.md) | 带证据的教训队列与晋升规则 |
+| [编码规范](coding-standard.md) | 按决策时刻组织的可检查规则 |
 
 ## 产品与工程设计
 

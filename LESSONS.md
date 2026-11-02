@@ -1,7 +1,5 @@
 # 教训队列（LESSONS）
 
-> **简体中文** · [English](LESSONS.en.md)
-
 本文件只收**付过代价**的教训；规范正文不在这里发明，规则的可执行版本在 [docs/coding-standard.md](docs/coding-standard.md)。
 
 ## 晋升规则
