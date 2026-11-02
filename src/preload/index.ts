@@ -2,6 +2,20 @@ import { contextBridge, ipcRenderer } from 'electron'
 import {
   IpcChannels,
   IpcEvents,
+  type AgentAuditView,
+  type AgentErrorEvent,
+  type AgentExitEvent,
+  type AgentPermissionDecision,
+  type AgentPermissionRequestView,
+  type AgentPermissionResolvedEvent,
+  type AgentProbeResult,
+  type AgentResult,
+  type AgentRunResult,
+  type AgentScanResult,
+  type AgentSessionView,
+  type AgentStatusEvent,
+  type AgentUpdateEvent,
+  type AgentView,
   type AppInfo,
   type AppSettingsPatch,
   type AvatarSourcePick,
@@ -348,7 +362,38 @@ const api: PantryApi = {
   beginWindowDrag: (): Promise<void> => ipcRenderer.invoke(IpcChannels.winBeginDrag),
   endWindowDrag: (): Promise<void> => ipcRenderer.invoke(IpcChannels.winEndDrag),
   closeWindow: (): Promise<void> => ipcRenderer.invoke(IpcChannels.winClose),
-  hideMainWindow: (): Promise<void> => ipcRenderer.invoke(IpcChannels.winHideMain)
+  hideMainWindow: (): Promise<void> => ipcRenderer.invoke(IpcChannels.winHideMain),
+
+  listAgents: (): Promise<AgentView[]> => ipcRenderer.invoke(IpcChannels.agentList),
+  scanAgents: (): Promise<AgentResult<AgentScanResult>> => ipcRenderer.invoke(IpcChannels.agentScan),
+  probeAgent: (path: string): Promise<AgentProbeResult> =>
+    ipcRenderer.invoke(IpcChannels.agentProbe, path),
+  pickAgentCommand: (): Promise<string | null> => ipcRenderer.invoke(IpcChannels.agentPickCommand),
+  pickAgentCwd: (): Promise<string | null> => ipcRenderer.invoke(IpcChannels.agentPickCwd),
+  listAgentSessions: (): Promise<AgentSessionView[]> => ipcRenderer.invoke(IpcChannels.agentSessionList),
+  newAgentSession: (agentId: string, cwd?: string): Promise<AgentResult<AgentSessionView>> =>
+    ipcRenderer.invoke(IpcChannels.agentSessionNew, agentId, cwd),
+  sendAgentPrompt: (sessionId: string, text: string): Promise<AgentResult<AgentRunResult>> =>
+    ipcRenderer.invoke(IpcChannels.agentPrompt, sessionId, text),
+  cancelAgent: (sessionId: string): Promise<void> =>
+    ipcRenderer.invoke(IpcChannels.agentCancel, sessionId),
+  closeAgentSession: (sessionId: string): Promise<void> =>
+    ipcRenderer.invoke(IpcChannels.agentSessionClose, sessionId),
+  respondAgentPermission: (
+    requestId: string,
+    decision: AgentPermissionDecision
+  ): Promise<AgentResult<null>> =>
+    ipcRenderer.invoke(IpcChannels.agentPermissionRespond, requestId, decision),
+  listAgentAudit: (limit?: number): Promise<AgentAuditView[]> =>
+    ipcRenderer.invoke(IpcChannels.agentAuditList, limit),
+  onAgentUpdate: (listener) => subscribe<AgentUpdateEvent>(IpcEvents.agentUpdate, listener),
+  onAgentStatus: (listener) => subscribe<AgentStatusEvent>(IpcEvents.agentStatus, listener),
+  onAgentPermissionRequest: (listener) =>
+    subscribe<AgentPermissionRequestView>(IpcEvents.agentPermissionRequest, listener),
+  onAgentPermissionResolved: (listener) =>
+    subscribe<AgentPermissionResolvedEvent>(IpcEvents.agentPermissionResolved, listener),
+  onAgentExit: (listener) => subscribe<AgentExitEvent>(IpcEvents.agentExit, listener),
+  onAgentError: (listener) => subscribe<AgentErrorEvent>(IpcEvents.agentError, listener)
 }
 
 contextBridge.exposeInMainWorld('pantry', api)

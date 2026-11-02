@@ -205,6 +205,63 @@ export const MIGRATIONS: ReadonlyArray<string> = [
   `
   ALTER TABLE groups ADD COLUMN description TEXT NOT NULL DEFAULT '';
   ALTER TABLE groups ADD COLUMN announce TEXT NOT NULL DEFAULT '';
+  `,
+
+  // v17：本机 ACP Agent（独立表；不改群聊/消息/peers 语义）
+  // 只存启动配置，不存凭据；env_names 只存变量名。
+  `
+  CREATE TABLE agent_agents (
+    id            TEXT PRIMARY KEY,
+    name          TEXT NOT NULL,
+    command       TEXT NOT NULL,
+    args          TEXT NOT NULL DEFAULT '[]',
+    cwd           TEXT NOT NULL DEFAULT '',
+    version       TEXT NOT NULL DEFAULT '',
+    source        TEXT NOT NULL DEFAULT 'path',
+    probe_error   TEXT NOT NULL DEFAULT '',
+    env_names     TEXT NOT NULL DEFAULT '[]',
+    enabled       INTEGER NOT NULL DEFAULT 1,
+    created_ts    INTEGER NOT NULL,
+    last_used_ts  INTEGER NOT NULL DEFAULT 0,
+    last_probe_ts INTEGER NOT NULL DEFAULT 0
+  );
+
+  CREATE TABLE agent_sessions (
+    id             TEXT PRIMARY KEY,
+    agent_id       TEXT NOT NULL,
+    acp_session_id TEXT,
+    cwd            TEXT NOT NULL,
+    title          TEXT NOT NULL DEFAULT '',
+    status         TEXT NOT NULL,
+    created_ts     INTEGER NOT NULL,
+    updated_ts     INTEGER NOT NULL
+  );
+  CREATE INDEX idx_agent_sessions_agent ON agent_sessions(agent_id, updated_ts);
+
+  CREATE TABLE agent_runs (
+    id          TEXT PRIMARY KEY,
+    session_id  TEXT NOT NULL,
+    prompt      TEXT NOT NULL,
+    stop_reason TEXT,
+    started_ts  INTEGER NOT NULL,
+    ended_ts    INTEGER,
+    error       TEXT
+  );
+  CREATE INDEX idx_agent_runs_session ON agent_runs(session_id, started_ts);
+
+  CREATE TABLE agent_audit (
+    id           TEXT PRIMARY KEY,
+    run_id       TEXT NOT NULL DEFAULT '',
+    ts           INTEGER NOT NULL,
+    method       TEXT NOT NULL,
+    tool_call_id TEXT,
+    option_kind  TEXT,
+    decision     TEXT NOT NULL,
+    path         TEXT,
+    command      TEXT,
+    detail       TEXT
+  );
+  CREATE INDEX idx_agent_audit_ts ON agent_audit(ts);
   `
 ]
 

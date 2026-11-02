@@ -149,7 +149,20 @@ export const IpcChannels = {
   /** AI 润色：改写输入框文本（决议 #324） */
   aiPolish: 'ai:polish',
   /** 消息稍后提醒（决议 #325） */
-  reminderAdd: 'reminder:add'
+  reminderAdd: 'reminder:add',
+  /** ACP Agent：本机 CLI 扫描、会话、提示、取消与权限应答 */
+  agentList: 'agent:list',
+  agentScan: 'agent:scan',
+  agentProbe: 'agent:probe',
+  agentPickCommand: 'agent:pick-command',
+  agentPickCwd: 'agent:pick-cwd',
+  agentSessionNew: 'agent:session-new',
+  agentSessionList: 'agent:session-list',
+  agentSessionClose: 'agent:session-close',
+  agentPrompt: 'agent:prompt',
+  agentCancel: 'agent:cancel',
+  agentPermissionRespond: 'agent:permission-respond',
+  agentAuditList: 'agent:audit-list'
 } as const
 
 /** main → renderer 的事件推送 */
@@ -194,7 +207,14 @@ export const IpcEvents = {
   /** 输入中提示：对方开始输入（决议 #321），短时展示由渲染层超时收尾 */
   typing: 'typing:incoming',
   /** 文件柜窗口已开着时再次请求打开某位同事的柜子（决议 #283） */
-  cabinetFocusPeer: 'cabinet:focus-peer'
+  cabinetFocusPeer: 'cabinet:focus-peer',
+  /** ACP Agent：流式 session/update 与运行状态 */
+  agentUpdate: 'agent:update',
+  agentStatus: 'agent:status',
+  agentPermissionRequest: 'agent:permission-request',
+  agentPermissionResolved: 'agent:permission-resolved',
+  agentExit: 'agent:exit',
+  agentError: 'agent:error'
 } as const
 
 /** 全局快捷键出厂默认（决议 #57）：设置页"恢复默认"与主进程默认值的唯一来源 */
@@ -259,6 +279,159 @@ export interface UpdateAvailability {
 export interface UpdatePackageReady {
   /** 安装包内解析出的版本（高于本机才推送） */
   version: string
+}
+
+/** 本机 ACP Agent 来源：启动扫描命中的目录类型或用户手动指定。 */
+export type AgentSource = 'path' | 'windows-dir' | 'manual'
+
+/** ACP Agent 启动配置（不含凭据）。 */
+export interface AgentView {
+  id: string
+  name: string
+  /** 绝对路径；禁止从聊天内容动态写入 */
+  command: string
+  args: string[]
+  cwd: string
+  /** `--version` 探测结果，失败时为空串 */
+  version: string
+  source: AgentSource
+  /** 探测失败原因（已脱敏、截断），成功时为空串 */
+  probeError: string
+  enabled: boolean
+  createdAt: number
+  lastUsedAt: number
+  lastProbeTs: number
+}
+
+export interface AgentScanFailure {
+  command: string
+  error: string
+}
+
+export interface AgentScanResult {
+  agents: AgentView[]
+  found: number
+  failures: AgentScanFailure[]
+  scannedAt: number
+}
+
+export type AgentProbeResult =
+  | { ok: true; agent: AgentView }
+  | { ok: false; error: string }
+
+export type AgentSessionStatus = 'starting' | 'idle' | 'running' | 'failed' | 'closed'
+
+export interface AgentSessionView {
+  id: string
+  agentId: string
+  agentName: string
+  acpSessionId: string | null
+  cwd: string
+  title: string
+  status: AgentSessionStatus
+  createdAt: number
+  updatedAt: number
+}
+
+export type AgentPermissionDecision = 'allow_once' | 'allow_session' | 'reject_once' | 'reject_session'
+
+export interface AgentPermissionOptionView {
+  optionId: string
+  name: string
+  /** ACP PermissionOptionKind；未知值只展示，不参与自动批准 */
+  kind: string
+}
+
+export interface AgentToolLocation {
+  path?: string
+  line?: number
+}
+
+/** 权限弹窗数据；`title` 是 Agent 自报文案，渲染层必须标记为不可信。 */
+export interface AgentPermissionRequestView {
+  requestId: string
+  sessionId: string
+  runId: string | null
+  toolCallId: string
+  title: string
+  toolKind: string
+  status: string
+  locations: AgentToolLocation[]
+  /** 仅展示，用于用户判断；不参与自动批准 */
+  command: string
+  options: AgentPermissionOptionView[]
+  createdAt: number
+}
+
+export interface AgentUpdateEvent {
+  sessionId: string
+  runId: string | null
+  update: AgentSessionUpdate
+}
+
+/** ACP `session/update` 常用字段；未知 `sessionUpdate` 由渲染层忽略。 */
+export interface AgentSessionUpdate {
+  sessionUpdate: string
+  messageId?: string
+  content?: { type: string; text?: string }
+  toolCallId?: string
+  title?: string
+  name?: string
+  kind?: string
+  status?: string
+  locations?: AgentToolLocation[]
+  entries?: unknown[]
+  rawInput?: unknown
+  rawOutput?: unknown
+  [key: string]: unknown
+}
+
+export interface AgentStatusEvent {
+  session: AgentSessionView
+  runId: string | null
+  running: boolean
+}
+
+export interface AgentExitEvent {
+  sessionId: string
+  code: number | null
+  signal: string | null
+  message: string
+  /** 主动关闭时为 true，UI 不当作崩溃 */
+  expected: boolean
+}
+
+export interface AgentErrorEvent {
+  sessionId: string | null
+  message: string
+}
+
+export interface AgentPermissionResolvedEvent {
+  requestId: string
+  sessionId: string
+  /** `cancelled` 表示超时/取消/默认拒绝；`selected` 表示用户或会话策略选定 */
+  outcome: 'selected' | 'cancelled'
+  optionId: string | null
+}
+
+export interface AgentRunResult {
+  runId: string
+  stopReason: string | null
+}
+
+export type AgentResult<T> = { ok: true; value: T } | { ok: false; error: string }
+
+export interface AgentAuditView {
+  id: string
+  runId: string
+  ts: number
+  method: string
+  toolCallId: string
+  optionKind: string
+  decision: string
+  path: string
+  command: string
+  detail: string
 }
 
 /** 对方开始输入（决议 #321）：渲染层按超时收尾展示 */
@@ -1133,4 +1306,28 @@ export interface PantryApi {
   /** Linux JS 拖拽（决议 #52）：按住拖拽带时主进程跟随光标移窗 */
   beginWindowDrag(): Promise<void>
   endWindowDrag(): Promise<void>
+
+  // ——— ACP Agent（本机 CLI，独立于群聊/peers） ———
+  listAgents(): Promise<AgentView[]>
+  /** 扫描 PATH 与 Windows 常见安装目录，并把结果落库 */
+  scanAgents(): Promise<AgentResult<AgentScanResult>>
+  /** 手动指定可执行文件绝对路径（.exe/.cmd/.bat） */
+  probeAgent(path: string): Promise<AgentProbeResult>
+  /** 弹文件选择框挑可执行文件；取消返回 null */
+  pickAgentCommand(): Promise<string | null>
+  /** 弹目录选择框作为会话 cwd；取消返回 null */
+  pickAgentCwd(): Promise<string | null>
+  listAgentSessions(): Promise<AgentSessionView[]>
+  newAgentSession(agentId: string, cwd?: string): Promise<AgentResult<AgentSessionView>>
+  sendAgentPrompt(sessionId: string, text: string): Promise<AgentResult<AgentRunResult>>
+  cancelAgent(sessionId: string): Promise<void>
+  closeAgentSession(sessionId: string): Promise<void>
+  respondAgentPermission(requestId: string, decision: AgentPermissionDecision): Promise<AgentResult<null>>
+  listAgentAudit(limit?: number): Promise<AgentAuditView[]>
+  onAgentUpdate(listener: (event: AgentUpdateEvent) => void): () => void
+  onAgentStatus(listener: (event: AgentStatusEvent) => void): () => void
+  onAgentPermissionRequest(listener: (request: AgentPermissionRequestView) => void): () => void
+  onAgentPermissionResolved(listener: (event: AgentPermissionResolvedEvent) => void): () => void
+  onAgentExit(listener: (event: AgentExitEvent) => void): () => void
+  onAgentError(listener: (event: AgentErrorEvent) => void): () => void
 }
