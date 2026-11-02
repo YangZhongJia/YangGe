@@ -6,6 +6,7 @@ import { darkTheme, dateZhCN, dateEnUS, enUS, NButton, NConfigProvider, NInput, 
 import type {
   AppInfo,
   CaptureFailureNotice,
+  MainWindowShownEvent,
   ScanProgressView,
   SettingsView
 } from '../../shared/ipc'
@@ -25,6 +26,8 @@ import PantryIcon from './components/PantryIcon.vue'
 import RailNavIcon from './components/RailNavIcon.vue'
 import WindowControls from './components/WindowControls.vue'
 import WindowDragStrip from './components/WindowDragStrip.vue'
+import StartupParticle from './components/StartupParticle.vue'
+import startupIconUrl from '../../../build/icons/pantry-logo-icon.png?url'
 import { useGroupsStore } from './stores/groups'
 import type { PeerView } from '../../shared/ipc'
 import { applyAppearance } from './utils/appearance'
@@ -169,6 +172,44 @@ const chatStore = useChatStore()
 let stopSettings: (() => void) | null = null
 let stopSettingsWindowState: (() => void) | null = null
 let stopCabinetOpen: (() => void) | null = null
+let stopWindowShown: (() => void) | null = null
+const motionRef = ref<InstanceType<typeof StartupParticle> | null>(null)
+const motionPending = ref(false)
+let motionPendingReason: MainWindowShownEvent['reason'] = 'startup'
+let startupMotionSeen = false
+
+/**
+ * 主进程在 ready-to-show / 托盘唤起 / restore 时通知。首次事件若早于 settings 加载，
+ * 先挂起，等组件真正挂载后再播——避免窗口还没显示就把 800ms 动效跑完。
+ */
+function requestMotion(reason: MainWindowShownEvent['reason']): void {
+  if (reason === 'startup') {
+    if (startupMotionSeen) return
+    startupMotionSeen = true
+  }
+  if (settings.value?.startupMotion === false) return
+  const motion = motionRef.value
+  if (motion) {
+    motionPending.value = false
+    motion.play(reason)
+    return
+  }
+  motionPending.value = true
+  motionPendingReason = reason
+}
+
+watch(motionRef, (motion) => {
+  if (!motion || !motionPending.value) return
+  motionPending.value = false
+  if (settings.value?.startupMotion === false) return
+  motion.play(motionPendingReason)
+})
+watch(
+  () => settings.value?.startupMotion,
+  (enabled) => {
+    if (enabled === false) motionPending.value = false
+  }
+)
 let stopScanProgress: (() => void) | null = null
 let stopCaptureFailed: (() => void) | null = null
 let stopTransferBlocked: (() => void) | null = null
@@ -411,6 +452,7 @@ onMounted(async () => {
     settingsWindowOpen.value = open
   })
   stopCabinetOpen = window.pantry.onCabinetFocusPeer((peerId) => showCabinet(peerId))
+  stopWindowShown = window.pantry.onMainWindowShown((event) => requestMotion(event.reason))
   void peersStore.init()
   void chatStore.init()
   void groupsStore.init()
@@ -448,6 +490,7 @@ onUnmounted(() => {
   stopSettings?.()
   stopSettingsWindowState?.()
   stopCabinetOpen?.()
+  stopWindowShown?.()
   stopScanProgress?.()
   stopCaptureFailed?.()
   stopTransferBlocked?.()
@@ -468,6 +511,12 @@ onUnmounted(() => {
     :date-locale="language === 'en' ? dateEnUS : dateZhCN"
   >
   <SetupWizard v-if="showWizard && settings" :settings="settings" @done="showWizard = false" />
+  <!-- 启动 / 托盘唤起动效：独立 overlay，不参与布局，pointer-events 全关 -->
+  <StartupParticle
+    v-if="settings && settings.startupMotion"
+    ref="motionRef"
+    :icon-url="startupIconUrl"
+  />
   <!-- 沉浸式无标题栏（决议 #49/#52）：顶部 32px 隐形拖拽带 + Win/Linux 自绘窗口控制按钮 -->
   <WindowDragStrip />
   <WindowControls />

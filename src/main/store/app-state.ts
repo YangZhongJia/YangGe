@@ -63,6 +63,8 @@ export interface ConfigFile {
   autoLaunch: boolean
   /** 关闭主窗口行为：true=最小化到托盘，false=退出 */
   closeToTray: boolean
+  /** 启动 / 托盘唤起时播放粒子动效（默认开） */
+  startupMotion: boolean
   /** 本机界面语言（决议 #307） */
   language: Language
   /** 深色主题手动切换（决议 #24） */
@@ -245,6 +247,7 @@ export function saveAppSettings(
       | 'hideOnCapture'
       | 'autoLaunch'
       | 'closeToTray'
+      | 'startupMotion'
       | 'language'
       | 'theme'
       | 'fontScale'
@@ -294,6 +297,7 @@ export function saveAppSettings(
   if (patch.hideOnCapture !== undefined) state.config.hideOnCapture = patch.hideOnCapture
   if (patch.autoLaunch !== undefined) state.config.autoLaunch = patch.autoLaunch
   if (patch.closeToTray !== undefined) state.config.closeToTray = patch.closeToTray
+  if (patch.startupMotion !== undefined) state.config.startupMotion = patch.startupMotion
   if (isLanguage(patch.language)) state.config.language = patch.language
   if (patch.theme !== undefined) state.config.theme = patch.theme
   if (patch.fontScale !== undefined) state.config.fontScale = patch.fontScale
@@ -468,6 +472,7 @@ export function loadAppState(
       hideOnCapture: true,
       autoLaunch: true,
       closeToTray: true,
+      startupMotion: true,
       language: initialLanguage(false, undefined, systemLanguage),
       theme: 'light',
       fontScale: 100,
@@ -552,6 +557,7 @@ export function loadAppState(
   config.hideOnCapture = config.hideOnCapture !== false
   config.autoLaunch = config.autoLaunch !== false
   config.closeToTray = config.closeToTray !== false
+  config.startupMotion = config.startupMotion !== false
   config.language = initialLanguage(true, config.language, systemLanguage)
   config.theme = config.theme === 'dark' || config.theme === 'auto' ? config.theme : 'light'
   config.fontScale = config.fontScale === 110 || config.fontScale === 125 ? config.fontScale : 100

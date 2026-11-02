@@ -64,6 +64,7 @@ import {
   type ImageOcrSource,
   type ImageSourceBytes,
   type MessageView,
+  type MainWindowShownEvent,
   type NetState,
   type NudgeEvent,
   type NudgeResult,
@@ -1865,7 +1866,28 @@ if (!gotLock) {
       }
     })
 
-    mainWindow.once('ready-to-show', () => mainWindow?.show())
+    let startupShown = false
+    let lastShownNotifyAt = 0
+    const notifyWindowShown = (reason: MainWindowShownEvent['reason']): void => {
+      const now = Date.now()
+      if (reason === 'restore' && now - lastShownNotifyAt < 300) return
+      lastShownNotifyAt = now
+      mainWindow?.webContents.send(IpcEvents.mainWindowShown, { reason } satisfies MainWindowShownEvent)
+    }
+
+    mainWindow.once('ready-to-show', () => {
+      mainWindow?.show()
+      startupShown = true
+      notifyWindowShown('startup')
+    })
+    // 托盘菜单/托盘单击、全局快捷键、通知点击都走 show；窗口从最小化恢复还会单独发 restore。
+    // 这里不挂 focus：只是切到前台不该重播动效。
+    mainWindow.on('show', () => {
+      if (startupShown) notifyWindowShown('restore')
+    })
+    mainWindow.on('restore', () => {
+      if (startupShown) notifyWindowShown('restore')
+    })
     // 关窗 = 进托盘常驻（F-SYS-1）；托盘不可用的桌面环境降级为直接退出
     mainWindow.on('close', (event) => {
       if (isQuitting || !tray || appState?.config.closeToTray === false) return
@@ -2337,6 +2359,7 @@ if (!gotLock) {
       hideOnCapture: c?.hideOnCapture !== false,
       autoLaunch: c?.autoLaunch !== false,
       closeToTray: c?.closeToTray !== false,
+      startupMotion: c?.startupMotion !== false,
       language: c?.language ?? 'zh-CN',
       theme: c?.theme === 'dark' ? 'dark' : 'light',
       fontScale,
@@ -3033,6 +3056,7 @@ if (!gotLock) {
       if (typeof p.hideOnCapture === 'boolean') clean.hideOnCapture = p.hideOnCapture
       if (typeof p.autoLaunch === 'boolean') clean.autoLaunch = p.autoLaunch
       if (typeof p.closeToTray === 'boolean') clean.closeToTray = p.closeToTray
+      if (typeof p.startupMotion === 'boolean') clean.startupMotion = p.startupMotion
       if (isLanguage(p.language)) clean.language = p.language
       if (p.theme === 'light' || p.theme === 'dark' || p.theme === 'auto') clean.theme = p.theme
       const ACCENT_IDS = ['indigo', 'teal', 'rose', 'amber', 'forest'] as const

@@ -214,8 +214,15 @@ export const IpcEvents = {
   agentPermissionRequest: 'agent:permission-request',
   agentPermissionResolved: 'agent:permission-resolved',
   agentExit: 'agent:exit',
-  agentError: 'agent:error'
+  agentError: 'agent:error',
+  /** 主窗首次显示 / 从托盘、最小化恢复：渲染层据此播放一次启动动效 */
+  mainWindowShown: 'ui:main-window-shown'
 } as const
+
+export interface MainWindowShownEvent {
+  /** startup = 首次 ready-to-show；restore = 托盘唤起或窗口 restore */
+  reason: 'startup' | 'restore'
+}
 
 /** 全局快捷键出厂默认（决议 #57）：设置页"恢复默认"与主进程默认值的唯一来源 */
 export const DEFAULT_CAPTURE_SHORTCUT = 'CommandOrControl+Alt+A'
@@ -815,6 +822,8 @@ export interface SettingsView {
   hideOnCapture: boolean
   autoLaunch: boolean
   closeToTray: boolean
+  /** 启动/托盘唤起时的粒子动效（默认开） */
+  startupMotion: boolean
   language: Language
   theme: 'light' | 'dark' | 'auto'
   fontScale: 100 | 110 | 125
@@ -972,6 +981,7 @@ export interface AppSettingsPatch {
   hideOnCapture?: boolean
   autoLaunch?: boolean
   closeToTray?: boolean
+  startupMotion?: boolean
   language?: Language
   theme?: SettingsView['theme']
   fontScale?: SettingsView['fontScale']
@@ -1288,6 +1298,8 @@ export interface PantryApi {
   onSettingsWindowState(listener: (open: boolean) => void): () => void
   /** 文件柜窗口：已开着时被要求切到某位同事的柜子（决议 #283） */
   onCabinetFocusPeer(listener: (peerId: string) => void): () => void
+  /** 主窗首次显示或从托盘/最小化恢复 */
+  onMainWindowShown(listener: (event: MainWindowShownEvent) => void): () => void
   /** 主界面全局网段刷新进度 */
   onScanProgress(listener: (progress: ScanProgressView) => void): () => void
   /** 主窗 Command/Ctrl+V 图片剪贴板兜底 */
