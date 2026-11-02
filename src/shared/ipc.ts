@@ -441,6 +441,78 @@ export interface AgentAuditView {
   detail: string
 }
 
+export type AgentTaskStatus =
+  | 'draft' | 'planning' | 'awaiting_approval' | 'running' | 'review'
+  | 'paused' | 'completed' | 'failed' | 'cancelled'
+export type AgentTaskStepStatus = 'queued' | 'running' | 'awaiting_approval' | 'completed' | 'failed' | 'cancelled'
+export type AgentTaskRole = 'coordinator' | 'research' | 'implement' | 'review'
+
+export interface AgentCoordinatorPlanStep {
+  id: string
+  title: string
+  role: Exclude<AgentTaskRole, 'coordinator'>
+  agentId: string
+  dependsOn: string[]
+  input: string
+  expectedOutput: string
+}
+
+export interface AgentCoordinatorPlan {
+  summary: string
+  steps: AgentCoordinatorPlanStep[]
+}
+
+export interface AgentTaskCreateInput {
+  id: string
+  prompt: string
+  repoPath: string
+  sourceBranch: string
+  baseCommit: string
+  worktreePath: string
+  taskBranch: string
+  coordinatorAgentId: string
+  teamAgentIds: string[]
+  createdAt: number
+}
+
+export interface AgentTaskView extends AgentTaskCreateInput {
+  status: AgentTaskStatus
+  plan: AgentCoordinatorPlan | null
+  reviewRound: number
+  error: string | null
+  updatedAt: number
+}
+
+export interface AgentTaskStepView {
+  id: string
+  taskId: string
+  ordinal: number
+  role: Exclude<AgentTaskRole, 'coordinator'>
+  agentId: string
+  title: string
+  input: string
+  expectedOutput: string
+  dependsOn: string[]
+  status: AgentTaskStepStatus
+  attempt: number
+  sessionId: string | null
+  runId: string | null
+  result: string
+  error: string | null
+  createdAt: number
+  updatedAt: number
+}
+
+export interface AgentTaskEventView {
+  id: string
+  taskId: string
+  stepId: string | null
+  kind: string
+  agentId: string | null
+  text: string
+  createdAt: number
+}
+
 /** 对方开始输入（决议 #321）：渲染层按超时收尾展示 */
 export interface TypingEvent {
   peerId: string

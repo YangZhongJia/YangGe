@@ -262,6 +262,61 @@ export const MIGRATIONS: ReadonlyArray<string> = [
     detail       TEXT
   );
   CREATE INDEX idx_agent_audit_ts ON agent_audit(ts);
+  `,
+
+  // v18：协调式 Agent 编码任务、执行步骤与可恢复时间线。
+  `
+  CREATE TABLE agent_tasks (
+    id                  TEXT PRIMARY KEY CHECK(length(id) BETWEEN 1 AND 64),
+    prompt              TEXT NOT NULL CHECK(length(prompt) BETWEEN 1 AND 128000),
+    repo_root           TEXT NOT NULL,
+    source_branch       TEXT NOT NULL,
+    base_commit         TEXT NOT NULL,
+    worktree_path       TEXT NOT NULL,
+    task_branch         TEXT NOT NULL,
+    coordinator_agent_id TEXT NOT NULL,
+    team_agent_ids      TEXT NOT NULL DEFAULT '[]',
+    status              TEXT NOT NULL CHECK(status IN ('draft','planning','awaiting_approval','running','review','paused','completed','failed','cancelled')),
+    plan_json           TEXT,
+    review_round        INTEGER NOT NULL DEFAULT 0 CHECK(review_round BETWEEN 0 AND 2),
+    error               TEXT,
+    created_ts          INTEGER NOT NULL,
+    updated_ts          INTEGER NOT NULL
+  );
+  CREATE INDEX idx_agent_tasks_updated ON agent_tasks(updated_ts DESC);
+
+  CREATE TABLE agent_task_steps (
+    id              TEXT PRIMARY KEY CHECK(length(id) BETWEEN 1 AND 64),
+    task_id         TEXT NOT NULL REFERENCES agent_tasks(id) ON DELETE CASCADE,
+    ordinal         INTEGER NOT NULL CHECK(ordinal BETWEEN 0 AND 4),
+    role            TEXT NOT NULL CHECK(role IN ('research','implement','review')),
+    agent_id        TEXT NOT NULL CHECK(length(agent_id) BETWEEN 1 AND 64),
+    title           TEXT NOT NULL CHECK(length(title) BETWEEN 1 AND 500),
+    input           TEXT NOT NULL CHECK(length(input) <= 32000),
+    expected_output TEXT NOT NULL CHECK(length(expected_output) <= 8000),
+    depends_on      TEXT NOT NULL DEFAULT '[]',
+    status          TEXT NOT NULL CHECK(status IN ('queued','running','awaiting_approval','completed','failed','cancelled')),
+    attempt         INTEGER NOT NULL DEFAULT 0 CHECK(attempt BETWEEN 0 AND 3),
+    session_id      TEXT,
+    run_id          TEXT,
+    result          TEXT NOT NULL DEFAULT '',
+    error           TEXT,
+    created_ts      INTEGER NOT NULL,
+    updated_ts      INTEGER NOT NULL,
+    UNIQUE(task_id, ordinal)
+  );
+  CREATE INDEX idx_agent_task_steps_task ON agent_task_steps(task_id, ordinal);
+
+  CREATE TABLE agent_task_events (
+    id         TEXT PRIMARY KEY CHECK(length(id) BETWEEN 1 AND 64),
+    task_id    TEXT NOT NULL REFERENCES agent_tasks(id) ON DELETE CASCADE,
+    step_id    TEXT REFERENCES agent_task_steps(id) ON DELETE SET NULL,
+    kind       TEXT NOT NULL CHECK(length(kind) BETWEEN 1 AND 48),
+    agent_id   TEXT,
+    text       TEXT NOT NULL CHECK(length(text) <= 32000),
+    created_ts INTEGER NOT NULL
+  );
+  CREATE INDEX idx_agent_task_events_order ON agent_task_events(task_id, created_ts, id);
   `
 ]
 
