@@ -34,7 +34,7 @@ const ERROR_CODES = /^(?:E[A-Z0-9_]{1,35}|SQLITE_[A-Z_]{1,35}|ERR_[A-Z_]{1,40})$
 export type DiagnosticEvent = 'app.start' | 'app.stop' | 'app.previous-exit' | 'app.exception' |
   'process.exit' | 'window.health' | 'renderer.error' | 'store.open' | 'network.listen' |
   'message.state' | 'transfer.state' | 'transfer.phase' | 'transfer.error' |
-  'capture.state' | 'screen.state' | 'logs.dropped' | 'bundle.export'
+  'capture.state' | 'screen.state' | 'agent.state' | 'logs.dropped' | 'bundle.export'
 export type DiagnosticFields = Record<string, unknown>
 export type DiagnosticReporter = (event: DiagnosticEvent, fields?: DiagnosticFields, error?: unknown) => void
 
@@ -84,7 +84,7 @@ function sanitizedLog(bytes: Buffer): Buffer {
     try {
       const record = JSON.parse(line) as Record<string, unknown>
       if (!/^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/.test(String(record.at)) || !UUID.test(String(record.runId)) ||
-        !/^(app\.(start|stop|previous-exit|exception)|process\.exit|window\.health|renderer\.error|store\.open|network\.listen|message\.state|transfer\.(state|phase|error)|capture\.state|screen\.state|logs\.dropped|bundle\.export)$/.test(String(record.event))) continue
+        !/^(app\.(start|stop|previous-exit|exception)|process\.exit|window\.health|renderer\.error|store\.open|network\.listen|message\.state|transfer\.(state|phase|error)|capture\.state|screen\.state|agent\.state|logs\.dropped|bundle\.export)$/.test(String(record.event))) continue
       const safe: Record<string, unknown> = { at: record.at, runId: record.runId, event: record.event }
       for (const [key, value] of Object.entries(record)) {
         if (key === 'level' && ['info', 'warn', 'error'].includes(String(value))) safe[key] = value
