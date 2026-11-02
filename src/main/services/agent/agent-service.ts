@@ -119,6 +119,7 @@ export class AcpAgentService {
 
   private readonly sessions = new Map<string, ActiveSession>()
   private readonly pendingPermissions = new Map<string, PendingPermission>()
+  private readonly eventSubscribers = new Set<(channel: string, payload: unknown) => void>()
   private disposed = false
 
   constructor(options: AgentServiceOptions) {
@@ -158,17 +159,33 @@ export class AcpAgentService {
     }
   }
 
+  subscribe(listener: (channel: string, payload: unknown) => void): () => void {
+    this.eventSubscribers.add(listener)
+    return () => this.eventSubscribers.delete(listener)
+  }
+
   async scanAgents(): Promise<AgentResult<AgentScanResult>> {
     if (this.disposed) return fail('应用正在退出')
     try {
       const discovery = await discoverAgents()
       const scannedAt = this.now()
-      const agents = discovery.agents.map((item) => this.toAgentView(item, scannedAt))
+      const checks = await Promise.all(discovery.agents.map(async (item) => {
+        const agent = this.toAgentView(item, scannedAt)
+        const probe = await this.probeAcp(agent)
+        return probe.ok
+          ? { ok: true as const, agent }
+          : { ok: false as const, failure: { command: agent.command, error: probe.error } }
+      }))
+      const agents = checks.flatMap((check) => check.ok ? [check.agent] : [])
+      const failures = [
+        ...discovery.failures,
+        ...checks.flatMap((check) => check.ok ? [] : [check.failure])
+      ]
       this.store.upsertAgents(agents)
       return ok({
         agents: this.store.listAgents(),
         found: agents.length,
-        failures: discovery.failures,
+        failures,
         scannedAt
       })
     } catch (error) {
@@ -186,9 +203,30 @@ export class AcpAgentService {
       return { ok: false, error: inspected.error || '无法识别该可执行文件' }
     }
     const view = this.toAgentView(inspected.agent, this.now())
+    const handshake = await this.probeAcp(view)
+    if (!handshake.ok) return { ok: false, error: handshake.error }
     this.store.upsertAgents([view])
     const stored = this.store.getAgent(view.id)
     return { ok: true, agent: stored ?? view }
+  }
+
+  private async probeAcp(agent: AgentView): Promise<AgentResult<null>> {
+    const client = new AcpClient({
+      command: agent.command,
+      args: agent.args,
+      cwd: this.defaultCwd,
+      roots: [this.defaultCwd],
+      clientInfo: { name: 'yangge', title: '阳鸽', version: this.clientVersion }
+    })
+    try {
+      await client.connect()
+      await client.initialize({ timeoutMs: 3500 })
+      return ok(null)
+    } catch (error) {
+      return fail(`ACP 握手失败：${errorText(error)}`)
+    } finally {
+      await client.close({ graceMs: 500 }).catch(() => null)
+    }
   }
 
   async newSession(agentId: string, cwd?: string): Promise<AgentResult<AgentSessionView>> {
@@ -556,6 +594,13 @@ export class AcpAgentService {
       this.emitRaw(channel, payload)
     } catch (error) {
       this.diagnostics('agent.state', { channel }, error)
+    }
+    for (const listener of this.eventSubscribers) {
+      try {
+        listener(channel, payload)
+      } catch (error) {
+        this.diagnostics('agent.state', { channel }, error)
+      }
     }
   }
 

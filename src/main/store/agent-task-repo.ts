@@ -14,6 +14,15 @@ const MAX_PROMPT_BYTES = 128 * 1024
 const MAX_EVENT_BYTES = 32 * 1024
 const MAX_STEPS = 5
 
+export interface AgentTaskRecordInput extends AgentTaskCreateInput {
+  id: string
+  sourceBranch: string
+  baseCommit: string
+  worktreePath: string
+  taskBranch: string
+  createdAt: number
+}
+
 interface TaskRow {
   id: string
   prompt: string
@@ -140,6 +149,7 @@ export class AgentTaskRepo {
   private readonly selectTaskStmt: DatabaseT.Statement
   private readonly selectTasksStmt: DatabaseT.Statement
   private readonly updateTaskStmt: DatabaseT.Statement
+  private readonly deleteStepsStmt: DatabaseT.Statement
   private readonly insertStepStmt: DatabaseT.Statement
   private readonly selectStepStmt: DatabaseT.Statement
   private readonly selectStepsStmt: DatabaseT.Statement
@@ -147,7 +157,7 @@ export class AgentTaskRepo {
   private readonly insertEventStmt: DatabaseT.Statement
   private readonly selectEventsStmt: DatabaseT.Statement
 
-  constructor(db: DatabaseT.Database) {
+  constructor(private readonly db: DatabaseT.Database) {
     this.insertTaskStmt = db.prepare(`
       INSERT INTO agent_tasks (
         id, prompt, repo_root, source_branch, base_commit, worktree_path,
@@ -165,6 +175,7 @@ export class AgentTaskRepo {
         updated_ts = @updatedAt
       WHERE id = @id
     `)
+    this.deleteStepsStmt = db.prepare('DELETE FROM agent_task_steps WHERE task_id = ?')
     this.insertStepStmt = db.prepare(`
       INSERT INTO agent_task_steps (
         id, task_id, ordinal, role, agent_id, title, input, expected_output,
@@ -194,7 +205,7 @@ export class AgentTaskRepo {
     `)
   }
 
-  createTask(task: AgentTaskCreateInput): AgentTaskView {
+  createTask(task: AgentTaskRecordInput): AgentTaskView {
     if (Buffer.byteLength(task.prompt, 'utf8') > MAX_PROMPT_BYTES) throw new Error('任务描述过长')
     if (task.teamAgentIds.length > 16) throw new Error('每个任务最多选择 16 个 Agent')
     this.insertTaskStmt.run(
@@ -211,6 +222,59 @@ export class AgentTaskRepo {
       task.createdAt
     )
     return this.getTask(task.id)!
+  }
+
+  replacePlan(
+    taskId: string,
+    plan: AgentCoordinatorPlan,
+    steps: AgentTaskStepView[],
+    updatedAt = Date.now()
+  ): AgentTaskView | null {
+    if (steps.length === 0 || steps.length > MAX_STEPS) throw new Error('任务步骤数量越界')
+    const transaction = this.db.transaction(() => {
+      this.updateTaskStmt.run({
+        id: taskId,
+        hasStatus: 1,
+        status: 'awaiting_approval',
+        hasPlan: 1,
+        planJson: JSON.stringify(plan),
+        hasReviewRound: 1,
+        reviewRound: 0,
+        hasError: 1,
+        error: null,
+        updatedAt
+      })
+      this.deleteStepsStmt.run(taskId)
+      for (const step of steps) {
+        if (step.ordinal < 0 || step.ordinal >= MAX_STEPS) {
+          throw new Error('任务步骤序号越界')
+        }
+        if (Buffer.byteLength(step.input, 'utf8') > 32 * 1024) {
+          throw new Error('步骤输入过长')
+        }
+        this.insertStepStmt.run(
+          step.id,
+          step.taskId,
+          step.ordinal,
+          step.role,
+          step.agentId,
+          step.title,
+          step.input,
+          step.expectedOutput,
+          JSON.stringify(step.dependsOn),
+          step.status,
+          step.attempt,
+          step.sessionId,
+          step.runId,
+          step.result,
+          step.error,
+          step.createdAt,
+          step.updatedAt
+        )
+      }
+    })
+    transaction()
+    return this.getTask(taskId)
   }
 
   getTask(id: string): AgentTaskView | null {
@@ -334,3 +398,17 @@ export class AgentTaskRepo {
     return (this.selectEventsStmt.all(taskId, safeLimit) as EventRow[]).map(toEvent)
   }
 }
+
+export type AgentTaskStore = Pick<
+  AgentTaskRepo,
+  | 'createTask'
+  | 'getTask'
+  | 'listTasks'
+  | 'updateTask'
+  | 'replacePlan'
+  | 'createStep'
+  | 'listSteps'
+  | 'updateStep'
+  | 'appendEvent'
+  | 'listEvents'
+>

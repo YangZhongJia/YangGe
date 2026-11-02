@@ -463,6 +463,13 @@ export interface AgentCoordinatorPlan {
 }
 
 export interface AgentTaskCreateInput {
+  repoPath: string
+  prompt: string
+  coordinatorAgentId: string
+  teamAgentIds: string[]
+}
+
+export interface AgentTaskView {
   id: string
   prompt: string
   repoPath: string
@@ -472,14 +479,11 @@ export interface AgentTaskCreateInput {
   taskBranch: string
   coordinatorAgentId: string
   teamAgentIds: string[]
-  createdAt: number
-}
-
-export interface AgentTaskView extends AgentTaskCreateInput {
   status: AgentTaskStatus
   plan: AgentCoordinatorPlan | null
   reviewRound: number
   error: string | null
+  createdAt: number
   updatedAt: number
 }
 

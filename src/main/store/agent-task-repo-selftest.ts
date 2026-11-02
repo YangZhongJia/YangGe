@@ -5,11 +5,11 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type {
-  AgentTaskCreateInput,
+  AgentCoordinatorPlan,
   AgentTaskEventView,
   AgentTaskStepView
 } from '../../shared/ipc'
-import { AgentTaskRepo } from './agent-task-repo'
+import { AgentTaskRepo, type AgentTaskRecordInput } from './agent-task-repo'
 import { openDatabase } from './db'
 
 const directories: string[] = []
@@ -20,7 +20,7 @@ function makeDirectory(): string {
   return dir
 }
 
-function taskInput(id = 'task-1'): AgentTaskCreateInput {
+function taskInput(id = 'task-1'): AgentTaskRecordInput {
   return {
     id,
     prompt: '修复登录流程',
@@ -121,12 +121,75 @@ function assertValidationAndDeduplication(): void {
   }
 }
 
+function assertPlanReplacementIsTransactional(): void {
+  const db = openDatabase(join(makeDirectory(), 'plans.db'))
+  try {
+    const repo = new AgentTaskRepo(db)
+    repo.createTask(taskInput())
+    const oldStep = makeStep()
+    repo.createStep(oldStep)
+    repo.appendEvent(makeEvent('event-before-plan', 102, '旧计划'))
+
+    const nextPlan: AgentCoordinatorPlan = {
+      summary: '实现、审查并复审',
+      steps: [
+        {
+          id: 'implement',
+          title: '实现',
+          role: 'implement',
+          agentId: 'agent-implementer',
+          dependsOn: [],
+          input: '实现改动',
+          expectedOutput: '代码完成'
+        },
+        {
+          id: 'review',
+          title: '审查',
+          role: 'review',
+          agentId: 'agent-reviewer',
+          dependsOn: ['implement'],
+          input: '审查改动',
+          expectedOutput: '审查结论'
+        }
+      ]
+    }
+    const nextSteps: AgentTaskStepView[] = nextPlan.steps.map((step, ordinal) => ({
+      ...makeStep(),
+      id: `next-step-${ordinal}`,
+      ordinal,
+      role: step.role,
+      agentId: step.agentId,
+      title: step.title,
+      input: step.input,
+      expectedOutput: step.expectedOutput,
+      dependsOn: step.dependsOn
+    }))
+    const replaced = repo.replacePlan('task-1', nextPlan, nextSteps, 103)
+    assert.equal(replaced?.status, 'awaiting_approval')
+    assert.deepEqual(replaced?.plan, nextPlan)
+    assert.deepEqual(repo.listSteps('task-1'), nextSteps)
+    assert.equal(repo.listEvents('task-1')[0].stepId, null, '删除旧步骤后事件保留并解除引用')
+
+    assert.throws(() =>
+      repo.replacePlan('task-1', nextPlan, Array.from({ length: 6 }, (_item, ordinal) => ({
+        ...makeStep(),
+        id: `too-many-${ordinal}`,
+        ordinal
+      })), 104)
+    )
+    assert.deepEqual(repo.listSteps('task-1'), nextSteps, '非法新计划不得删除已保存步骤')
+  } finally {
+    db.close()
+  }
+}
+
 try {
   console.log(
     `[agent-task-repo-selftest] runtime node=${process.versions.node} abi=${process.versions.modules}`
   )
   assertPersistence()
   assertValidationAndDeduplication()
+  assertPlanReplacementIsTransactional()
   console.log('[agent-task-repo-selftest] PASS —— 任务、步骤、时间线与边界校验通过')
 } finally {
   for (const dir of directories) rmSync(dir, { recursive: true, force: true })
