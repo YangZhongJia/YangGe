@@ -1,5 +1,7 @@
 import { AiReplier, buildPolishMessages, callChatCompletion, isPolishMode } from './services/ai-replier'
 import { normalizeAi, normalizeClipboardFollow } from './store/app-state'
+import { AcpAgentService } from './services/agent/agent-service'
+import { AgentRepo } from './store/agent-repo'
 
 /** AI 分身的间接挂载点：chat/groups 先建、AiReplier 后挂（避免循环依赖） */
 const aiPortRef: {
@@ -47,6 +49,7 @@ import {
   DEFAULT_SHOWHIDE_SHORTCUT,
   IpcChannels,
   IpcEvents,
+  type AgentPermissionDecision,
   type AvatarSourcePick,
   type AppInfo,
   type AppSettingsPatch,
@@ -295,6 +298,11 @@ if (!gotLock) {
   const netState: NetState = { ok: false, udpPort, error: '' }
   const IMAGE_SOURCE_MAX_BYTES = 25 * 1024 * 1024
   const GLOBAL_SCAN_PROGRESS_PUSH_INTERVAL = 200
+
+  function isAgentPermissionDecision(value: unknown): value is AgentPermissionDecision {
+    return value === 'allow_once' || value === 'allow_session' ||
+      value === 'reject_once' || value === 'reject_session'
+  }
   const IMAGE_EXTS = new Set<string>(IMAGE_FILE_EXTENSIONS)
   const AVATAR_PICKER_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp', 'bmp']
   const IMAGE_SEND_MAX_BYTES = 20 * 1024 * 1024
@@ -326,6 +334,7 @@ if (!gotLock) {
   let stickerRepo: StickerRepo | null = null
   let shareGrantsRepo: ShareGrantsRepo | null = null
   let share: ShareService | null = null
+  let agentService: AcpAgentService | null = null
   let capturing = false
   let pruneTimer: ReturnType<typeof setInterval> | null = null
   let avatarPruneTimer: ReturnType<typeof setTimeout> | null = null
@@ -1379,6 +1388,16 @@ if (!gotLock) {
     if (db) {
       peersRepo = new PeersRepo(db)
       groupRepo = new GroupRepo(db)
+      agentService = new AcpAgentService({
+        store: new AgentRepo(db),
+        homeDir: app.getPath('home'),
+        defaultCwd: app.getPath('home'),
+        clientVersion: app.getVersion(),
+        emit: (channel, payload) => {
+          mainWindow?.webContents.send(channel, payload)
+        },
+        diagnostics: (event, data, error) => diagnostics.record(event, data, error)
+      })
       registry.seed(peersRepo.loadAll()) // 历史联系人以离线态回灌（F-DISC-7）
       for (const [id, remark] of peersRepo.loadRemarks()) remarks.set(id, remark)
 
@@ -2104,6 +2123,97 @@ if (!gotLock) {
   ipcMain.handle(IpcChannels.peersProbe, (_event, nodeId: unknown): boolean => {
     if (typeof nodeId !== 'string' || nodeId.length === 0 || nodeId.length > 64) return false
     return discovery?.probeNode(nodeId) ?? false
+  })
+
+  // ——— ACP Agent：只校验参数并转发；生命周期与权限在 AcpAgentService ———
+  ipcMain.handle(IpcChannels.agentList, () => agentService?.listAgents() ?? [])
+
+  ipcMain.handle(IpcChannels.agentScan, () => {
+    if (!agentService) return { ok: false, error: 'Agent 存储不可用' }
+    return agentService.scanAgents()
+  })
+
+  ipcMain.handle(IpcChannels.agentProbe, (_event, path: unknown) => {
+    if (typeof path !== 'string' || path.length === 0 || path.length > 4096) {
+      return { ok: false, error: '路径不合法' }
+    }
+    if (!agentService) return { ok: false, error: 'Agent 存储不可用' }
+    return agentService.probeAgent(path)
+  })
+
+  ipcMain.handle(IpcChannels.agentPickCommand, async (): Promise<string | null> => {
+    if (!mainWindow) return null
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: tr('选择 Agent 可执行文件'),
+      properties: ['openFile'],
+      ...(process.platform === 'win32'
+        ? { filters: [{ name: tr('可执行文件'), extensions: ['exe', 'cmd', 'bat'] }] }
+        : {})
+    })
+    return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0]
+  })
+
+  ipcMain.handle(IpcChannels.agentPickCwd, async (): Promise<string | null> => {
+    if (!mainWindow) return null
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: tr('选择 Agent 工作目录'),
+      properties: ['openDirectory', 'createDirectory']
+    })
+    return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0]
+  })
+
+  ipcMain.handle(IpcChannels.agentSessionList, () => agentService?.listSessions() ?? [])
+
+  ipcMain.handle(IpcChannels.agentSessionNew, (_event, agentId: unknown, cwd: unknown) => {
+    if (typeof agentId !== 'string' || agentId.length === 0 || agentId.length > 64) {
+      return { ok: false, error: 'Agent 标识不合法' }
+    }
+    if (cwd !== undefined && (typeof cwd !== 'string' || cwd.length > 4096)) {
+      return { ok: false, error: '工作目录不合法' }
+    }
+    if (!agentService) return { ok: false, error: 'Agent 存储不可用' }
+    return agentService.newSession(agentId, typeof cwd === 'string' ? cwd : undefined)
+  })
+
+  ipcMain.handle(IpcChannels.agentPrompt, (_event, sessionId: unknown, text: unknown) => {
+    if (typeof sessionId !== 'string' || sessionId.length === 0 || sessionId.length > 64) {
+      return { ok: false, error: '会话标识不合法' }
+    }
+    if (typeof text !== 'string' || text.length === 0 || text.length > 200_000) {
+      return { ok: false, error: '消息不合法' }
+    }
+    if (!agentService) return { ok: false, error: 'Agent 存储不可用' }
+    return agentService.prompt(sessionId, text)
+  })
+
+  ipcMain.handle(IpcChannels.agentCancel, (_event, sessionId: unknown) => {
+    if (typeof sessionId === 'string' && sessionId.length <= 64) agentService?.cancel(sessionId)
+  })
+
+  ipcMain.handle(IpcChannels.agentSessionClose, (_event, sessionId: unknown) => {
+    if (typeof sessionId === 'string' && sessionId.length <= 64) {
+      return agentService?.closeSession(sessionId)
+    }
+    return undefined
+  })
+
+  ipcMain.handle(
+    IpcChannels.agentPermissionRespond,
+    (_event, requestId: unknown, decision: unknown) => {
+      if (typeof requestId !== 'string' || requestId.length === 0 || requestId.length > 128) {
+        return { ok: false, error: '权限请求标识不合法' }
+      }
+      if (!isAgentPermissionDecision(decision)) {
+        return { ok: false, error: '权限决策不合法' }
+      }
+      if (!agentService) return { ok: false, error: 'Agent 存储不可用' }
+      return agentService.respondPermission(requestId, decision)
+    }
+  )
+
+  ipcMain.handle(IpcChannels.agentAuditList, (_event, limit: unknown) => {
+    const safeLimit = typeof limit === 'number' && Number.isInteger(limit) ? limit : 100
+    return agentService?.listAudit(safeLimit) ?? []
   })
 
   ipcMain.handle(IpcChannels.convList, () => chat?.listConversations() ?? [])
@@ -3601,6 +3711,9 @@ if (!gotLock) {
     if (pruneTimer) clearInterval(pruneTimer)
     if (persistTimer) clearTimeout(persistTimer)
     if (avatarPruneTimer) clearTimeout(avatarPruneTimer)
+    // 先收口 Agent 子进程树（taskkill /T），再关 DB；否则落库回调会踩到已关闭的连接。
+    agentService?.dispose()
+    agentService = null
     void files?.stop()
     try {
       if (registry && peersRepo) peersRepo.upsertMany(registry.values()) // 离场前最后一次落库
