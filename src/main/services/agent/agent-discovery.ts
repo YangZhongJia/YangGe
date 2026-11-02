@@ -1,7 +1,7 @@
 import { accessSync, constants as fsConstants, readdirSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, delimiter, extname, isAbsolute, join, resolve } from 'node:path'
-import type { AgentScanFailure, AgentSource } from '../../../shared/ipc'
+import type { AgentCliInfo, AgentScanFailure, AgentSource } from '../../../shared/ipc'
 import { probeVersion, validateExecutable } from './agent-process'
 
 // 本机 ACP CLI 发现：PATH + Windows 常见安装目录 + 用户手动路径。
@@ -13,13 +13,68 @@ export interface KnownAgent {
   args: string[]
 }
 
+export interface KnownCli {
+  id: string
+  name: string
+  commands: string[]
+  adapterCommands: string[]
+  adapterCommand: string
+}
+
 /** 官方 Registry 给出的常见启动形态；找不到时用户可手动指定。 */
 export const KNOWN_AGENTS: readonly KnownAgent[] = [
   { name: 'Codex ACP', commands: ['codex-acp'], args: [] },
   { name: 'Claude Agent', commands: ['claude-acp', 'claude-agent-acp'], args: [] },
   { name: 'OpenCode', commands: ['opencode'], args: ['acp'] },
+  { name: 'Pi ACP', commands: ['pi-acp'], args: [] },
   { name: 'Gemini CLI', commands: ['gemini'], args: ['--acp'] },
   { name: 'GitHub Copilot', commands: ['copilot'], args: ['--acp'] }
+]
+
+/** 常见基础 CLI；它们本身不是 ACP，只有适配器握手成功后才可连接。 */
+export const KNOWN_CLIS: readonly KnownCli[] = [
+  {
+    id: 'codex',
+    name: 'Codex CLI',
+    commands: ['codex'],
+    adapterCommands: ['codex-acp'],
+    adapterCommand: 'codex-acp'
+  },
+  {
+    id: 'claude',
+    name: 'Claude Code',
+    commands: ['claude'],
+    adapterCommands: ['claude-acp', 'claude-agent-acp'],
+    adapterCommand: 'claude-acp'
+  },
+  {
+    id: 'pi',
+    name: 'Pi',
+    commands: ['pi'],
+    adapterCommands: ['pi-acp'],
+    adapterCommand: 'pi-acp'
+  },
+  {
+    id: 'opencode',
+    name: 'OpenCode',
+    commands: ['opencode'],
+    adapterCommands: ['opencode'],
+    adapterCommand: 'opencode acp'
+  },
+  {
+    id: 'gemini',
+    name: 'Gemini CLI',
+    commands: ['gemini'],
+    adapterCommands: ['gemini'],
+    adapterCommand: 'gemini --acp'
+  },
+  {
+    id: 'copilot',
+    name: 'GitHub Copilot',
+    commands: ['copilot'],
+    adapterCommands: ['copilot'],
+    adapterCommand: 'copilot --acp'
+  }
 ]
 
 export interface SearchRoot {
@@ -33,6 +88,7 @@ export interface DiscoveryOptions {
   homeDir?: string
   probeTimeoutMs?: number
   knownAgents?: readonly KnownAgent[]
+  knownClients?: readonly KnownCli[]
 }
 
 export interface DiscoveredAgent {
@@ -127,6 +183,15 @@ export function findExecutable(
   roots: SearchRoot[],
   platform: NodeJS.Platform = process.platform
 ): { path: string; source: AgentSource } | null {
+  if (isAbsolute(command)) {
+    try {
+      if (!statSync(command).isFile()) return null
+      accessSync(command, fsConstants.F_OK)
+      return { path: command, source: 'manual' }
+    } catch {
+      return null
+    }
+  }
   const names = executableCandidates(command, platform)
   for (const root of roots) {
     for (const name of names) {
@@ -156,11 +221,13 @@ function agentArgsFor(commandPath: string, knownAgents: readonly KnownAgent[]): 
 export interface DiscoveryResult {
   agents: DiscoveredAgent[]
   failures: AgentScanFailure[]
+  clients: AgentCliInfo[]
 }
 
 export async function discoverAgents(options: DiscoveryOptions = {}): Promise<DiscoveryResult> {
   const platform = options.platform ?? process.platform
   const knownAgents = options.knownAgents ?? KNOWN_AGENTS
+  const knownClients = options.knownClients ?? KNOWN_CLIS
   const roots = defaultSearchRoots(options)
   const seen = new Set<string>()
   const found: Array<{ path: string; source: AgentSource; name: string; args: string[] }> = []
@@ -177,9 +244,41 @@ export async function discoverAgents(options: DiscoveryOptions = {}): Promise<Di
     }
   }
 
+  const clientHits: Array<{
+    spec: KnownCli
+    command: string
+    source: AgentSource
+    adapterReady: boolean
+  }> = []
+  for (const spec of knownClients) {
+    let hit: { path: string; source: AgentSource } | null = null
+    for (const command of spec.commands) {
+      hit = findExecutable(command, roots, platform)
+      if (hit) break
+    }
+    if (!hit) continue
+    const adapterReady = spec.adapterCommands.some((command) =>
+      Boolean(findExecutable(command, roots, platform))
+    )
+    clientHits.push({
+      spec,
+      command: hit.path,
+      source: hit.source,
+      adapterReady
+    })
+  }
+
   const probes = await Promise.all(
     found.map(async (item) => {
       const probe = await probeVersion(item.path, ['--version'], {
+        timeoutMs: options.probeTimeoutMs
+      })
+      return { item, probe }
+    })
+  )
+  const clientProbes = await Promise.all(
+    clientHits.map(async (item) => {
+      const probe = await probeVersion(item.command, ['--version'], {
         timeoutMs: options.probeTimeoutMs
       })
       return { item, probe }
@@ -199,7 +298,16 @@ export async function discoverAgents(options: DiscoveryOptions = {}): Promise<Di
     })
     if (!probe.ok) failures.push({ command: item.path, error: probe.error })
   }
-  return { agents, failures }
+  const clients: AgentCliInfo[] = clientProbes.map(({ item, probe }) => ({
+    id: item.spec.id,
+    name: item.spec.name,
+    command: item.command,
+    version: probe.version,
+    source: item.source,
+    adapterCommand: item.spec.adapterCommand,
+    adapterReady: item.adapterReady
+  }))
+  return { agents, failures, clients }
 }
 
 export interface ManualAgentResult {

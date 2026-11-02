@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import type {
+  AgentCliInfo,
   AgentPermissionDecision,
   AgentPermissionRequestView,
   AgentSessionUpdate,
@@ -66,6 +67,7 @@ function toolContentText(update: AgentSessionUpdate): string {
 export const useAgentStore = defineStore('agent', {
   state: () => ({
     agents: [] as AgentView[],
+    clients: [] as AgentCliInfo[],
     sessions: [] as AgentSessionView[],
     activeSessionId: null as string | null,
     transcripts: {} as Record<string, AgentTranscriptItem[]>,
@@ -395,6 +397,7 @@ export const useAgentStore = defineStore('agent', {
           return
         }
         this.agents = result.value.agents
+        this.clients = result.value.clients
         if (result.value.failures.length > 0) {
           this.error = tr('有 {0} 个 Agent 探测失败：{1}', {
             0: result.value.failures.length,

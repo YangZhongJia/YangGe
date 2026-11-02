@@ -123,6 +123,18 @@ Packages are built from this repository via `npm run dist:win` and placed under 
 5. **Image viewing & text recognition**: Double-click an image in chat to open the standalone viewer, use the side arrows to navigate session image history, or click "Recognize Text" to select and copy text directly from the image.
 6. Allow the application through the operating-system firewall when prompted. Default ports are UDP `17878` and TCP `17879`.
 
+## Local agent coding collaboration
+
+The Agent page scans the local PATH and common installation directories, and can also register a manually selected ACP executable. Base CLIs and connectable ACP agents are shown separately: when Codex CLI, Claude Code, Pi, OpenCode, Gemini CLI, GitHub Copilot, or another local CLI is installed without its ACP adapter, YangGe shows the required command instead of treating the plain CLI as connectable. Only implementations that complete the ACP handshake can create sessions. YangGe never installs, signs in to, or downloads an agent automatically.
+
+The first version handles coding tasks only in Git repositories. You choose one coordinator and a team containing at least one implementer and one reviewer. The coordinator must produce a 1–5 step plan, and work starts only after you approve it. One writer at a time modifies a dedicated worktree; implementation and review must use different agents, with at most two review rounds. After the final review, you inspect the changed-file list and diff, then explicitly confirm before YangGe applies the patch to the source working tree. YangGe never commits, merges, or pushes automatically.
+
+The source repository must be clean and cannot be on a detached HEAD. Task creation adds a dedicated branch and worktree from the current `HEAD`; apply checks the source branch and base commit again. If the branch moved or the source tree became dirty, apply is refused and the worktree is retained. A Git worktree isolates the coding workspace; it is not an operating-system sandbox, so the agent process retains its own system permissions.
+
+Tool permissions default to per-request approval. A user may approve the current session; timeout, cancellation, and session close resolve access as denied. After restart, YangGe restores tasks, steps, and events from disk and retries an interrupted step in a new ACP session rather than claiming the old process is still active. Task records and final diffs stay on the local machine.
+
+An agent's model request may send task context to the cloud provider configured by that CLI. YangGe does not store those credentials or change the provider's data policy for you.
+
 ## How it works
 
 Each client is an equal peer (P2P), with **no central server**:

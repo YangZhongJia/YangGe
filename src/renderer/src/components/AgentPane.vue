@@ -293,6 +293,15 @@ onMounted(() => {
             <span>{{ agent.name }}</span>
             <small>{{ agent.version || tr('版本未知') }}</small>
           </div>
+          <div
+            v-for="client in store.clients.filter((item) => !item.adapterReady)"
+            :key="client.id"
+            class="cli-hint"
+          >
+            <span>{{ client.name }} · {{ tr('需要 ACP 适配器') }}</span>
+            <code>{{ client.adapterCommand }}</code>
+            <small>{{ tr('安装后重新扫描') }}</small>
+          </div>
           <button type="button" class="manual-link" @click="pickCommand">
             {{ tr('添加 ACP 可执行文件…') }}
           </button>
@@ -601,7 +610,7 @@ onMounted(() => {
           </NButton>
         </div>
         <p class="side-hint">
-          {{ tr('只扫描本机已安装的 ACP CLI，不会联网安装；Agent 的模型请求仍可能离开本机。') }}
+          {{ tr('扫描本机 CLI 与 ACP 适配器，不会联网安装；只有适配器握手成功后才可连接。') }}
         </p>
         <button type="button" class="manual-link" @click="pickCommand">
           {{ tr('手动指定可执行文件…') }}
@@ -628,6 +637,15 @@ onMounted(() => {
             </NButton>
           </div>
         </article>
+        <div
+          v-for="client in store.clients.filter((item) => !item.adapterReady)"
+          :key="client.id"
+          class="cli-hint"
+        >
+          <span>{{ client.name }} · {{ tr('需要 ACP 适配器') }}</span>
+          <code>{{ client.adapterCommand }}</code>
+          <small>{{ tr('安装后重新扫描') }}</small>
+        </div>
 
         <div class="side-head sessions-head">
           <h2>{{ tr('会话') }}</h2>
@@ -1046,6 +1064,27 @@ onMounted(() => {
 
 .agent-dot[data-ready='true'] {
   background: #16a36a;
+}
+
+.cli-hint {
+  display: grid;
+  gap: 3px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  font-size: var(--font-xs);
+  color: var(--text-2);
+  background: var(--bg-window);
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-control);
+}
+
+.cli-hint code {
+  color: var(--primary);
+}
+
+.cli-hint small {
+  font-size: 10px;
+  color: var(--text-3);
 }
 
 .agent-card {

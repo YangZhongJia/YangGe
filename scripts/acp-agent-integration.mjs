@@ -10,16 +10,19 @@
  */
 
 import assert from 'node:assert/strict'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { execFile } from 'node:child_process'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { promisify } from 'node:util'
 import { build } from 'esbuild'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const mockAgent = join(root, 'scripts', 'acp-mock-agent.mjs')
-const bundle = join(root, 'out', 'acp-integration-bundle.mjs')
+const bundleDir = join(root, 'out', 'acp-integration')
+const execFileAsync = promisify(execFile)
 
 class MemoryStore {
   constructor() {
@@ -27,6 +30,9 @@ class MemoryStore {
     this.sessions = new Map()
     this.runs = new Map()
     this.audits = []
+    this.tasks = new Map()
+    this.steps = new Map()
+    this.taskEvents = new Map()
   }
   listAgents() { return [...this.agents.values()] }
   getAgent(id) { return this.agents.get(id) ?? null }
@@ -66,65 +72,260 @@ class MemoryStore {
   }
   addAudit(entry) { this.audits.push(entry) }
   listAudit(limit = 100) { return this.audits.slice(-limit).reverse() }
+  createTask(record) {
+    const task = {
+      ...record,
+      status: 'draft',
+      plan: null,
+      reviewRound: 0,
+      error: null,
+      updatedAt: record.createdAt
+    }
+    this.tasks.set(task.id, task)
+    return structuredClone(task)
+  }
+  getTask(id) {
+    const task = this.tasks.get(id)
+    return task ? structuredClone(task) : null
+  }
+  listTasks(limit = 50) {
+    return [...this.tasks.values()]
+      .sort((left, right) => right.updatedAt - left.updatedAt)
+      .slice(0, limit)
+      .map((task) => structuredClone(task))
+  }
+  updateTask(id, patch) {
+    const task = this.tasks.get(id)
+    if (!task) return null
+    for (const key of ['status', 'plan', 'reviewRound', 'error', 'updatedAt']) {
+      if (Object.prototype.hasOwnProperty.call(patch, key)) task[key] = patch[key]
+    }
+    return structuredClone(task)
+  }
+  replacePlan(taskId, plan, steps, updatedAt = Date.now()) {
+    const task = this.tasks.get(taskId)
+    if (!task) return null
+    task.status = 'awaiting_approval'
+    task.plan = structuredClone(plan)
+    task.reviewRound = 0
+    task.error = null
+    task.updatedAt = updatedAt
+    for (const [id, step] of this.steps) {
+      if (step.taskId === taskId) this.steps.delete(id)
+    }
+    for (const step of steps) this.steps.set(step.id, structuredClone(step))
+    return structuredClone(task)
+  }
+  createStep(step) {
+    this.steps.set(step.id, structuredClone(step))
+    return structuredClone(step)
+  }
+  listSteps(taskId) {
+    return [...this.steps.values()]
+      .filter((step) => step.taskId === taskId)
+      .sort((left, right) => left.ordinal - right.ordinal)
+      .map((step) => structuredClone(step))
+  }
+  updateStep(id, patch) {
+    const step = this.steps.get(id)
+    if (!step) return null
+    for (const key of [
+      'status',
+      'attempt',
+      'sessionId',
+      'runId',
+      'result',
+      'error',
+      'updatedAt'
+    ]) {
+      if (Object.prototype.hasOwnProperty.call(patch, key)) step[key] = patch[key]
+    }
+    return structuredClone(step)
+  }
+  appendEvent(event) {
+    if (!this.taskEvents.has(event.id)) {
+      this.taskEvents.set(event.id, structuredClone(event))
+    }
+  }
+  listEvents(taskId, limit = 500) {
+    return [...this.taskEvents.values()]
+      .filter((event) => event.taskId === taskId)
+      .sort((left, right) =>
+        left.createdAt - right.createdAt || left.id.localeCompare(right.id)
+      )
+      .slice(0, limit)
+      .map((event) => structuredClone(event))
+  }
 }
 
 function separator(title) {
   console.log(`\n=== ${title} ===`)
 }
 
-await mkdir(dirname(bundle), { recursive: true })
+await mkdir(bundleDir, { recursive: true })
 await build({
-  entryPoints: [join(root, 'src', 'main', 'services', 'agent', 'agent-service.ts')],
+  entryPoints: {
+    'agent-service': join(root, 'src', 'main', 'services', 'agent', 'agent-service.ts'),
+    'agent-coordinator': join(root, 'src', 'main', 'services', 'agent', 'agent-coordinator.ts'),
+    'git-worktree': join(root, 'src', 'main', 'services', 'agent', 'git-worktree.ts')
+  },
   bundle: true,
   platform: 'node',
   format: 'esm',
   target: 'node16',
-  outfile: bundle,
+  outdir: bundleDir,
   logLevel: 'silent'
 })
-const { AcpAgentService } = await import(pathToFileURL(bundle).href)
+const { AcpAgentService } = await import(
+  pathToFileURL(join(bundleDir, 'agent-service.js')).href
+)
+const { AgentCoordinator } = await import(
+  pathToFileURL(join(bundleDir, 'agent-coordinator.js')).href
+)
+const { GitTaskWorkspace } = await import(
+  pathToFileURL(join(bundleDir, 'git-worktree.js')).href
+)
 
 const dir = await mkdtemp(join(tmpdir(), 'yangge-acp-integration-'))
 const store = new MemoryStore()
-const agent = {
-  id: 'agent_mock',
-  name: 'Mock ACP Agent',
-  command: process.execPath,
-  args: [mockAgent],
-  cwd: dir,
-  version: '0.1.0',
-  source: 'manual',
-  probeError: '',
-  enabled: true,
-  createdAt: Date.now(),
-  lastUsedAt: 0,
-  lastProbeTs: Date.now()
+function mockAgentView(id, name) {
+  return {
+    id,
+    name,
+    command: process.execPath,
+    args: [mockAgent],
+    cwd: dir,
+    version: '0.1.0',
+    source: 'manual',
+    probeError: '',
+    enabled: true,
+    createdAt: Date.now(),
+    lastUsedAt: 0,
+    lastProbeTs: Date.now()
+  }
 }
-store.upsertAgents([agent])
+const coordinatorAgentId = 'agent_mock_coordinator'
+const implementerAgentId = 'agent_mock_implementer'
+const reviewerAgentId = 'agent_mock_reviewer'
+store.upsertAgents([
+  mockAgentView('agent_mock', 'Mock ACP Agent'),
+  mockAgentView(coordinatorAgentId, 'Mock Coordinator'),
+  mockAgentView(implementerAgentId, 'Mock Implementer'),
+  mockAgentView(reviewerAgentId, 'Mock Reviewer')
+])
 await writeFile(join(dir, 'sample.txt'), '来自集成测试的只读内容\n', 'utf8')
 
 const events = []
 let permissionDecision = 'allow_once'
 let service = null
 let permissionRequests = 0
+const coordinators = []
 
-service = new AcpAgentService({
-  store,
-  homeDir: dir,
-  defaultCwd: dir,
-  emit: (channel, payload) => {
-    events.push({ channel, payload })
-    if (channel === 'agent:permission-request') {
-      permissionRequests += 1
-      assert.ok(payload.options.some((option) => option.kind === 'allow_once'))
-      assert.equal(payload.requestId, payload.requestId.slice(0, 128))
-      void service.respondPermission(payload.requestId, permissionDecision).then((result) => {
-        assert.equal(result.ok, true)
-      })
-    }
-  },
-  diagnostics: () => {}
-})
+function createAcpService() {
+  const instance = new AcpAgentService({
+    store,
+    homeDir: dir,
+    defaultCwd: dir,
+    emit: (channel, payload) => {
+      events.push({ channel, payload })
+      if (channel === 'agent:permission-request') {
+        permissionRequests += 1
+        assert.ok(payload.options.some((option) => option.kind === 'allow_once'))
+        assert.equal(payload.requestId, payload.requestId.slice(0, 128))
+        void instance.respondPermission(payload.requestId, permissionDecision).then((result) => {
+          assert.equal(result.ok, true)
+        })
+      }
+    },
+    diagnostics: () => {}
+  })
+  return instance
+}
+
+service = createAcpService()
+
+function createCoordinator(currentService = service) {
+  const workspaces = new GitTaskWorkspace(
+    join(dir, 'worktrees'),
+    (taskId) => store.getTask(taskId)
+  )
+  const coordinator = new AgentCoordinator({
+    store,
+    agents: currentService,
+    workspaces
+  })
+  coordinators.push(coordinator)
+  return { coordinator, workspaces }
+}
+
+function unwrap(result) {
+  assert.equal(result.ok, true, result.ok ? '' : result.error)
+  return result.value
+}
+
+async function waitFor(check, label, timeoutMs = 15_000) {
+  const startedAt = Date.now()
+  while (Date.now() - startedAt < timeoutMs) {
+    const value = await check()
+    if (value) return value
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 25))
+  }
+  throw new Error(`等待超时：${label}`)
+}
+
+async function runGit(cwd, args) {
+  const { stdout } = await execFileAsync('git', args, {
+    cwd,
+    windowsHide: true,
+    env: { ...process.env, GIT_TERMINAL_PROMPT: '0' }
+  })
+  return stdout.trim()
+}
+
+async function createRepository(name) {
+  const repository = join(dir, name)
+  await mkdir(repository, { recursive: true })
+  await runGit(repository, ['init'])
+  await runGit(repository, ['config', 'user.email', 'integration@yangge.local'])
+  await runGit(repository, ['config', 'user.name', 'YangGe Integration'])
+  await writeFile(join(repository, 'README.md'), `# ${name}\n`, 'utf8')
+  await runGit(repository, ['add', 'README.md'])
+  await runGit(repository, ['commit', '-m', 'initial'])
+  return repository
+}
+
+async function waitForTask(coordinator, taskId, status) {
+  return waitFor(
+    () => {
+      const task = store.getTask(taskId)
+      return task?.status === status ? task : null
+    },
+    `task ${taskId} -> ${status}`
+  )
+}
+
+async function waitForEvent(taskId, kind) {
+  return waitFor(
+    () => store.listEvents(taskId).find((event) => event.kind === kind),
+    `task ${taskId} event ${kind}`
+  )
+}
+
+function taskInput(repository, prompt) {
+  return {
+    repoPath: repository,
+    prompt,
+    coordinatorAgentId,
+    teamAgentIds: [implementerAgentId, reviewerAgentId]
+  }
+}
+
+async function assertNoRunningSessions() {
+  await waitFor(
+    () => !store.listSessions(200).some((session) => session.status === 'running'),
+    'all ACP sessions to stop'
+  )
+}
 
 function updatesSince(index) {
   return events.slice(index)
@@ -141,6 +342,12 @@ function chunkText(updates) {
 
 let sessionId = null
 try {
+  separator('reject plain CLI during manual registration')
+  const plainCli = await service.probeAgent(process.execPath)
+  assert.equal(plainCli.ok, false, '普通 CLI 不能通过 ACP Agent 探测')
+  assert.match(plainCli.error, /ACP/i)
+  console.log(`[probe] 普通 CLI 已拒绝：${plainCli.error}`)
+
   separator('initialize + session/new')
   const created = await service.newSession('agent_mock', dir)
   assert.equal(created.ok, true, created.ok ? '' : created.error)
@@ -194,14 +401,122 @@ try {
   assert.equal(store.sessions.get(sessionId)?.status, 'closed')
   console.log(`[cleanup] hung prompt rejected: ${hung.ok ? 'unexpected' : hung.error}`)
 
+  separator('coordinator: create -> approve -> implement -> review -> diff -> apply')
+  permissionDecision = 'allow_once'
+  const taskRepository = await createRepository('task-repository')
+  const { coordinator, workspaces } = createCoordinator()
+  const createdTask = unwrap(await coordinator.createTask(
+    taskInput(taskRepository, '创建一个协作结果文件')
+  ))
+  assert.equal(createdTask.status, 'draft')
+  unwrap(await coordinator.start(createdTask.id))
+  const plannedTask = await waitForTask(coordinator, createdTask.id, 'awaiting_approval')
+  assert.equal(plannedTask.plan?.steps.length, 2)
+  assert.deepEqual(
+    plannedTask.plan?.steps.map((step) => step.role),
+    ['implement', 'review']
+  )
+  unwrap(await coordinator.approvePlan(createdTask.id))
+  const completedTask = await waitForTask(coordinator, createdTask.id, 'completed')
+  assert.equal(completedTask.reviewRound, 1)
+  assert.deepEqual(
+    await workspaces.listChangedFiles(createdTask.id),
+    ['coordinator-result.txt']
+  )
+  const patch = await workspaces.buildPatch(createdTask.id)
+  assert.match(patch.toString('utf8'), /coordinator-result\.txt/)
+  const sourceHead = await runGit(taskRepository, ['rev-parse', 'HEAD'])
+  assert.equal(await runGit(taskRepository, ['rev-parse', 'HEAD']), sourceHead)
+  unwrap(await coordinator.apply(createdTask.id))
+  assert.match(
+    await readFile(join(taskRepository, 'coordinator-result.txt'), 'utf8'),
+    /阳鸽协作任务完成/
+  )
+  assert.notEqual(
+    await runGit(taskRepository, ['status', '--porcelain=v1']),
+    '',
+    '应用补丁后源仓库应保留未提交修改'
+  )
+  assert.equal(
+    await runGit(taskRepository, ['rev-parse', 'HEAD']),
+    sourceHead,
+    '阳鸽不能自动创建提交'
+  )
+  console.log(`[apply] task=${createdTask.id} diff=${patch.length} bytes head=${sourceHead.slice(0, 8)}`)
+
+  separator('coordinator: cancellation stops the active ACP turn')
+  const cancelRepository = await createRepository('cancel-repository')
+  const cancelHarness = createCoordinator()
+  const cancelTask = unwrap(await cancelHarness.coordinator.createTask(
+    taskInput(cancelRepository, '[mock-hang-plan] 取消这个任务')
+  ))
+  unwrap(await cancelHarness.coordinator.start(cancelTask.id))
+  await waitForEvent(cancelTask.id, 'plan_request')
+  const cancelledTask = unwrap(await cancelHarness.coordinator.cancel(cancelTask.id))
+  assert.equal(cancelledTask.status, 'cancelled')
+  await assertNoRunningSessions()
+  assert.equal(store.getTask(cancelTask.id)?.status, 'cancelled')
+  console.log(`[cancel] task=${cancelTask.id} status=${cancelledTask.status}`)
+
+  separator('coordinator: restart recovery uses a new ACP session')
+  const recoveryRepository = await createRepository('recovery-repository')
+  let recoveryHarness = createCoordinator()
+  const recoveryTask = unwrap(await recoveryHarness.coordinator.createTask(
+    taskInput(recoveryRepository, '[mock-hang-implement] 重启后继续完成任务')
+  ))
+  unwrap(await recoveryHarness.coordinator.start(recoveryTask.id))
+  await waitForTask(recoveryHarness.coordinator, recoveryTask.id, 'awaiting_approval')
+  unwrap(await recoveryHarness.coordinator.approvePlan(recoveryTask.id))
+  await waitForEvent(recoveryTask.id, 'step_request')
+  await waitFor(
+    () => store.listSessions(200).some((session) => session.status === 'running'),
+    'implementation ACP turn to start'
+  )
+  const interruptedStep = store.listSteps(recoveryTask.id)[0]
+  const interruptedSessionId = interruptedStep.sessionId
+  recoveryHarness.coordinator.checkpointAndDispose()
+  assert.equal(store.getTask(recoveryTask.id)?.status, 'failed')
+  assert.equal(store.listSteps(recoveryTask.id)[0].status, 'queued')
+  await assertNoRunningSessions()
+
+  service.dispose()
+  service = createAcpService()
+  recoveryHarness = createCoordinator()
+  unwrap(await recoveryHarness.coordinator.resume(recoveryTask.id))
+  const recoveredTask = await waitForTask(
+    recoveryHarness.coordinator,
+    recoveryTask.id,
+    'completed'
+  )
+  const recoveredStep = store.listSteps(recoveryTask.id)[0]
+  assert.equal(recoveredTask.reviewRound, 1)
+  assert.equal(recoveredStep.status, 'completed')
+  assert.ok(recoveredStep.attempt >= 2)
+  assert.ok(recoveredStep.sessionId)
+  assert.notEqual(recoveredStep.sessionId, interruptedSessionId)
+  assert.ok(
+    store.listEvents(recoveryTask.id).some((event) => event.kind === 'recovery')
+  )
+  assert.match(
+    await readFile(
+      join(recoveredTask.worktreePath, 'coordinator-result.txt'),
+      'utf8'
+    ),
+    /重启后继续完成任务/
+  )
+  console.log(
+    `[recovery] task=${recoveryTask.id} old=${interruptedSessionId?.slice(0, 8)} new=${recoveredStep.sessionId.slice(0, 8)}`
+  )
+
   const allowedAudit = store.audits.filter((entry) => entry.decision === 'allowed').length
   const deniedAudit = store.audits.filter((entry) => entry.decision === 'denied').length
   assert.ok(allowedAudit >= 2)
   assert.ok(deniedAudit >= 1)
   console.log(`[audit] allowed=${allowedAudit} denied=${deniedAudit}`)
 
-  console.log('\nPASS: ACP 服务端到端（mock agent）')
+  console.log('\nPASS: ACP 与协作任务端到端（mock agent）')
 } finally {
-  service.dispose()
+  for (const coordinator of coordinators) coordinator.dispose()
+  service?.dispose()
   await rm(dir, { recursive: true, force: true })
 }

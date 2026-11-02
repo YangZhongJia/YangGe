@@ -669,6 +669,9 @@ export class AgentCoordinator {
           'step'
         )
         const latest = this.requireTask(taskId)
+        if (this.disposed || latest.status === 'failed') {
+          return
+        }
         if (latest.status === 'cancelled') {
           this.store.updateStep(step.id, {
             status: 'cancelled',

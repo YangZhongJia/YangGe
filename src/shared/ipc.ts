@@ -333,9 +333,21 @@ export interface AgentScanFailure {
   error: string
 }
 
+/** 已安装的基础 CLI；只有 adapterReady 的实现才会出现在可连接 Agent 列表。 */
+export interface AgentCliInfo {
+  id: string
+  name: string
+  command: string
+  version: string
+  source: AgentSource
+  adapterCommand: string
+  adapterReady: boolean
+}
+
 export interface AgentScanResult {
   agents: AgentView[]
   found: number
+  clients: AgentCliInfo[]
   failures: AgentScanFailure[]
   scannedAt: number
 }

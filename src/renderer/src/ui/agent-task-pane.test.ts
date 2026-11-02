@@ -24,6 +24,12 @@ describe('Agent task room', () => {
     expect(source).toContain('worktree')
   })
 
+  it('shows base CLIs separately with actionable ACP adapter guidance', () => {
+    expect(source).toContain("store.clients.filter((item) => !item.adapterReady)")
+    expect(source).toContain("{{ tr('需要 ACP 适配器') }}")
+    expect(source).toContain('client.adapterCommand')
+  })
+
   it('shows the coordinator, selected team, plan phases, timeline, and task permissions', () => {
     expect(source).toContain('{{ tr(\'协调者\') }}')
     expect(source).toContain('{{ tr(\'团队\') }}')

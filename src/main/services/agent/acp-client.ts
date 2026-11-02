@@ -310,7 +310,7 @@ export class AcpClient extends EventEmitter {
     })
   }
 
-  async initialize(): Promise<Record<string, unknown>> {
+  async initialize(options: { timeoutMs?: number } = {}): Promise<Record<string, unknown>> {
     const result = await this.request(
       'initialize',
       {
@@ -318,7 +318,7 @@ export class AcpClient extends EventEmitter {
         clientCapabilities: ACP_CLIENT_CAPABILITIES,
         clientInfo: this.clientInfo
       },
-      { timeoutMs: 15000 }
+      { timeoutMs: options.timeoutMs ?? 15000 }
     )
     if (!isPlainObject(result)) throw new AcpError(-32603, 'initialize 响应不是对象')
     if (result.protocolVersion !== ACP_PROTOCOL_VERSION) {

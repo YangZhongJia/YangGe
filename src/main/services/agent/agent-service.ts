@@ -185,6 +185,7 @@ export class AcpAgentService {
       return ok({
         agents: this.store.listAgents(),
         found: agents.length,
+        clients: discovery.clients,
         failures,
         scannedAt
       })

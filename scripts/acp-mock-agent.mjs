@@ -15,6 +15,7 @@
  */
 
 import { createInterface } from 'node:readline'
+import { readFile, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 
 const PROTOCOL_VERSION = 1
@@ -73,6 +74,173 @@ async function writeLineSplitInsideMultibyte(line) {
   process.stdout.write(bytes.subarray(0, splitAt))
   await sleep(3)
   process.stdout.write(bytes.subarray(splitAt))
+}
+
+async function waitForCancellation(turn, timeoutMs = 30_000) {
+  const startedAt = Date.now()
+  while (!turn.cancelled && !shuttingDown && Date.now() - startedAt < timeoutMs) {
+    await sleep(50)
+  }
+}
+
+async function requestPermission(sessionId, toolCall, title) {
+  return agentRequest('session/request_permission', {
+    sessionId,
+    toolCall: {
+      toolCallId: toolCall.toolCallId,
+      title,
+      kind: toolCall.kind,
+      status: 'pending',
+      locations: toolCall.locations ?? [],
+      rawInput: toolCall.rawInput ?? {}
+    },
+    options: [
+      { optionId: 'allow-once', name: '允许一次', kind: 'allow_once' },
+      { optionId: 'reject-once', name: '拒绝', kind: 'reject_once' }
+    ]
+  })
+}
+
+async function handleCoordinatorPrompt(id, turn, sessionId, promptText) {
+  if (promptText.includes('[mock-hang-plan]')) {
+    sendUpdate(sessionId, {
+      sessionUpdate: 'agent_message_chunk',
+      messageId: 'msg_mock_coordinator_wait',
+      content: { type: 'text', text: '协调器等待模拟取消。' }
+    })
+    await waitForCancellation(turn)
+    finishTurn(id, turn, 'cancelled')
+    return
+  }
+
+  const team = [...promptText.matchAll(/^- ([a-z0-9._-]+)$/gim)].map((match) => match[1])
+  if (team.length < 2) throw new Error('协调器提示词未包含至少两个团队成员')
+  const goal = promptText.match(/^用户目标：(.+)$/m)?.[1] ?? '完成集成测试任务'
+  const plan = {
+    summary: '实现可见文件并由不同 Agent 完成最终审查',
+    steps: [
+      {
+        id: 'implement',
+        title: '实现集成测试文件',
+        role: 'implement',
+        agentId: team[0],
+        dependsOn: [],
+        input: `实现用户目标：${goal}`,
+        expectedOutput: '在当前 worktree 写入 coordinator-result.txt'
+      },
+      {
+        id: 'review',
+        title: '审查实现结果',
+        role: 'review',
+        agentId: team[1],
+        dependsOn: ['implement'],
+        input: '检查 coordinator-result.txt 并确认内容完整',
+        expectedOutput: '明确给出审查结论'
+      }
+    ]
+  }
+  sendUpdate(sessionId, {
+    sessionUpdate: 'agent_message_chunk',
+    messageId: 'msg_mock_coordinator_plan',
+    content: { type: 'text', text: JSON.stringify(plan) }
+  })
+  finishTurn(id, turn, 'end_turn')
+}
+
+async function handleImplementationPrompt(id, turn, sessionId, promptText) {
+  if (
+    promptText.includes('[mock-hang-implement]') &&
+    !promptText.includes('恢复未完成任务')
+  ) {
+    sendUpdate(sessionId, {
+      sessionUpdate: 'agent_message_chunk',
+      messageId: 'msg_mock_implementation_wait',
+      content: { type: 'text', text: '实现步骤等待模拟应用重启。' }
+    })
+    await waitForCancellation(turn)
+    finishTurn(id, turn, 'cancelled')
+    return
+  }
+
+  const targetPath = join(turn.cwd, 'coordinator-result.txt')
+  const toolCall = {
+    toolCallId: 'call_mock_coordinator_write',
+    kind: 'edit',
+    locations: [{ path: targetPath }],
+    rawInput: { path: targetPath }
+  }
+  sendUpdate(sessionId, {
+    sessionUpdate: 'tool_call',
+    toolCallId: toolCall.toolCallId,
+    title: `写入 ${targetPath}`,
+    name: 'write_file',
+    kind: toolCall.kind,
+    status: 'pending',
+    locations: toolCall.locations,
+    rawInput: toolCall.rawInput
+  })
+  const permission = await requestPermission(sessionId, toolCall, `写入 ${targetPath}`)
+  if (turn.cancelled) {
+    finishTurn(id, turn, 'cancelled')
+    return
+  }
+  const outcome = permission?.outcome
+  const allowed = outcome?.outcome === 'selected' && outcome.optionId === 'allow-once'
+  if (!allowed) {
+    sendUpdate(sessionId, {
+      sessionUpdate: 'tool_call_update',
+      toolCallId: toolCall.toolCallId,
+      status: 'failed',
+      content: [{ type: 'content', content: { type: 'text', text: '写入权限被拒绝。' } }]
+    })
+    sendUpdate(sessionId, {
+      sessionUpdate: 'agent_message_chunk',
+      messageId: 'msg_mock_implementation',
+      content: { type: 'text', text: '实现未执行：写入权限被拒绝。' }
+    })
+    finishTurn(id, turn, 'end_turn')
+    return
+  }
+
+  const goal = promptText.match(/实现用户目标：(.+)$/m)?.[1] ?? '协作任务'
+  await writeFile(targetPath, `阳鸽协作任务完成\n${goal}\n`, 'utf8')
+  sendUpdate(sessionId, {
+    sessionUpdate: 'tool_call_update',
+    toolCallId: toolCall.toolCallId,
+    status: 'completed',
+    content: [{ type: 'content', content: { type: 'text', text: '文件已写入。' } }]
+  })
+  sendUpdate(sessionId, {
+    sessionUpdate: 'agent_message_chunk',
+    messageId: 'msg_mock_implementation',
+    content: { type: 'text', text: '实现完成：已写入 coordinator-result.txt。' }
+  })
+  finishTurn(id, turn, 'end_turn')
+}
+
+async function handleReviewPrompt(id, turn, sessionId, promptText) {
+  const targetPath = join(turn.cwd, 'coordinator-result.txt')
+  let content = ''
+  try {
+    content = await readFile(targetPath, 'utf8')
+  } catch (error) {
+    sendUpdate(sessionId, {
+      sessionUpdate: 'agent_message_chunk',
+      messageId: 'msg_mock_review',
+      content: { type: 'text', text: `审查失败：${error.message}` }
+    })
+    finishTurn(id, turn, 'end_turn')
+    return
+  }
+  sendUpdate(sessionId, {
+    sessionUpdate: 'agent_message_chunk',
+    messageId: 'msg_mock_review',
+    content: {
+      type: 'text',
+      text: `审查通过：coordinator-result.txt 可读，内容为 ${JSON.stringify(content)}`
+    }
+  })
+  finishTurn(id, turn, 'end_turn')
 }
 
 function agentRequest(method, params, timeoutMs = 5000) {
@@ -141,7 +309,12 @@ async function handlePrompt(id, params) {
     return
   }
 
-  const turn = { sessionId: params.sessionId, cancelled: false, done: false }
+  const turn = {
+    sessionId: params.sessionId,
+    cwd: session.cwd,
+    cancelled: false,
+    done: false
+  }
   activeTurn = turn
   const promptText = params.prompt
     .filter((block) => block && block.type === 'text' && typeof block.text === 'string')
@@ -151,8 +324,21 @@ async function handlePrompt(id, params) {
   try {
     // 测试用：让 prompt 长时间不返回，用于验证客户端关闭时挂起请求的清理。
     if (promptText.includes('[hang]')) {
-      await sleep(30000)
+      await waitForCancellation(turn)
       if (!turn.done) finishTurn(id, turn, 'cancelled')
+      return
+    }
+
+    if (promptText.includes('你是阳鸽编码任务的协调者')) {
+      await handleCoordinatorPrompt(id, turn, params.sessionId, promptText)
+      return
+    }
+    if (promptText.includes('你是阳鸽编码团队中的 implement Agent')) {
+      await handleImplementationPrompt(id, turn, params.sessionId, promptText)
+      return
+    }
+    if (promptText.includes('你是阳鸽编码团队中的 review Agent')) {
+      await handleReviewPrompt(id, turn, params.sessionId, promptText)
       return
     }
 
