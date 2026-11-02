@@ -22,6 +22,14 @@ const taskPrompt = ref('')
 const coordinatorAgentId = ref<string | null>(null)
 const teamAgentIds = ref<string[]>([])
 const applyConfirmed = ref(false)
+const showAgentSettings = ref(false)
+const settingsAgentId = ref<string | null>(null)
+const settingsDisplayName = ref('')
+const settingsDescription = ref('')
+const settingsInstructions = ref('')
+const settingsEnabled = ref(true)
+const settingsError = ref('')
+const settingsBusy = ref(false)
 
 const active = computed(() => store.activeSession)
 const permission = computed(() => store.activePermission)
@@ -29,6 +37,9 @@ const activeTask = computed(() => store.activeTask)
 const activeTaskDetail = computed(() => store.activeTaskDetail)
 const activeTaskPermission = computed(() => store.activeTaskPermission)
 const taskDiff = computed(() => store.taskDiff)
+const settingsAgent = computed(() =>
+  store.agents.find((agent) => agent.id === settingsAgentId.value) ?? null
+)
 
 const statusLabel = computed(() => {
   const status = active.value?.status
@@ -44,12 +55,15 @@ const canSend = computed(() => store.canSend && draft.value.trim().length > 0)
 const coordinatorOptions = computed(() =>
   store.agents
     .filter((agent) => agent.enabled && !agent.probeError)
-    .map((agent) => ({ label: `${agent.name} · ${agent.version || tr('版本未知')}`, value: agent.id }))
+    .map((agent) => ({
+      label: `${agentLabel(agent)} · ${agent.version || tr('版本未知')}`,
+      value: agent.id
+    }))
 )
 const teamOptions = computed(() =>
   store.agents
     .filter((agent) => agent.enabled && !agent.probeError && agent.id !== coordinatorAgentId.value)
-    .map((agent) => ({ label: agent.name, value: agent.id }))
+    .map((agent) => ({ label: agentLabel(agent), value: agent.id }))
 )
 const canCreateTask = computed(() =>
   repoPath.value.trim().length > 0 &&
@@ -91,7 +105,12 @@ function taskStatus(status: AgentTaskStatus): string {
 }
 
 function agentName(agentId: string): string {
-  return store.agents.find((agent) => agent.id === agentId)?.name ?? agentId
+  const agent = store.agents.find((item) => item.id === agentId)
+  return agent ? agentLabel(agent) : agentId
+}
+
+function agentLabel(agent: AgentView): string {
+  return agent.displayName.trim() || agent.name
 }
 
 function formatTime(timestamp: number): string {
@@ -119,6 +138,37 @@ async function create(agent: AgentView): Promise<void> {
 async function pickCwdAndCreate(agent: AgentView): Promise<void> {
   const cwd = await window.pantry.pickAgentCwd()
   if (cwd) await store.newSession(agent.id, cwd)
+}
+
+function openAgentSettings(agent: AgentView): void {
+  settingsAgentId.value = agent.id
+  settingsDisplayName.value = agent.displayName
+  settingsDescription.value = agent.description
+  settingsInstructions.value = agent.instructions
+  settingsEnabled.value = agent.enabled
+  settingsError.value = ''
+  showAgentSettings.value = true
+}
+
+function closeAgentSettings(): void {
+  if (!settingsBusy.value) showAgentSettings.value = false
+}
+
+async function saveAgentSettings(): Promise<void> {
+  const agent = settingsAgent.value
+  if (!agent || settingsBusy.value) return
+  settingsBusy.value = true
+  settingsError.value = ''
+  const saved = await store.updateAgentProfile({
+    id: agent.id,
+    displayName: settingsDisplayName.value.trim(),
+    description: settingsDescription.value.trim(),
+    instructions: settingsInstructions.value.trim(),
+    enabled: settingsEnabled.value
+  })
+  settingsBusy.value = false
+  if (saved) showAgentSettings.value = false
+  else settingsError.value = store.error || tr('保存失败')
 }
 
 async function send(): Promise<void> {
@@ -290,8 +340,16 @@ onMounted(() => {
           </div>
           <div v-for="agent in store.agents" :key="agent.id" class="mini-agent">
             <span class="agent-dot" :data-ready="!agent.probeError"></span>
-            <span>{{ agent.name }}</span>
+            <span>{{ agentLabel(agent) }}</span>
             <small>{{ agent.version || tr('版本未知') }}</small>
+            <button
+              type="button"
+              class="mini-settings"
+              :title="tr('Agent 设置')"
+              @click="openAgentSettings(agent)"
+            >
+              {{ tr('设置') }}
+            </button>
           </div>
           <div
             v-for="client in store.clients.filter((item) => !item.adapterReady)"
@@ -620,13 +678,18 @@ onMounted(() => {
           {{ tr('尚未发现 Agent。点击「扫描」或手动选择 CLI。') }}
         </div>
         <article v-for="agent in store.agents" :key="agent.id" class="agent-card">
-          <div class="agent-name">{{ agent.name }}</div>
+          <div class="agent-name">{{ agentLabel(agent) }}</div>
           <div class="agent-meta">
             <span>{{ agent.version || tr('版本未知') }}</span>
+            <span v-if="!agent.enabled">{{ tr('已停用') }}</span>
+            <span v-if="agent.instructions.trim()">{{ tr('已配置提示词') }}</span>
             <span v-if="agent.probeError" class="probe-error" :title="agent.probeError">
               {{ tr('探测失败') }}
             </span>
           </div>
+          <p v-if="agent.description.trim()" class="agent-description">
+            {{ agent.description }}
+          </p>
           <div class="agent-path" :title="agent.command">{{ shortPath(agent.command) }}</div>
           <div class="agent-actions">
             <NButton size="tiny" type="primary" ghost @click="create(agent)">
@@ -634,6 +697,9 @@ onMounted(() => {
             </NButton>
             <NButton size="tiny" quaternary @click="pickCwdAndCreate(agent)">
               {{ tr('选择目录') }}
+            </NButton>
+            <NButton size="tiny" quaternary @click="openAgentSettings(agent)">
+              {{ tr('设置') }}
             </NButton>
           </div>
         </article>
@@ -728,6 +794,91 @@ onMounted(() => {
         </div>
       </section>
     </template>
+
+    <div
+      v-if="showAgentSettings && settingsAgent"
+      class="agent-settings-mask"
+      @click.self="closeAgentSettings"
+    >
+      <section
+        class="agent-settings-card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="agent-settings-title"
+      >
+        <header class="agent-settings-head">
+          <div>
+            <p class="eyebrow">AGENT PROFILE</p>
+            <h3 id="agent-settings-title">{{ tr('Agent 设置') }}</h3>
+            <span>{{ settingsAgent.name }}</span>
+          </div>
+          <button
+            type="button"
+            :aria-label="tr('关闭')"
+            :disabled="settingsBusy"
+            @click="closeAgentSettings"
+          >
+            ×
+          </button>
+        </header>
+
+        <div class="agent-settings-body">
+          <label class="settings-field">
+            <span>{{ tr('显示名称') }}</span>
+            <NInput
+              v-model:value="settingsDisplayName"
+              :maxlength="80"
+              :placeholder="settingsAgent.name"
+            />
+            <small>{{ tr('用于识别和展示；留空时使用扫描到的名称。') }}</small>
+          </label>
+
+          <label class="settings-field">
+            <span>{{ tr('简介') }}</span>
+            <NInput
+              v-model:value="settingsDescription"
+              type="textarea"
+              :autosize="{ minRows: 3, maxRows: 6 }"
+              :maxlength="1000"
+              :placeholder="tr('说明这个 Agent 擅长什么、适合承担什么角色。')"
+            />
+            <small>{{ tr('只在本机界面展示，不会自动发送给模型。') }}</small>
+          </label>
+
+          <label class="settings-field">
+            <span>{{ tr('角色提示词') }}</span>
+            <NInput
+              v-model:value="settingsInstructions"
+              type="textarea"
+              :autosize="{ minRows: 7, maxRows: 14 }"
+              :maxlength="16000"
+              :placeholder="tr('例如：优先编写测试，修改前先说明影响范围，不要改动无关文件。')"
+            />
+            <small>
+              {{ tr('发送单聊消息和分派协作步骤时，阳鸽会把它与用户输入一起交给该 Agent。') }}
+            </small>
+          </label>
+
+          <NCheckbox v-model:checked="settingsEnabled">
+            {{ tr('启用此 Agent') }}
+          </NCheckbox>
+
+          <div class="settings-notice">
+            {{ tr('角色提示词会随任务内容发送给该 CLI 配置的模型供应商；它不是工具授权，也不是系统沙箱。') }}
+          </div>
+          <div v-if="settingsError" class="settings-error" role="alert">{{ settingsError }}</div>
+        </div>
+
+        <footer class="agent-settings-actions">
+          <NButton secondary :disabled="settingsBusy" @click="closeAgentSettings">
+            {{ tr('取消') }}
+          </NButton>
+          <NButton type="primary" :loading="settingsBusy" @click="saveAgentSettings">
+            {{ tr('保存设置') }}
+          </NButton>
+        </footer>
+      </section>
+    </div>
 
     <div
       v-if="mode === 'tasks' && activeTaskPermission"
@@ -1042,7 +1193,7 @@ onMounted(() => {
 
 .mini-agent {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 6px;
   padding: 5px 2px;
@@ -1053,6 +1204,15 @@ onMounted(() => {
 .mini-agent small {
   font-size: 9px;
   color: var(--text-3);
+}
+
+.mini-settings {
+  padding: 1px 0;
+  font: inherit;
+  color: var(--primary);
+  background: none;
+  border: 0;
+  cursor: pointer;
 }
 
 .agent-dot {
@@ -1122,10 +1282,126 @@ onMounted(() => {
   white-space: nowrap;
 }
 
+.agent-description {
+  display: -webkit-box;
+  margin: 6px 0 0;
+  overflow: hidden;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-2);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
 .agent-actions {
   display: flex;
   gap: 6px;
   margin-top: 8px;
+}
+
+.agent-settings-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 1350;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: var(--scrim);
+}
+
+.agent-settings-card {
+  display: flex;
+  flex-direction: column;
+  width: min(620px, calc(100vw - 32px));
+  max-height: calc(100vh - 40px);
+  overflow: hidden;
+  color: var(--text-1);
+  background: var(--bg-window);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-float);
+}
+
+.agent-settings-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.agent-settings-head h3 {
+  margin: 3px 0 2px;
+  font-size: var(--font-lg);
+}
+
+.agent-settings-head span {
+  font-size: var(--font-xs);
+  color: var(--text-3);
+}
+
+.agent-settings-head button {
+  width: 28px;
+  height: 28px;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--text-2);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-control);
+  cursor: pointer;
+}
+
+.agent-settings-head button:hover {
+  color: var(--text-1);
+  background: var(--bg-list);
+}
+
+.agent-settings-body {
+  display: grid;
+  gap: 16px;
+  padding: 18px 20px;
+  overflow-y: auto;
+}
+
+.settings-field {
+  display: grid;
+  gap: 7px;
+  font-size: var(--font-sm);
+}
+
+.settings-field > span {
+  font-weight: 600;
+}
+
+.settings-field small {
+  font-size: var(--font-xs);
+  line-height: 1.5;
+  color: var(--text-3);
+}
+
+.settings-notice {
+  padding: 10px 12px;
+  font-size: var(--font-xs);
+  line-height: 1.55;
+  color: var(--text-2);
+  background: var(--primary-weak);
+  border: 1px solid var(--primary-border);
+  border-radius: var(--radius-control);
+}
+
+.settings-error {
+  font-size: var(--font-xs);
+  color: var(--danger);
+}
+
+.agent-settings-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 13px 20px;
+  border-top: 1px solid var(--line);
 }
 
 .session-item {

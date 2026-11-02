@@ -3,6 +3,7 @@ import type {
   AgentCliInfo,
   AgentPermissionDecision,
   AgentPermissionRequestView,
+  AgentProfileUpdate,
   AgentSessionUpdate,
   AgentSessionView,
   AgentTaskCreateInput,
@@ -421,6 +422,28 @@ export const useAgentStore = defineStore('agent', {
       const index = this.agents.findIndex((agent) => agent.id === result.agent.id)
       if (index === -1) this.agents.push(result.agent)
       else this.agents[index] = result.agent
+    },
+
+    async updateAgentProfile(input: AgentProfileUpdate): Promise<boolean> {
+      this.error = ''
+      try {
+        const result = await window.pantry.updateAgentProfile(input)
+        if (!result.ok) {
+          this.error = result.error
+          return false
+        }
+        const index = this.agents.findIndex((agent) => agent.id === result.value.id)
+        if (index === -1) this.agents.push(result.value)
+        else this.agents[index] = result.value
+        const agentName = result.value.displayName.trim() || result.value.name
+        this.sessions = this.sessions.map((session) =>
+          session.agentId === result.value.id ? { ...session, agentName } : session
+        )
+        return true
+      } catch (error) {
+        this.error = error instanceof Error ? error.message : String(error)
+        return false
+      }
     },
 
     async newSession(agentId: string, cwd?: string): Promise<void> {

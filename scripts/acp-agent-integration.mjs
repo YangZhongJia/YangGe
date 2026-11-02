@@ -39,12 +39,33 @@ class MemoryStore {
   upsertAgents(list) {
     for (const agent of list) {
       const previous = this.agents.get(agent.id)
-      this.agents.set(agent.id, previous ? { ...agent, enabled: previous.enabled } : agent)
+      this.agents.set(
+        agent.id,
+        previous
+          ? {
+              ...agent,
+              enabled: previous.enabled,
+              cwd: previous.cwd,
+              displayName: previous.displayName,
+              description: previous.description,
+              instructions: previous.instructions
+            }
+          : agent
+      )
     }
   }
   setEnabled(id, enabled) {
     const agent = this.agents.get(id)
     if (agent) agent.enabled = enabled
+  }
+  updateAgentProfile(input) {
+    const agent = this.agents.get(input.id)
+    if (!agent) return null
+    agent.displayName = input.displayName
+    agent.description = input.description
+    agent.instructions = input.instructions
+    agent.enabled = input.enabled
+    return structuredClone(agent)
   }
   touchAgent(id) {
     const agent = this.agents.get(id)
@@ -192,6 +213,9 @@ function mockAgentView(id, name) {
   return {
     id,
     name,
+    displayName: '',
+    description: '',
+    instructions: '',
     command: process.execPath,
     args: [mockAgent],
     cwd: dir,
@@ -342,6 +366,51 @@ function chunkText(updates) {
 
 let sessionId = null
 try {
+  separator('agent profile -> local description + role prompt injection + profile gating')
+  const localOnlyDescription = 'LOCAL_ONLY_AGENT_DESCRIPTION'
+  const normalProfileInstruction = 'NORMAL_PROFILE_INSTRUCTION：先阅读再回答。'
+  const profiledAgent = unwrap(await service.updateAgentProfile({
+    id: 'agent_mock',
+    displayName: '档案助手',
+    description: localOnlyDescription,
+    instructions: normalProfileInstruction,
+    enabled: true
+  }))
+  assert.equal(profiledAgent.displayName, '档案助手')
+  const profileSession = unwrap(await service.newSession('agent_mock', dir))
+  assert.equal(profileSession.agentName, '档案助手')
+  const profileRunIds = new Set(store.runs.keys())
+  const profilePrompt = await service.prompt(profileSession.id, '档案冒烟输入')
+  assert.equal(profilePrompt.ok, true, profilePrompt.ok ? '' : profilePrompt.error)
+  const profileRuns = [...store.runs.values()].filter((run) => !profileRunIds.has(run.id))
+  assert.equal(profileRuns.length, 1)
+  assert.ok(profileRuns[0].prompt.includes(normalProfileInstruction))
+  assert.ok(profileRuns[0].prompt.includes('档案冒烟输入'))
+  assert.ok(!profileRuns[0].prompt.includes(localOnlyDescription))
+
+  unwrap(await service.updateAgentProfile({
+    id: 'agent_mock',
+    displayName: '档案助手',
+    description: localOnlyDescription,
+    instructions: normalProfileInstruction,
+    enabled: false
+  }))
+  const rejectedSession = await service.newSession('agent_mock', dir)
+  assert.equal(rejectedSession.ok, false)
+  const runCountBeforeDisabledPrompt = store.runs.size
+  const rejectedPrompt = await service.prompt(profileSession.id, '停用后不应发送')
+  assert.equal(rejectedPrompt.ok, false)
+  assert.equal(store.runs.size, runCountBeforeDisabledPrompt)
+  unwrap(await service.updateAgentProfile({
+    id: 'agent_mock',
+    displayName: '',
+    description: '',
+    instructions: '',
+    enabled: true
+  }))
+  await service.closeSession(profileSession.id)
+  console.log('[profile] display name, prompt injection, local description, profile gating PASS')
+
   separator('reject plain CLI during manual registration')
   const plainCli = await service.probeAgent(process.execPath)
   assert.equal(plainCli.ok, false, '普通 CLI 不能通过 ACP Agent 探测')
@@ -403,6 +472,27 @@ try {
 
   separator('coordinator: create -> approve -> implement -> review -> diff -> apply')
   permissionDecision = 'allow_once'
+  const coordinatorInstruction = 'COORDINATOR_PROFILE_INSTRUCTION'
+  const implementerInstruction = 'IMPLEMENTER_PROFILE_INSTRUCTION'
+  const reviewerInstruction = 'REVIEWER_PROFILE_INSTRUCTION'
+  const localDescriptions = [
+    'LOCAL_ONLY_COORDINATOR_DESCRIPTION',
+    'LOCAL_ONLY_IMPLEMENTER_DESCRIPTION',
+    'LOCAL_ONLY_REVIEWER_DESCRIPTION'
+  ]
+  for (const [id, instruction, description] of [
+    [coordinatorAgentId, coordinatorInstruction, localDescriptions[0]],
+    [implementerAgentId, implementerInstruction, localDescriptions[1]],
+    [reviewerAgentId, reviewerInstruction, localDescriptions[2]]
+  ]) {
+    unwrap(await service.updateAgentProfile({
+      id,
+      displayName: `档案-${id}`,
+      description,
+      instructions: instruction,
+      enabled: true
+    }))
+  }
   const taskRepository = await createRepository('task-repository')
   const { coordinator, workspaces } = createCoordinator()
   const createdTask = unwrap(await coordinator.createTask(
@@ -432,6 +522,22 @@ try {
     await readFile(join(taskRepository, 'coordinator-result.txt'), 'utf8'),
     /阳鸽协作任务完成/
   )
+  const taskRuns = [...store.runs.values()]
+  const coordinatorRun = taskRuns.find((run) =>
+    run.prompt.includes('你是阳鸽编码任务的协调者')
+  )
+  const implementerRun = taskRuns.find((run) =>
+    run.prompt.includes('你是阳鸽编码团队中的 implement Agent')
+  )
+  const reviewerRun = taskRuns.find((run) =>
+    run.prompt.includes('你是阳鸽编码团队中的 review Agent')
+  )
+  assert.equal((coordinatorRun?.prompt.match(/COORDINATOR_PROFILE_INSTRUCTION/g) ?? []).length, 1)
+  assert.equal((implementerRun?.prompt.match(/IMPLEMENTER_PROFILE_INSTRUCTION/g) ?? []).length, 1)
+  assert.equal((reviewerRun?.prompt.match(/REVIEWER_PROFILE_INSTRUCTION/g) ?? []).length, 1)
+  assert.ok(taskRuns.every((run) =>
+    localDescriptions.every((description) => !run.prompt.includes(description))
+  ))
   assert.notEqual(
     await runGit(taskRepository, ['status', '--porcelain=v1']),
     '',

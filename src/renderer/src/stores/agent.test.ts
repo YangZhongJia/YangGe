@@ -1,12 +1,32 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type {
+  AgentProfileUpdate,
   AgentTaskCreateInput,
   AgentTaskDetailView,
   AgentTaskDiffView,
-  AgentTaskView
+  AgentTaskView,
+  AgentView
 } from '../../../shared/ipc'
 import { useAgentStore } from './agent'
+
+const agent: AgentView = {
+  id: 'agent-1',
+  name: 'Codex',
+  displayName: '',
+  description: '',
+  instructions: '',
+  command: 'C:\\agents\\codex-acp.exe',
+  args: [],
+  cwd: 'C:\\project',
+  version: '1.0.0',
+  source: 'manual',
+  probeError: '',
+  enabled: true,
+  createdAt: 1,
+  lastUsedAt: 0,
+  lastProbeTs: 1
+}
 
 const task: AgentTaskView = {
   id: 'task-1',
@@ -68,7 +88,11 @@ function installApi() {
     applyAgentTask: vi.fn(async () => ({ ok: true as const, value: null })),
     removeAgentTaskWorktree: vi.fn(async () => ({ ok: true as const, value: null })),
     respondAgentTaskPermission: vi.fn(async () => ({ ok: true as const, value: null })),
-    listAgents: vi.fn(async () => []),
+    listAgents: vi.fn(async () => [agent]),
+    updateAgentProfile: vi.fn(async (input: AgentProfileUpdate) => ({
+      ok: true as const,
+      value: { ...agent, ...input }
+    })),
     listAgentSessions: vi.fn(async () => [])
   }
   vi.stubGlobal('window', { pantry: api })
@@ -80,6 +104,36 @@ beforeEach(() => {
 })
 
 describe('agent task store', () => {
+  it('replaces the saved local Agent profile in reactive state', async () => {
+    const api = installApi()
+    const store = useAgentStore()
+    store.agents = [agent]
+    store.sessions = [{
+      id: 'session-1',
+      agentId: agent.id,
+      agentName: agent.name,
+      acpSessionId: 'acp-1',
+      cwd: 'C:\\project',
+      title: agent.name,
+      status: 'idle',
+      createdAt: 1,
+      updatedAt: 1
+    }]
+    const input: AgentProfileUpdate = {
+      id: agent.id,
+      displayName: 'Builder',
+      description: '实现与测试',
+      instructions: '先写测试。',
+      enabled: false
+    }
+
+    await expect(store.updateAgentProfile(input)).resolves.toBe(true)
+
+    expect(api.updateAgentProfile).toHaveBeenCalledWith(input)
+    expect(store.agents).toEqual([{ ...agent, ...input }])
+    expect(store.sessions[0]?.agentName).toBe('Builder')
+  })
+
   it('loads and creates tasks while selecting the new room', async () => {
     const api = installApi()
     const store = useAgentStore()

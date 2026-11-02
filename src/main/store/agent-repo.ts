@@ -1,6 +1,7 @@
 import type DatabaseT from 'better-sqlite3'
 import type {
   AgentAuditView,
+  AgentProfileUpdate,
   AgentSessionStatus,
   AgentSessionView,
   AgentSource,
@@ -12,6 +13,9 @@ import type {
 interface AgentRow {
   id: string
   name: string
+  display_name: string
+  description: string
+  instructions: string
   command: string
   args: string
   cwd: string
@@ -75,6 +79,9 @@ function toAgentView(row: AgentRow): AgentView {
   return {
     id: row.id,
     name: row.name,
+    displayName: row.display_name,
+    description: row.description,
+    instructions: row.instructions,
     command: row.command,
     args: parseArgs(row.args),
     cwd: row.cwd,
@@ -107,6 +114,7 @@ export class AgentRepo {
   private readonly selectAgentStmt: DatabaseT.Statement
   private readonly upsertAgentStmt: DatabaseT.Statement
   private readonly setEnabledStmt: DatabaseT.Statement
+  private readonly updateAgentProfileStmt: DatabaseT.Statement
   private readonly touchAgentStmt: DatabaseT.Statement
   private readonly insertSessionStmt: DatabaseT.Statement
   private readonly updateSessionStmt: DatabaseT.Statement
@@ -137,6 +145,14 @@ export class AgentRepo {
         last_probe_ts = excluded.last_probe_ts
     `)
     this.setEnabledStmt = db.prepare('UPDATE agent_agents SET enabled = ? WHERE id = ?')
+    this.updateAgentProfileStmt = db.prepare(`
+      UPDATE agent_agents SET
+        display_name = ?,
+        description = ?,
+        instructions = ?,
+        enabled = ?
+      WHERE id = ?
+    `)
     this.touchAgentStmt = db.prepare('UPDATE agent_agents SET last_used_ts = ? WHERE id = ?')
     this.insertSessionStmt = db.prepare(`
       INSERT INTO agent_sessions (
@@ -152,12 +168,12 @@ export class AgentRepo {
       WHERE id = ?
     `)
     this.selectSessionStmt = db.prepare(`
-      SELECT s.*, a.name AS agent_name
+      SELECT s.*, COALESCE(NULLIF(a.display_name, ''), a.name) AS agent_name
       FROM agent_sessions s LEFT JOIN agent_agents a ON a.id = s.agent_id
       WHERE s.id = ?
     `)
     this.selectSessionsStmt = db.prepare(`
-      SELECT s.*, a.name AS agent_name
+      SELECT s.*, COALESCE(NULLIF(a.display_name, ''), a.name) AS agent_name
       FROM agent_sessions s LEFT JOIN agent_agents a ON a.id = s.agent_id
       ORDER BY s.updated_ts DESC
       LIMIT ?
@@ -186,7 +202,7 @@ export class AgentRepo {
     return row ? toAgentView(row) : null
   }
 
-  /** 扫描/手动结果落库；保留用户已有的 enabled 与 cwd。 */
+  /** 扫描/手动结果落库；保留用户已有的 enabled、cwd、简介、名称与角色提示词。 */
   upsertAgents(agents: AgentView[]): void {
     const transaction = (list: AgentView[]): void => {
       for (const agent of list) {
@@ -211,6 +227,17 @@ export class AgentRepo {
 
   setEnabled(id: string, enabled: boolean): void {
     this.setEnabledStmt.run(enabled ? 1 : 0, id)
+  }
+
+  updateAgentProfile(input: AgentProfileUpdate): AgentView | null {
+    this.updateAgentProfileStmt.run(
+      input.displayName,
+      input.description,
+      input.instructions,
+      input.enabled ? 1 : 0,
+      input.id
+    )
+    return this.getAgent(input.id)
   }
 
   touchAgent(id: string, ts = Date.now()): void {
@@ -324,6 +351,7 @@ export type AgentStore = Pick<
   | 'getAgent'
   | 'upsertAgents'
   | 'setEnabled'
+  | 'updateAgentProfile'
   | 'touchAgent'
   | 'createSession'
   | 'updateSession'

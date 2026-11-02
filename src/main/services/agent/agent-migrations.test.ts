@@ -29,3 +29,15 @@ describe('v18 Agent 协调任务迁移', () => {
     expect(v18).not.toMatch(/\bALTER TABLE\b/)
   })
 })
+
+describe('v19 Agent 档案迁移', () => {
+  it('为已有 Agent 增加本地展示与提示词字段', () => {
+    expect(MIGRATIONS.length).toBeGreaterThanOrEqual(19)
+    const v19 = MIGRATIONS[18]
+    expect(v19).toContain('display_name')
+    expect(v19).toContain('description')
+    expect(v19).toContain('instructions')
+    expect(v19.match(/ALTER TABLE agent_agents/g)).toHaveLength(3)
+    expect(v19).not.toMatch(/\b(?:peers|conversations|messages|groups)\b/)
+  })
+})

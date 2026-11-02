@@ -317,6 +317,13 @@ export const MIGRATIONS: ReadonlyArray<string> = [
     created_ts INTEGER NOT NULL
   );
   CREATE INDEX idx_agent_task_events_order ON agent_task_events(task_id, created_ts, id);
+  `,
+
+  // v19：用户为本机 ACP Agent 配置的展示名称、简介与角色提示词。
+  `
+  ALTER TABLE agent_agents ADD COLUMN display_name TEXT NOT NULL DEFAULT '';
+  ALTER TABLE agent_agents ADD COLUMN description TEXT NOT NULL DEFAULT '';
+  ALTER TABLE agent_agents ADD COLUMN instructions TEXT NOT NULL DEFAULT '';
   `
 ]
 

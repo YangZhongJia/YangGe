@@ -8,6 +8,7 @@ import {
   type AgentPermissionDecision,
   type AgentPermissionRequestView,
   type AgentPermissionResolvedEvent,
+  type AgentProfileUpdate,
   type AgentProbeResult,
   type AgentResult,
   type AgentRunResult,
@@ -397,6 +398,8 @@ const api: PantryApi = {
   hideMainWindow: (): Promise<void> => ipcRenderer.invoke(IpcChannels.winHideMain),
 
   listAgents: (): Promise<AgentView[]> => ipcRenderer.invoke(IpcChannels.agentList),
+  updateAgentProfile: (input: AgentProfileUpdate): Promise<AgentResult<AgentView>> =>
+    ipcRenderer.invoke(IpcChannels.agentProfileUpdate, input),
   scanAgents: (): Promise<AgentResult<AgentScanResult>> => ipcRenderer.invoke(IpcChannels.agentScan),
   probeAgent: (path: string): Promise<AgentProbeResult> =>
     ipcRenderer.invoke(IpcChannels.agentProbe, path),

@@ -54,6 +54,7 @@ import {
   IpcChannels,
   IpcEvents,
   type AgentPermissionDecision,
+  type AgentProfileUpdate,
   type AvatarSourcePick,
   type AppInfo,
   type AppSettingsPatch,
@@ -2190,6 +2191,14 @@ if (!gotLock) {
 
   // ——— ACP Agent：只校验参数并转发；生命周期与权限在 AcpAgentService ———
   ipcMain.handle(IpcChannels.agentList, () => agentService?.listAgents() ?? [])
+
+  ipcMain.handle(IpcChannels.agentProfileUpdate, (_event, input: unknown) => {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) {
+      return { ok: false, error: 'Agent 设置不合法' }
+    }
+    if (!agentService) return { ok: false, error: 'Agent 存储不可用' }
+    return agentService.updateAgentProfile(input as AgentProfileUpdate)
+  })
 
   ipcMain.handle(IpcChannels.agentScan, () => {
     if (!agentService) return { ok: false, error: 'Agent 存储不可用' }

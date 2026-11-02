@@ -152,6 +152,7 @@ export const IpcChannels = {
   reminderAdd: 'reminder:add',
   /** ACP Agent：本机 CLI 扫描、会话、提示、取消与权限应答 */
   agentList: 'agent:list',
+  agentProfileUpdate: 'agent:profile-update',
   agentScan: 'agent:scan',
   agentProbe: 'agent:probe',
   agentPickCommand: 'agent:pick-command',
@@ -313,6 +314,12 @@ export type AgentSource = 'path' | 'windows-dir' | 'manual'
 export interface AgentView {
   id: string
   name: string
+  /** 用户设置的显示名称；空串时回退到扫描名称 */
+  displayName: string
+  /** 用户设置的本机简介，仅用于界面展示 */
+  description: string
+  /** 每次由阳鸽发起 Agent 提示时注入的角色说明 */
+  instructions: string
   /** 绝对路径；禁止从聊天内容动态写入 */
   command: string
   args: string[]
@@ -326,6 +333,15 @@ export interface AgentView {
   createdAt: number
   lastUsedAt: number
   lastProbeTs: number
+}
+
+/** 只更新阳鸽本地的 Agent 档案，不修改命令、参数或环境。 */
+export interface AgentProfileUpdate {
+  id: string
+  displayName: string
+  description: string
+  instructions: string
+  enabled: boolean
 }
 
 export interface AgentScanFailure {
@@ -1473,6 +1489,7 @@ export interface PantryApi {
 
   // ——— ACP Agent（本机 CLI，独立于群聊/peers） ———
   listAgents(): Promise<AgentView[]>
+  updateAgentProfile(input: AgentProfileUpdate): Promise<AgentResult<AgentView>>
   /** 扫描 PATH 与 Windows 常见安装目录，并把结果落库 */
   scanAgents(): Promise<AgentResult<AgentScanResult>>
   /** 手动指定可执行文件绝对路径（.exe/.cmd/.bat） */

@@ -11,6 +11,18 @@ const storeSource = readFileSync(
 )
 
 describe('Agent task room', () => {
+  it('lets each Agent edit its display name, local description, role prompt, and enabled state', () => {
+    expect(source).toContain('openAgentSettings(agent)')
+    expect(source).toContain("tr('显示名称')")
+    expect(source).toContain("tr('简介')")
+    expect(source).toContain("tr('角色提示词')")
+    expect(source).toContain('v-model:checked="settingsEnabled"')
+    expect(source).toContain('store.updateAgentProfile({')
+    expect(source).toContain('只在本机界面展示，不会自动发送给模型。')
+    expect(source).toContain('角色提示词会随任务内容发送给该 CLI 配置的模型供应商')
+    expect(source).toContain('它不是工具授权，也不是系统沙箱')
+  })
+
   it('keeps the existing single-agent chat available as a separate mode', () => {
     expect(source).toContain("mode === 'tasks'")
     expect(source).toContain("mode === 'chat'")

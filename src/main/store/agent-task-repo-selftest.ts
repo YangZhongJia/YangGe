@@ -7,9 +7,11 @@ import { join } from 'node:path'
 import type {
   AgentCoordinatorPlan,
   AgentTaskEventView,
-  AgentTaskStepView
+  AgentTaskStepView,
+  AgentView
 } from '../../shared/ipc'
 import { AgentTaskRepo, type AgentTaskRecordInput } from './agent-task-repo'
+import { AgentRepo } from './agent-repo'
 import { openDatabase } from './db'
 
 const directories: string[] = []
@@ -66,6 +68,95 @@ function makeEvent(id: string, createdAt: number, text: string): AgentTaskEventV
     agentId: 'agent-coordinator',
     text,
     createdAt
+  }
+}
+
+function makeAgent(): AgentView {
+  return {
+    id: 'agent-1',
+    name: 'Detected Agent',
+    displayName: '',
+    description: '',
+    instructions: '',
+    command: 'C:\\agents\\agent.exe',
+    args: [],
+    cwd: 'C:\\project',
+    version: '1.0.0',
+    source: 'manual',
+    probeError: '',
+    enabled: true,
+    createdAt: 100,
+    lastUsedAt: 0,
+    lastProbeTs: 100
+  }
+}
+
+function assertAgentProfilePersistence(): void {
+  const dir = makeDirectory()
+  const dbPath = join(dir, 'agents.db')
+  const db = openDatabase(dbPath)
+  const repo = new AgentRepo(db)
+  repo.upsertAgents([makeAgent()])
+  assert.deepEqual(repo.updateAgentProfile({
+    id: 'agent-1',
+    displayName: 'Builder',
+    description: '测试与实现',
+    instructions: '先写测试。',
+    enabled: false
+  }), {
+    ...makeAgent(),
+    displayName: 'Builder',
+    description: '测试与实现',
+    instructions: '先写测试。',
+    enabled: false
+  })
+  repo.createSession({
+    id: 'session-1',
+    agentId: 'agent-1',
+    agentName: 'ignored',
+    acpSessionId: 'acp-session-1',
+    cwd: 'C:\\project',
+    title: 'Builder',
+    status: 'idle',
+    createdAt: 101,
+    updatedAt: 102
+  })
+  assert.equal(repo.getSession('session-1')?.agentName, 'Builder')
+  assert.equal(repo.listSessions()[0]?.agentName, 'Builder')
+  repo.upsertAgents([{
+    ...makeAgent(),
+    name: 'Rescanned Agent',
+    displayName: 'should-not-overwrite',
+    description: 'should-not-overwrite',
+    instructions: 'should-not-overwrite',
+    enabled: true,
+    cwd: 'C:\\changed',
+    lastProbeTs: 200
+  }])
+  assert.deepEqual(repo.getAgent('agent-1'), {
+    ...makeAgent(),
+    name: 'Rescanned Agent',
+    displayName: 'Builder',
+    description: '测试与实现',
+    instructions: '先写测试。',
+    enabled: false,
+    lastProbeTs: 200
+  })
+  db.close()
+
+  const reopened = openDatabase(dbPath)
+  try {
+    assert.deepEqual(new AgentRepo(reopened).getAgent('agent-1'), {
+      ...makeAgent(),
+      name: 'Rescanned Agent',
+      displayName: 'Builder',
+      description: '测试与实现',
+      instructions: '先写测试。',
+      enabled: false,
+      lastProbeTs: 200
+    })
+  } finally {
+    reopened.close()
   }
 }
 
@@ -190,7 +281,8 @@ try {
   assertPersistence()
   assertValidationAndDeduplication()
   assertPlanReplacementIsTransactional()
-  console.log('[agent-task-repo-selftest] PASS —— 任务、步骤、时间线与边界校验通过')
+  assertAgentProfilePersistence()
+  console.log('[agent-task-repo-selftest] PASS —— 任务、步骤、时间线、Agent 档案与边界校验通过')
 } finally {
   for (const dir of directories) rmSync(dir, { recursive: true, force: true })
 }

@@ -9,6 +9,7 @@ import {
   type AgentPermissionDecision,
   type AgentPermissionRequestView,
   type AgentPermissionResolvedEvent,
+  type AgentProfileUpdate,
   type AgentProbeResult,
   type AgentResult,
   type AgentRunResult,
@@ -40,6 +41,9 @@ import {
 const MAX_PROMPT_BYTES = 128 * 1024
 const MAX_TITLE_CHARS = 500
 const MAX_LOCATIONS = 20
+const MAX_AGENT_NAME_CHARS = 80
+const MAX_AGENT_DESCRIPTION_CHARS = 1_000
+const MAX_AGENT_INSTRUCTIONS_CHARS = 16_000
 const DEFAULT_PERMISSION_TIMEOUT_MS = 120_000
 
 export interface AgentServiceOptions {
@@ -107,6 +111,23 @@ function fail<T>(error: unknown): AgentResult<T> {
   return { ok: false, error: errorText(error) }
 }
 
+function agentDisplayName(agent: AgentView): string {
+  return agent.displayName.trim() || agent.name
+}
+
+function promptWithInstructions(agent: AgentView, text: string): string {
+  const instructions = agent.instructions.trim()
+  if (!instructions) return text
+  return [
+    `你正在阳鸽中担任“${agentDisplayName(agent)}”。`,
+    '以下说明由用户为该 Agent 配置，用于约束你的工作方式与输出偏好：',
+    instructions,
+    '',
+    '本轮用户输入：',
+    text
+  ].join('\n')
+}
+
 export class AcpAgentService {
   private readonly store: AgentStore
   private readonly emitRaw: (channel: string, payload: unknown) => void
@@ -139,6 +160,44 @@ export class AcpAgentService {
     } catch (error) {
       this.diagnostics('agent.state', { status: 'failed' }, error)
       return []
+    }
+  }
+
+  async updateAgentProfile(input: AgentProfileUpdate): Promise<AgentResult<AgentView>> {
+    if (this.disposed) return fail('应用正在退出')
+    if (!isPlainObject(input)) return fail('Agent 设置不合法')
+    if (
+      typeof input.id !== 'string' ||
+      input.id.length === 0 ||
+      input.id.length > 64 ||
+      typeof input.displayName !== 'string' ||
+      typeof input.description !== 'string' ||
+      typeof input.instructions !== 'string' ||
+      typeof input.enabled !== 'boolean'
+    ) {
+      return fail('Agent 设置不合法')
+    }
+    if (input.displayName.length > MAX_AGENT_NAME_CHARS) {
+      return fail(`显示名称不能超过 ${MAX_AGENT_NAME_CHARS} 个字符`)
+    }
+    if (input.description.length > MAX_AGENT_DESCRIPTION_CHARS) {
+      return fail(`简介不能超过 ${MAX_AGENT_DESCRIPTION_CHARS} 个字符`)
+    }
+    if (input.instructions.length > MAX_AGENT_INSTRUCTIONS_CHARS) {
+      return fail(`角色提示词不能超过 ${MAX_AGENT_INSTRUCTIONS_CHARS} 个字符`)
+    }
+    if (!this.store.getAgent(input.id)) return fail('Agent 不存在，请重新扫描')
+    try {
+      const updated = this.store.updateAgentProfile({
+        id: input.id,
+        displayName: cleanText(input.displayName, MAX_AGENT_NAME_CHARS).replace(/\s+/g, ' '),
+        description: cleanText(input.description, MAX_AGENT_DESCRIPTION_CHARS),
+        instructions: cleanText(input.instructions, MAX_AGENT_INSTRUCTIONS_CHARS),
+        enabled: input.enabled
+      })
+      return updated ? ok(updated) : fail('Agent 不存在，请重新扫描')
+    } catch (error) {
+      return fail(error)
     }
   }
 
@@ -250,13 +309,14 @@ export class AcpAgentService {
     }
 
     const at = this.now()
+    const displayName = agentDisplayName(agent)
     const view: AgentSessionView = {
       id: this.id(),
       agentId: agent.id,
-      agentName: agent.name,
+      agentName: displayName,
       acpSessionId: null,
       cwd: dir,
-      title: agent.name,
+      title: displayName,
       status: 'starting',
       createdAt: at,
       updatedAt: at
@@ -325,12 +385,17 @@ export class AcpAgentService {
     if (!acpSessionId) return fail('会话尚未就绪')
     if (active.runId) return fail('该会话已有进行中的回复，请先停止')
     if (typeof text !== 'string' || text.trim().length === 0) return fail('消息不能为空')
-    if (Buffer.byteLength(text, 'utf8') > MAX_PROMPT_BYTES) return fail('消息过长')
     if (active.closing) return fail('会话正在关闭')
+
+    const latestAgent = this.store.getAgent(active.agent.id)
+    if (!latestAgent) return fail('Agent 不存在，请重新扫描')
+    if (!latestAgent.enabled) return fail('该 Agent 已停用')
+    const promptText = promptWithInstructions(latestAgent, text)
+    if (Buffer.byteLength(promptText, 'utf8') > MAX_PROMPT_BYTES) return fail('消息过长')
 
     const runId = this.id()
     try {
-      this.store.createRun({ id: runId, sessionId, prompt: text, startedAt: this.now() })
+      this.store.createRun({ id: runId, sessionId, prompt: promptText, startedAt: this.now() })
     } catch (error) {
       return fail(error)
     }
@@ -339,7 +404,7 @@ export class AcpAgentService {
     this.emitStatus(active)
 
     try {
-      const result = await active.client.prompt(acpSessionId, text)
+      const result = await active.client.prompt(acpSessionId, promptText)
       if (active.runId === runId) {
         this.finishRunSafe(runId, { stopReason: result.stopReason, error: null })
       }
@@ -634,6 +699,9 @@ export class AcpAgentService {
     return {
       id,
       name: item.name,
+      displayName: existing?.displayName ?? '',
+      description: existing?.description ?? '',
+      instructions: existing?.instructions ?? '',
       command: item.command,
       args: item.args,
       cwd: existing?.cwd || this.defaultCwd,

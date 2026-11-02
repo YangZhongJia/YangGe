@@ -29,6 +29,9 @@ function agent(id: string): AgentView {
   return {
     id,
     name: id,
+    displayName: '',
+    description: '',
+    instructions: '',
     command: `/agents/${id}`,
     args: [],
     cwd: '',
