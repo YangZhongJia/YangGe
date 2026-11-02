@@ -11,6 +11,14 @@ The established Simplified Chinese documents are the canonical product, protocol
 - [Development guide](../../DEVELOPMENT.en.md) · [简体中文](../../DEVELOPMENT.md)
 - [Third-party notices](../../THIRD_PARTY_NOTICES.en.md) · [简体中文](../../THIRD_PARTY_NOTICES.md)
 
+## AI maintenance governance
+
+| English document | Purpose | Canonical Chinese source |
+|---|---|---|
+| [AGENTS](../../AGENTS.en.md) | Repository routing, stack and the three hard rules (navigation only) | [AGENTS.md](../../AGENTS.md) |
+| [LESSONS](../../LESSONS.en.md) | Evidence-backed lessons queue and promotion rule | [LESSONS.md](../../LESSONS.md) |
+| [Coding standard](coding-standard.md) | Checkable rules grouped by decision moment | [编码规范](../coding-standard.md) |
+
 ## Product and engineering design
 
 | English document | Purpose | Canonical Chinese source |

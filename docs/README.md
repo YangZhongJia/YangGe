@@ -11,6 +11,14 @@
 - [二次开发指南](../DEVELOPMENT.md) · [English](../DEVELOPMENT.en.md)
 - [第三方资源声明](../THIRD_PARTY_NOTICES.md) · [English](../THIRD_PARTY_NOTICES.en.md)
 
+## AI 维护治理
+
+| 中文文档 | 职责 | 英文版本 |
+|---|---|---|
+| [AGENTS.md](../AGENTS.md) | 仓库路由、技术栈与三条红线（只做导航） | [AGENTS](../AGENTS.en.md) |
+| [LESSONS.md](../LESSONS.md) | 带证据的教训队列与晋升规则 | [Lessons](../LESSONS.en.md) |
+| [编码规范](coding-standard.md) | 按决策时刻组织的可检查规则 | [Coding standard](en/coding-standard.md) |
+
 ## 产品与工程设计
 
 | 中文文档 | 职责 | 英文版本 |

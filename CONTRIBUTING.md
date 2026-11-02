@@ -102,6 +102,18 @@ pantry/
 - GitHub Actions `release.yml`：构建 Windows 7 x64、Debian 10 / UOS 20 x64 等产物并上传；推送 `main` 后，全部平台构建与产物版本校验通过时，按 `package.json` 版本创建带注释的 `v<version>` tag 并发布 Release；远端已有该 tag 则跳过发布。推送 `v*` tag 仍会创建或更新 Release，tag 必须与包版本一致；手动触发仅在 `v*` tag 上发布。发布任务串行执行，构建不受限制且不会被取消。
 - 各平台产物仍需在对应真机 / VM 上冒烟验证（Win7 SP1 x64、Debian 10 / UOS 20）。
 
+## PR 停审条件
+
+出现下列改动时，PR 不按普通流程直接合并，先停下单独审查：作者在 PR 描述里补齐「为什么必须、影响哪些平台、如何回滚、如何验证」，审查结论写在评论里。停审不是拒绝。
+
+1. **修改 CI 或打包脚本** —— `.github/workflows/`、`scripts/ci-install-linux.sh`、`package.json` 的 `build` 段、`electron-builder` 配置。CI 是五个平台唯一的发布闸门。
+2. **新增外网请求或 CDN** —— 更新检查、遥测、CDN 字体 / 图标、远程图片、第三方 API。违反纯内网红线，默认拒绝。
+3. **新增依赖或依赖自带 install script** —— 需说明 Node 16 / Electron 22 兼容性、供应链来源，以及为什么现有依赖做不到。
+4. **读取凭据文件** —— `~/.ssh`、token、证书私钥、系统钥匙串；或把凭据写入日志、数据库、导出包。
+5. **引入二进制或混淆产物** —— 预编译 `.node` / `.exe` / `.wasm`、压缩混淆脚本、无法审阅的第三方 chunk。
+
+安全与迁移类改动同时对照 [docs/coding-standard.md](docs/coding-standard.md) 第 7、9 章；已经踩过的坑见 [LESSONS.md](LESSONS.md)。
+
 ## 常见问题
 
 **macOS 上 `npm install` 报 `Electron failed to install correctly`**：解压环节对 zip 内符号链接处理失败（常见于较新的 npm / Node）。处理：进入 `node_modules/electron`，用系统 `ditto -xk ~/Library/Caches/electron/<哈希目录>/electron-v22.3.27-darwin-arm64.zip dist/` 手动解压，再执行 `printf "Electron.app/Contents/MacOS/Electron" > path.txt`（**必须用 printf，路径不能带换行**）。

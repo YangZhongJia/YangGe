@@ -6,6 +6,8 @@ export const DOCUMENT_PAIRS = [
   ['README.md', 'README.en.md'],
   ['CONTRIBUTING.md', 'CONTRIBUTING.en.md'],
   ['DEVELOPMENT.md', 'DEVELOPMENT.en.md'],
+  ['AGENTS.md', 'AGENTS.en.md'],
+  ['LESSONS.md', 'LESSONS.en.md'],
   ['THIRD_PARTY_NOTICES.md', 'THIRD_PARTY_NOTICES.en.md'],
   ['docs/README.md', 'docs/en/README.md'],
   ['docs/handoff.md', 'docs/en/handoff.md'],
@@ -13,6 +15,7 @@ export const DOCUMENT_PAIRS = [
   ['docs/protocol.md', 'docs/en/protocol.md'],
   ['docs/ui-design.md', 'docs/en/ui-design.md'],
   ['docs/tech-design.md', 'docs/en/tech-design.md'],
+  ['docs/coding-standard.md', 'docs/en/coding-standard.md'],
   ['docs/nwt-compat-design.md', 'docs/en/nwt-compat-design.md'],
   ['docs/optimization-plan.md', 'docs/en/optimization-plan.md']
 ]
