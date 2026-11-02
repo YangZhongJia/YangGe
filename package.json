@@ -30,6 +30,7 @@
     "test:screen": "node scripts/remote-view-selftest.cjs",
     "test:bulk-ranges": "node scripts/bulk-ranges-selftest.cjs",
     "test:diagnostics": "node scripts/diagnostics-selftest.cjs",
+    "test:acp": "node scripts/acp-agent-integration.mjs",
     "check:docs": "node scripts/check-doc-locales.mjs",
     "check:version": "node scripts/check-version-consistency.mjs",
     "check:renderer-bundles": "node scripts/check-renderer-bundles.mjs",
