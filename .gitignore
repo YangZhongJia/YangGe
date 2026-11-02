@@ -31,9 +31,9 @@ references/iptux/
 # docs/en/ 是公开英文文档；既有已跟踪中文设计文档继续由 Git 管理。
 docs/*
 !docs/README.md
+!docs/coding-standard.md
 !docs/en/
 !docs/en/**
-AGENTS.md
 CLAUDE.md
 _yangge/
 bchk*/\ndbg*/

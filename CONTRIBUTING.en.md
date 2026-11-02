@@ -135,6 +135,18 @@ Keep `package.json`, the root and top-level versions in `package-lock.json`, the
 
 After a push to `main`, once every platform job and artifact version check succeeds, the workflow creates an annotated `v<version>` tag from `package.json` and publishes a GitHub Release; publication is skipped if that tag already exists remotely. Pushing a `v*` tag still creates or updates the Release, and the tag must match the package version. Manual dispatch publishes only on a `v*` tag. Publishing jobs run serially; builds remain unrestricted and are not canceled. Platform packages still require smoke tests on the target operating systems before a production rollout.
 
+## PR stop conditions
+
+When a PR contains any of the following, it does not merge through the normal path. Stop and review it separately: the author adds "why this is required, which platforms are affected, how to roll back, how it was verified" to the PR description, and the conclusion is recorded in a review comment. A stop is not a rejection.
+
+1. **Changes to CI or packaging scripts** — `.github/workflows/`, `scripts/ci-install-linux.sh`, the `build` section of `package.json`, or `electron-builder` configuration. CI is the only release gate for all five platforms.
+2. **New outbound requests or CDNs** — update checks, telemetry, CDN fonts/icons, remote images, third-party APIs. This breaks the intranet-only rule and is rejected by default.
+3. **New dependencies, or a dependency with an install script** — explain Node 16 / Electron 22 compatibility, supply-chain provenance, and why existing dependencies cannot do the job.
+4. **Reading credential files** — `~/.ssh`, tokens, private certificate keys, the system keychain; or writing credentials into logs, the database, or export packages.
+5. **Binary or obfuscated artifacts** — prebuilt `.node` / `.exe` / `.wasm`, minified/obfuscated scripts, or third-party chunks that cannot be reviewed.
+
+Security and migration changes must also follow chapters 7 and 9 of [docs/coding-standard.md](docs/coding-standard.md); known pitfalls are in [LESSONS.md](LESSONS.md).
+
 ## Troubleshooting
 
 If `npm install` on macOS reports `Electron failed to install correctly`, npm may have mishandled symlinks in the Electron archive. Extract the cached Electron 22.3.27 arm64 zip with `ditto` inside `node_modules/electron`, then write the executable path without a trailing newline:
