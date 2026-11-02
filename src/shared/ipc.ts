@@ -513,6 +513,21 @@ export interface AgentTaskEventView {
   createdAt: number
 }
 
+export interface RepositoryState {
+  repoRoot: string
+  sourceBranch: string
+  baseCommit: string
+  clean: boolean
+}
+
+export interface TaskWorkspace {
+  repoRoot: string
+  sourceBranch: string
+  baseCommit: string
+  worktreePath: string
+  taskBranch: string
+}
+
 /** 对方开始输入（决议 #321）：渲染层按超时收尾展示 */
 export interface TypingEvent {
   peerId: string
