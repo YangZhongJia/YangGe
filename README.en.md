@@ -9,16 +9,16 @@
 <p><b>Chat and transfer files across a LAN, with no Internet connection or server (original Iris indigo UI)</b></p>
 
 > **Fork notice**: YangGe is a secondary-development fork of the open-source [Teahouse](https://github.com/skyjt/teahouse) project (GPL-3.0-only).
-> It goes far beyond a rebrand: rebuilt brand & UI, new features (AI avatar, clipboard send, typing indicator, AI group summary), one-click LAN self-update, multi-platform packaging with CI auto-release — see the [fork content](#fork-contentwhat-yangge-changes-upstream) for the full list. Thanks to the upstream authors.
+> It goes far beyond a rebrand: rebuilt brand & UI, new features (AI avatar, clipboard send, typing indicator, AI group summary, task center, two-player arena, playful avatar interactions), one-click LAN self-update, multi-platform packaging with CI auto-release — see the [fork content](#fork-contentwhat-yangge-changes-upstream) for the full list. Thanks to the upstream authors.
 
 <p>
-  <a href="https://github.com/skyjt/teahouse/releases/latest">
+  <a href="https://github.com/YangZhongJia/YangGe/releases/latest">
     <img src="https://img.shields.io/github/v/release/skyjt/teahouse?style=flat-square&label=latest&color=3D8B6B&logo=github&logoColor=white" alt="Latest release" />
   </a>
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/License-GPL--3.0--only-3D8B6B?style=flat-square" alt="GPL-3.0-only" />
   </a>
-  <a href="https://github.com/skyjt/teahouse/releases">
+  <a href="https://github.com/YangZhongJia/YangGe/releases">
     <img src="https://img.shields.io/badge/platform-Windows%207%2B%20%7C%20Linux%20%7C%20macOS-0366d6?style=flat-square" alt="Supported platforms" />
   </a>
   <img src="https://img.shields.io/badge/Electron-22-47848F?style=flat-square&logo=electron&logoColor=white" alt="Electron 22" />
@@ -46,7 +46,14 @@
 
 ---
 
-Start YangGe on computers connected to the same local network and they discover each other automatically. Open a peer to chat or transfer files directly. No cloud account, central server, telemetry, or Internet access is involved. YangGe is designed for corporate intranets, isolated networks, and laboratories where external connectivity is limited or prohibited.
+Start YangGe on computers connected to the same local network and they discover each other automatically. Open a peer to chat, transfer files, manage tasks, or challenge them to a quick duel. No cloud account, central server, telemetry, or Internet access is involved. YangGe is designed for corporate intranets, isolated networks, and laboratories where external connectivity is limited or prohibited.
+
+## Recent updates (v1.11.0)
+
+- **Two-player duel arena**: invite a contact from the PK menu; both players have 100 HP, pick attack / guard / goofy skill in 10-second rounds, and the result is saved to each player's chat. Disconnects never invent a winner.
+- **Task center**: projects, tasks, start/due dates, reminders, completion badges, and LAN task sharing with offline queueing and delivery status.
+- **Paper plane / ink bomb**: right-click a contact's avatar to send a playful animation. Unlimited, never shakes the window, and can be disabled in Settings.
+- **Agent improvements**: refresh the Windows PATH before scanning, cover more harness install locations, and allow slower ACP cold starts.
 
 ## Why YangGe
 
@@ -57,6 +64,9 @@ Moving a file or sending a short message inside an office network should be effo
 - **Zero-configuration peer discovery** — UDP broadcast discovers online peers on the same subnet automatically. Peers communicate directly without deploying a central server or manually configuring IP addresses.
 - **Cross-subnet communication & LAN self-updates** — Supports manual peer IP addition and CIDR subnet scanning; saved scan ranges are shared among online peers at a low rate; provides a global subnet scan trigger with real-time progress; supports P2P package requests for LAN-based self-updating. Installers self-retain their package (the first upgraded machine becomes the update source), and after pulling a package one click installs silently and restarts.
 - **Messaging & group collaboration** — Direct chats and multi-user discussion groups; text, local images, pasted screenshots, Twemoji SVG graphics, and custom sticker collections; delivery acknowledgments, offline queuing with automatic retry upon reconnection, 2-minute message recall, message forwarding, quote replies with jump-to-source navigation, and @ mentions in groups; synchronized group descriptions (≤200 characters) and announcements (≤1024 characters); window nudge alerts.
+- **Task center** — Organize tasks by project with start and due dates, automatic deadline groups, due-today and overdue reminders, unread badges, and read-only LAN task sharing with offline delivery and revocation.
+- **Paper plane / ink bomb** — Right-click a contact avatar to throw a looping paper plane or an indigo ink bomb. Purely visual, unlimited, and respectful of focus and reduced-motion settings.
+- **Two-player duel arena** — Invite a peer from the PK menu; each side has 100 HP and privately picks attack, guard, or a goofy skill in 10-second rounds. Six rounds, KO or remaining-HP scoring, with results saved to chat.
 - **High-speed P2P file transfers** — Direct TCP peer-to-peer transfers maximize LAN physical bandwidth; supports single files, multi-file selections, and full directory trees; resume interrupted transfers and review comprehensive transfer history; 24-hour expiration window closes outdated transfers automatically.
 - **Shared file cabinet (third main tab)** — Built natively into the third tab of the main window; publish a local folder with configurable global permissions (disabled, read-only, read-write) and granular per-peer grants; browse colleagues' shared cabinets with breadcrumb navigation and pagination; multi-select download and save-as; drag-and-drop upload of files or folders into dedicated subdirectories to avoid overwriting existing data; aggregate recent upload activity.
 - **Standalone image viewer & offline OCR** — Independent image viewer with smooth zooming, double-click mouse-anchored zooming, rotation, and window centering; browse chat image history seamlessly using previous/next navigation buttons; built-in PaddleOCR (PP-OCRv6 tiny + onnxruntime-web WASM) fully offline text recognition engine; directly select, drag across lines, and copy text on top of the original image, plus one-click copy of all recognized text; session-level in-memory caching restores the text selection layer instantly.
@@ -81,6 +91,9 @@ Moving a file or sending a short message inside an office network should be effo
 - **AI group summary**: right-click to summarize today's group messages; local dialog only, never posted to the group.
 - **Clipboard send**: one-click cross-machine clipboard text sharing.
 - **Typing indicator**: live "typing…" in single chats.
+- **Task center**: projects, tasks, deadline grouping, due/overdue reminders, badges, and read-only LAN sharing with offline retry.
+- **Two-player duel arena**: invite, accept, private move selection, 100 HP, six 10-second rounds, KO/score results saved to chat.
+- **Paper plane / ink bomb interactions**: playful avatar-to-avatar effects with reduced-motion fallback.
 - **One-click LAN self-update**: completes upstream decision #166 — installers self-retain to become update sources; after pulling a package, one click installs silently and restarts. Zero servers, zero internet.
 
 **Fixes & engineering**
@@ -88,7 +101,7 @@ Moving a file or sending a short message inside an office network should be effo
 - WeChat-style notification policy: a focused window suppresses toasts only for the conversation you are looking at.
 - Installers add firewall rules automatically (idempotent, zero UAC on silent upgrades), fixing screen-assist timeouts caused by inbound blocks after rebranding.
 - Restored macOS (arm64/x64 dmg) and Linux (deb/AppImage) packaging; five-platform CI builds and tag-triggered releases with checksums.
-- 1033+ automated tests maintained; key chains (self-update, notifications, AI, clipboard, typing) covered by unit and real-instance E2E tests.
+- 1247 automated tests maintained; key chains (self-update, notifications, AI, clipboard, typing) covered by unit and real-instance E2E tests.
 
 ## Platform support
 
@@ -125,7 +138,7 @@ Packages are built from this repository via `npm run dist:win` and placed under 
 
 ## Local agent coding collaboration
 
-The Agent page scans the local PATH and common installation directories, and can also register a manually selected ACP executable. Base CLIs and connectable ACP agents are shown separately: when Codex CLI, Claude Code, Pi, OpenCode, Gemini CLI, GitHub Copilot, or another local CLI is installed without its ACP adapter, YangGe shows the required command instead of treating the plain CLI as connectable. Only implementations that complete the ACP handshake can create sessions. YangGe never installs, signs in to, or downloads an agent automatically.
+The Agent page scans the local PATH and common installation directories, and can also register a manually selected ACP executable. The first time it opens with no stored scan result, it scans automatically. On Windows every scan re-reads the user and machine PATH from the registry, so a CLI installed or upgraded after YangGe started is found without restarting the app; handshakes run with a fixed concurrency cap (two at a time) so slower machines are not misreported as failing when every candidate cold-starts at once. Base CLIs and connectable ACP agents are shown separately: when Codex CLI, Claude Code, Pi, OpenCode, Gemini CLI, GitHub Copilot, or another local CLI is installed without its ACP adapter, YangGe shows the required command instead of treating the plain CLI as connectable. Only implementations that complete the ACP handshake can create sessions. A failed probe reports the executable name and error; CLIs installed in a custom directory can still be added with “Add ACP executable…”. YangGe never installs, signs in to, or downloads an agent automatically.
 
 Each detected agent can have a display name, local description, role prompt, and enabled state. The display name, description, and enabled state stay on this machine and drive the interface and task selection. YangGe sends the role prompt with each single-agent message or coordinated task step to the model provider configured by that CLI. The prompt grants no tool permission and is not an operating-system sandbox. An agent whose enabled state is off cannot start a new session or join a task team, and rescanning preserves these user settings.
 

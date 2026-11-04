@@ -16,6 +16,7 @@ interface AgentRow {
   display_name: string
   description: string
   instructions: string
+  model: string
   command: string
   args: string
   cwd: string
@@ -82,6 +83,7 @@ function toAgentView(row: AgentRow): AgentView {
     displayName: row.display_name,
     description: row.description,
     instructions: row.instructions,
+    model: row.model ?? '',
     command: row.command,
     args: parseArgs(row.args),
     cwd: row.cwd,
@@ -114,6 +116,8 @@ export class AgentRepo {
   private readonly selectAgentStmt: DatabaseT.Statement
   private readonly upsertAgentStmt: DatabaseT.Statement
   private readonly setEnabledStmt: DatabaseT.Statement
+  private readonly deleteAgentStmt: DatabaseT.Statement
+  private readonly reassignAgentSessionsStmt: DatabaseT.Statement
   private readonly updateAgentProfileStmt: DatabaseT.Statement
   private readonly touchAgentStmt: DatabaseT.Statement
   private readonly insertSessionStmt: DatabaseT.Statement
@@ -133,8 +137,8 @@ export class AgentRepo {
     this.upsertAgentStmt = db.prepare(`
       INSERT INTO agent_agents (
         id, name, command, args, cwd, version, source, probe_error, env_names,
-        enabled, created_ts, last_used_ts, last_probe_ts
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, ?, ?)
+        model, enabled, created_ts, last_used_ts, last_probe_ts
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         name = excluded.name,
         command = excluded.command,
@@ -145,12 +149,15 @@ export class AgentRepo {
         last_probe_ts = excluded.last_probe_ts
     `)
     this.setEnabledStmt = db.prepare('UPDATE agent_agents SET enabled = ? WHERE id = ?')
+    this.deleteAgentStmt = db.prepare('DELETE FROM agent_agents WHERE id = ?')
+    this.reassignAgentSessionsStmt = db.prepare('UPDATE agent_sessions SET agent_id = ? WHERE agent_id = ?')
     this.updateAgentProfileStmt = db.prepare(`
       UPDATE agent_agents SET
         display_name = ?,
         description = ?,
         instructions = ?,
-        enabled = ?
+        enabled = ?,
+        model = ?
       WHERE id = ?
     `)
     this.touchAgentStmt = db.prepare('UPDATE agent_agents SET last_used_ts = ? WHERE id = ?')
@@ -215,6 +222,7 @@ export class AgentRepo {
           agent.version,
           agent.source,
           agent.probeError,
+          agent.model,
           agent.enabled ? 1 : 0,
           agent.createdAt,
           agent.lastUsedAt,
@@ -229,12 +237,23 @@ export class AgentRepo {
     this.setEnabledStmt.run(enabled ? 1 : 0, id)
   }
 
+  /** 扫描对账：删除被更优入口取代或磁盘上已不存在的自动发现条目（手动 Agent 不由此删除）。 */
+  deleteAgent(id: string): void {
+    this.deleteAgentStmt.run(id)
+  }
+
+  /** 扫描对账迁移：把旧 Agent 的历史会话挂到修正后的新 Agent 上，保留聊天记录。 */
+  reassignAgentSessions(fromId: string, toId: string): void {
+    this.reassignAgentSessionsStmt.run(toId, fromId)
+  }
+
   updateAgentProfile(input: AgentProfileUpdate): AgentView | null {
     this.updateAgentProfileStmt.run(
       input.displayName,
       input.description,
       input.instructions,
       input.enabled ? 1 : 0,
+      input.model,
       input.id
     )
     return this.getAgent(input.id)
@@ -351,6 +370,8 @@ export type AgentStore = Pick<
   | 'getAgent'
   | 'upsertAgents'
   | 'setEnabled'
+  | 'deleteAgent'
+  | 'reassignAgentSessions'
   | 'updateAgentProfile'
   | 'touchAgent'
   | 'createSession'

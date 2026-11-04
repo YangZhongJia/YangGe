@@ -105,6 +105,7 @@ UDP messages and framed TCP control messages use one envelope:
 | `peers` | unicast | UDP | Known-peer gossip summary |
 | `scan-ranges` | unicast | UDP | Low-rate CIDR configuration candidates |
 | `msg` | unicast | UDP/TCP | User message kinds |
+| `task` | unicast | UDP/TCP | Personal/shared task snapshot or revocation (`tsk1`, see 7.5) |
 | `ack` | unicast | UDP/TCP | Reliable-control acknowledgement |
 | `file-ctl` | unicast | UDP | Transfer offer/accept/decline/cancel/direct |
 | `update` | unicast | UDP/TCP | Reliable peer-update request |
@@ -206,6 +207,16 @@ For reinvitation catch-up (#51), a receiver absent from its local member list ma
 ### 7.4 Custom avatars
 
 Profiles and groups announce a lowercase 64-character SHA-256 hash. Peers advertising `av1` may exchange `avatar` request/data/miss operations. Data is bounded to a validated static 192×192 WebP. Managed storage verifies format, size, and hash before atomic placement. A group avatar may fail over among online group members; `miss` is best-effort to avoid old-client ACK behavior.
+
+### 7.5 Personal and shared task records (tsk1)
+
+- Capability `CAPS.taskSharing = "tsk1"`. Task payloads are sent only to contacts advertising it; nodes without the capability receive and display nothing.
+- `TaskSyncPayload` has two variants:
+  - `{op:"upsert", toNodeId, task, project}` carries a complete task snapshot (title, description, project, start/due dates, status, revision) and a project snapshot. `task.ownerNodeId` must equal `project.ownerNodeId` and the envelope `from`.
+  - `{op:"revoke", toNodeId, ownerNodeId, taskId, revision}` revokes sharing; the receiver hides the copy but keeps local history.
+- A receiver requires `toNodeId` to be itself, `from` to be the owner, a known contact advertising `tsk1`, and a strictly higher revision. Duplicate or stale packets are ignored idempotently. Revocation applies when its revision is at least the local one; a later, higher-revision upsert can reactivate the copy.
+- Delivery reuses the reliable `msg` channel and offline retry. Sharing follows the existing unencrypted, unsigned LAN trust model. Revocation cannot force deletion of data already saved by a receiver, and task payloads never travel through group chat or agent channels.
+- Transport details: `task` is part of the Messenger reliable control set — per-envelope UDP ACK with 1s/2s/4s backoff retries; envelopes above the single-packet UDP limit (task descriptions allow 8000B and often exceed it) or short packets unacked after all rounds fall back to a TCP control frame. Only then is the peer marked offline and the envelope persisted for replay. Replay marks the payload `resend:true`, so the `task` payload whitelist must accept that field; otherwise replayed tasks are dropped by the receiver as `bad-payload`.
 
 ## 8. File transfer
 

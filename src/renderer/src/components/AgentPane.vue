@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { NButton, NCheckbox, NInput, NSelect } from 'naive-ui'
+import PantryIcon from './PantryIcon.vue'
 import type {
+  AgentModelOption,
   AgentPermissionDecision,
   AgentSessionView,
   AgentTaskCreateInput,
@@ -18,7 +20,10 @@ const scrollEl = ref<HTMLElement | null>(null)
 
 const showCreate = ref(false)
 const repoPath = ref('')
+const taskMode = ref<'git' | 'plain'>('git')
 const taskPrompt = ref('')
+const taskChatText = ref('')
+const taskComposerEl = ref<HTMLElement | null>(null)
 const coordinatorAgentId = ref<string | null>(null)
 const teamAgentIds = ref<string[]>([])
 const applyConfirmed = ref(false)
@@ -27,7 +32,32 @@ const settingsAgentId = ref<string | null>(null)
 const settingsDisplayName = ref('')
 const settingsDescription = ref('')
 const settingsInstructions = ref('')
+const settingsModel = ref<string | null>('')
 const settingsEnabled = ref(true)
+const settingsModelState = computed(
+  () =>
+    (settingsAgentId.value ? store.agentModels[settingsAgentId.value] : undefined) ?? {
+      loading: false,
+      models: [] as AgentModelOption[],
+      currentModel: '',
+      error: ''
+    }
+)
+const settingsModelOptions = computed(() => {
+  const options = [{ label: tr('默认（CLI 默认模型）'), value: '' }]
+  const seen = new Set<string>()
+  for (const model of settingsModelState.value.models) {
+    if (seen.has(model.id)) continue
+    seen.add(model.id)
+    options.push({
+      label: model.name && model.name !== model.id ? `${model.name}（${model.id}）` : model.id,
+      value: model.id
+    })
+  }
+  const current = (settingsModel.value ?? '').trim()
+  if (current.length > 0 && !seen.has(current)) options.push({ label: current, value: current })
+  return options
+})
 const settingsError = ref('')
 const settingsBusy = ref(false)
 
@@ -104,6 +134,23 @@ function taskStatus(status: AgentTaskStatus): string {
   return tr(labels[status])
 }
 
+function stepRoleLabel(role: string): string {
+  if (role === 'research') return tr('调研')
+  if (role === 'implement') return tr('实现')
+  if (role === 'review') return tr('审查')
+  return role
+}
+
+function stepStatusLabel(status: string): string {
+  if (status === 'queued') return tr('待执行')
+  if (status === 'running') return tr('执行中')
+  if (status === 'awaiting_approval') return tr('待确认')
+  if (status === 'completed') return tr('已完成')
+  if (status === 'failed') return tr('已失败')
+  if (status === 'cancelled') return tr('已取消')
+  return status
+}
+
 function agentName(agentId: string): string {
   const agent = store.agents.find((item) => item.id === agentId)
   return agent ? agentLabel(agent) : agentId
@@ -145,7 +192,9 @@ function openAgentSettings(agent: AgentView): void {
   settingsDisplayName.value = agent.displayName
   settingsDescription.value = agent.description
   settingsInstructions.value = agent.instructions
+  settingsModel.value = agent.model
   settingsEnabled.value = agent.enabled
+  void store.loadAgentModels(agent.id)
   settingsError.value = ''
   showAgentSettings.value = true
 }
@@ -164,6 +213,7 @@ async function saveAgentSettings(): Promise<void> {
     displayName: settingsDisplayName.value.trim(),
     description: settingsDescription.value.trim(),
     instructions: settingsInstructions.value.trim(),
+    model: (settingsModel.value ?? '').trim(),
     enabled: settingsEnabled.value
   })
   settingsBusy.value = false
@@ -197,6 +247,8 @@ async function respondTaskPermission(decision: AgentPermissionDecision): Promise
 function openCreate(): void {
   showCreate.value = true
   taskPrompt.value = ''
+  repoPath.value = ''
+  taskMode.value = 'git'
   store.taskError = ''
   if (!coordinatorAgentId.value) coordinatorAgentId.value = coordinatorOptions.value[0]?.value ?? null
   teamAgentIds.value = teamAgentIds.value.filter((id) => id !== coordinatorAgentId.value)
@@ -219,13 +271,24 @@ async function pickRepository(): Promise<void> {
   if (selected) repoPath.value = selected
 }
 
+async function sendTaskChat(): Promise<void> {
+  const task = activeTask.value
+  const text = taskChatText.value.trim()
+  if (!task || !text || task.status === 'cancelled' || store.taskBusy) return
+  taskChatText.value = ''
+  await store.chatTask(task.id, text)
+  await nextTick()
+  taskComposerEl.value?.scrollIntoView({ block: 'nearest' })
+}
+
 async function createTask(): Promise<void> {
   if (!canCreateTask.value || !coordinatorAgentId.value) return
   const input: AgentTaskCreateInput = {
     repoPath: repoPath.value.trim(),
     prompt: taskPrompt.value.trim(),
     coordinatorAgentId: coordinatorAgentId.value,
-    teamAgentIds: [...teamAgentIds.value]
+    teamAgentIds: [...teamAgentIds.value],
+    mode: taskMode.value
   }
   await store.createTask(input)
   if (!store.taskError) showCreate.value = false
@@ -266,23 +329,25 @@ watch(
   scrollToEnd
 )
 
-onMounted(() => {
-  void store.init()
+onMounted(async () => {
   void store.initTasks()
+  await store.init().catch(() => null)
+  // 本次运行还没扫过、库里也没有 Agent 时自动扫一次：其他人刚装好阳鸽时不一定
+  // 知道要先点「扫描」，否则面板会一直停在空列表。
+  if (store.scannedAt === 0 && store.agents.length === 0 && !store.scanning) void store.scan()
 })
 </script>
 
 <template>
   <div class="agent-app">
     <nav class="mode-rail" :aria-label="tr('Agent 模式')">
-      <div class="mode-mark">YG</div>
       <button
         type="button"
         class="mode-button"
         :class="{ active: mode === 'tasks' }"
         @click="mode = 'tasks'"
       >
-        <span class="mode-glyph">◎</span>
+        <PantryIcon name="list" :size="18" />
         <span>{{ tr('协作任务') }}</span>
       </button>
       <button
@@ -291,7 +356,7 @@ onMounted(() => {
         :class="{ active: mode === 'chat' }"
         @click="mode = 'chat'"
       >
-        <span class="mode-glyph">···</span>
+        <PantryIcon name="chat" :size="18" />
         <span>{{ tr('单聊') }}</span>
       </button>
     </nav>
@@ -300,16 +365,12 @@ onMounted(() => {
       <aside class="agent-side task-side">
         <div class="side-head">
           <div>
-            <p class="eyebrow">AGENT TEAM</p>
             <h2>{{ tr('协作任务') }}</h2>
           </div>
           <NButton size="tiny" type="primary" @click="openCreate">
             {{ tr('新建任务') }}
           </NButton>
         </div>
-        <p class="side-hint">
-          {{ tr('你指定协调者与团队。协调者规划，实现与审查 Agent 在独立 worktree 中接力完成。') }}
-        </p>
 
         <div v-if="store.tasks.length === 0" class="side-empty task-empty">
           <strong>{{ tr('还没有协作任务') }}</strong>
@@ -331,17 +392,18 @@ onMounted(() => {
         <div class="task-agent-strip">
           <div class="strip-head">
             <span>{{ tr('本机 Agent') }}</span>
-            <button type="button" :disabled="store.scanning" @click="scan">
+            <NButton size="tiny" secondary :loading="store.scanning" @click="scan">
+              <PantryIcon name="refresh" :size="14" />
               {{ tr('扫描') }}
-            </button>
+            </NButton>
           </div>
           <div v-if="store.agents.length === 0" class="side-empty">
             {{ tr('尚未发现可连接 Agent。') }}
           </div>
           <div v-for="agent in store.agents" :key="agent.id" class="mini-agent">
             <span class="agent-dot" :data-ready="!agent.probeError"></span>
-            <span>{{ agentLabel(agent) }}</span>
-            <small>{{ agent.version || tr('版本未知') }}</small>
+            <span class="mini-agent-name" :title="agentLabel(agent)">{{ agentLabel(agent) }}</span>
+            <small class="mini-agent-version" :title="agent.version || tr('版本未知')">{{ agent.version || tr('版本未知') }}</small>
             <button
               type="button"
               class="mini-settings"
@@ -371,6 +433,10 @@ onMounted(() => {
           <span>{{ store.taskError }}</span>
           <button type="button" :aria-label="tr('关闭提示')" @click="store.taskError = ''">×</button>
         </div>
+        <div v-if="store.error" class="error-bar" role="alert">
+          <span>{{ store.error }}</span>
+          <button type="button" :aria-label="tr('关闭提示')" @click="store.error = ''">×</button>
+        </div>
 
         <div v-if="showCreate" class="task-screen create-screen">
           <header class="screen-head">
@@ -381,9 +447,13 @@ onMounted(() => {
             <NButton size="small" quaternary @click="closeCreate">{{ tr('取消') }}</NButton>
           </header>
 
-          <div class="notice notice-warn">
-            <strong>{{ tr('首版只处理 Git 项目编码任务') }}</strong>
-            <span>{{ tr('仓库必须干净，未提交改动需先提交或暂存。阳鸽不会自动暂存、修改或丢弃你的工作区。') }}</span>
+          <div class="notice notice-warn" v-if="taskMode === 'git'">
+            <strong>{{ tr('Git 仓库模式') }}</strong>
+            <span>{{ tr('仓库必须干净，未提交改动需先提交或暂存。Agent 在隔离 worktree 中工作，改动经你确认后才应用。') }}</span>
+          </div>
+          <div class="notice" v-else>
+            <strong>{{ tr('普通目录模式') }}</strong>
+            <span>{{ tr('Agent 直接在该目录内工作，改动实时生效且没有版本回滚；请确保目录可修改。') }}</span>
           </div>
           <div class="notice">
             <strong>{{ tr('模型连接说明') }}</strong>
@@ -401,12 +471,39 @@ onMounted(() => {
           </label>
 
           <div class="field">
-            <span>{{ tr('Git 仓库') }}</span>
-            <div class="path-picker">
-              <NInput :value="repoPath" readonly :placeholder="tr('选择一个 Git 仓库')" />
-              <NButton secondary @click="pickRepository">{{ tr('选择 Git 仓库') }}</NButton>
+            <div class="workdir-head">
+              <span>{{ tr('工作目录') }}</span>
+              <div class="mode-switch">
+                <button
+                  type="button"
+                  :class="{ on: taskMode === 'git' }"
+                  @click="taskMode = 'git'"
+                >
+                  {{ tr('Git 仓库') }}
+                </button>
+                <button
+                  type="button"
+                  :class="{ on: taskMode === 'plain' }"
+                  @click="taskMode = 'plain'"
+                >
+                  {{ tr('普通目录') }}
+                </button>
+              </div>
             </div>
-            <small>{{ tr('任务会在阳鸽管理的 worktree 中执行，源分支保持不动。') }}</small>
+            <div class="path-picker">
+              <NInput
+                :value="repoPath"
+                readonly
+                :placeholder="taskMode === 'git' ? tr('选择一个 Git 仓库') : tr('选择一个文件夹')"
+              />
+              <NButton secondary @click="pickRepository">
+                {{ taskMode === 'git' ? tr('选择 Git 仓库') : tr('选择目录') }}
+              </NButton>
+            </div>
+            <small v-if="taskMode === 'git'">
+              {{ tr('任务会在阳鸽管理的 worktree 中执行，源分支保持不动。') }}
+            </small>
+            <small v-else>{{ tr('Agent 直接在此目录内工作，改动实时生效。') }}</small>
           </div>
 
           <div class="role-grid">
@@ -431,7 +528,11 @@ onMounted(() => {
                   {{ agent.label }}
                 </NCheckbox>
               </div>
-              <small>{{ tr('至少选择两个 Agent；实现者与最终审查者必须不同。') }}</small>
+              <small>
+                {{ taskMode === 'git'
+                  ? tr('至少选择两个 Agent；实现者与最终审查者必须不同。')
+                  : tr('至少选择两个 Agent；建议包含审查角色，改动无法整体回滚。') }}
+              </small>
             </div>
           </div>
 
@@ -451,8 +552,8 @@ onMounted(() => {
         <div v-else-if="activeTask && activeTaskDetail" class="task-screen task-room">
           <header class="room-head">
             <div class="room-title">
-              <p class="eyebrow">{{ activeTask.id }}</p>
-              <h1>{{ activeTask.prompt }}</h1>
+              <p class="eyebrow" :title="activeTask.id">{{ activeTask.id.slice(0, 8) }}</p>
+              <h1 :title="activeTask.prompt">{{ activeTask.prompt }}</h1>
               <span class="task-status large" :data-status="activeTask.status">
                 {{ taskStatus(activeTask.status) }}
               </span>
@@ -522,16 +623,22 @@ onMounted(() => {
             <section class="room-content">
               <div class="meta-panel">
                 <div>
-                  <span>{{ tr('源仓库') }}</span>
+                  <span>{{ activeTask.mode === 'plain' ? tr('工作目录') : tr('源仓库') }}</span>
                   <code :title="activeTask.repoPath">{{ shortPath(activeTask.repoPath) }}</code>
                 </div>
-                <div>
-                  <span>{{ tr('分支 / 基线') }}</span>
-                  <code>{{ activeTask.sourceBranch }} @ {{ activeTask.baseCommit.slice(0, 10) }}</code>
-                </div>
-                <div>
-                  <span>{{ tr('任务 worktree') }}</span>
-                  <code>{{ activeTask.taskBranch }}</code>
+                <template v-if="activeTask.mode === 'git'">
+                  <div>
+                    <span>{{ tr('分支 / 基线') }}</span>
+                    <code>{{ activeTask.sourceBranch }} @ {{ activeTask.baseCommit.slice(0, 10) }}</code>
+                  </div>
+                  <div>
+                    <span>{{ tr('任务 worktree') }}</span>
+                    <code>{{ activeTask.taskBranch }}</code>
+                  </div>
+                </template>
+                <div v-else>
+                  <span>{{ tr('模式') }}</span>
+                  <strong>{{ tr('普通目录 · 改动直接生效') }}</strong>
                 </div>
                 <div>
                   <span>{{ tr('协调者') }}</span>
@@ -564,7 +671,11 @@ onMounted(() => {
                     <span class="step-index">{{ step.ordinal + 1 }}</span>
                     <div>
                       <strong>{{ step.title }}</strong>
-                      <span>{{ step.role }} · {{ agentName(step.agentId) }} · {{ step.status }}</span>
+                      <span class="step-meta">
+                        <span>{{ stepRoleLabel(step.role) }}</span>
+                        <span>{{ agentName(step.agentId) }}</span>
+                        <span class="step-state" :data-status="step.status">{{ stepStatusLabel(step.status) }}</span>
+                      </span>
                       <small>{{ step.expectedOutput }}</small>
                     </div>
                   </li>
@@ -590,20 +701,55 @@ onMounted(() => {
                     :key="event.id"
                     class="timeline-item"
                     :data-kind="event.kind"
+                    :class="{ 'chat-item': event.kind === 'chat.user' || event.kind === 'chat.coordinator' }"
                   >
-                    <div class="timeline-head">
-                      <span>{{ event.kind }}</span>
-                      <span>{{ event.agentId ? agentName(event.agentId) : tr('系统') }}</span>
-                      <time>{{ formatTime(event.createdAt) }}</time>
-                    </div>
-                    <details v-if="event.kind.endsWith('_request')">
-                      <summary>{{ tr('查看交给 Agent 的完整任务') }}</summary>
-                      <pre>{{ event.text }}</pre>
-                    </details>
-                    <p v-else>{{ event.text }}</p>
+                    <template v-if="event.kind === 'chat.user'">
+                      <div class="chat-bubble user">{{ event.text }}</div>
+                    </template>
+                    <template v-else-if="event.kind === 'chat.coordinator'">
+                      <div class="chat-bubble coordinator">
+                        <span class="chat-author">
+                          {{ event.agentId ? agentName(event.agentId) : tr('统筹者') }} · {{ formatTime(event.createdAt) }}
+                        </span>
+                        <p>{{ event.text }}</p>
+                      </div>
+                    </template>
+                    <template v-else>
+                      <div class="timeline-head">
+                        <span>{{ event.kind }}</span>
+                        <span>{{ event.agentId ? agentName(event.agentId) : tr('系统') }}</span>
+                        <time>{{ formatTime(event.createdAt) }}</time>
+                      </div>
+                      <details v-if="event.kind.endsWith('_request')">
+                        <summary>{{ tr('查看交给 Agent 的完整任务') }}</summary>
+                        <pre>{{ event.text }}</pre>
+                      </details>
+                      <p v-else>{{ event.text }}</p>
+                    </template>
                   </article>
                 </div>
               </section>
+
+              <div ref="taskComposerEl" class="task-chat-composer">
+                <NInput
+                  v-model:value="taskChatText"
+                  type="textarea"
+                  :autosize="{ minRows: 2, maxRows: 5 }"
+                  :placeholder="tr('在群里发消息给统筹者…')"
+                  @keydown.enter.exact.prevent="sendTaskChat"
+                />
+                <div class="composer-actions">
+                  <small>{{ tr('Enter 发送，Shift+Enter 换行') }}</small>
+                  <NButton
+                    type="primary"
+                    :disabled="!taskChatText.trim() || activeTask.status === 'cancelled'"
+                    :loading="store.taskBusy"
+                    @click="sendTaskChat"
+                  >
+                    {{ tr('发送') }}
+                  </NButton>
+                </div>
+              </div>
             </section>
 
             <aside class="room-aside">
@@ -653,56 +799,73 @@ onMounted(() => {
         </div>
 
         <div v-else class="transcript-empty task-welcome">
-          <p>{{ tr('从一个 Git 仓库开始，让 Agent 团队先规划、再实现和审查。') }}</p>
+          <p>{{ tr('选择一个 Git 仓库或普通文件夹，让 Agent 团队规划、实现并审查。') }}</p>
           <NButton type="primary" @click="openCreate">{{ tr('新建协作任务') }}</NButton>
         </div>
       </section>
     </template>
 
     <template v-else-if="mode === 'chat'">
-      <aside class="agent-side">
-        <div class="side-head">
-          <h2>{{ tr('本机 Agent') }}</h2>
+      <aside class="agent-side chat-side">
+        <div class="agent-library-head">
+          <div class="agent-library-title">
+            <h2>{{ tr('本机 Agent') }}</h2>
+            <span class="agent-count">{{ store.agents.length }}</span>
+          </div>
           <NButton size="tiny" secondary :loading="store.scanning" @click="scan">
+            <PantryIcon name="refresh" :size="14" />
             {{ tr('扫描') }}
           </NButton>
         </div>
-        <p class="side-hint">
-          {{ tr('扫描本机 CLI 与 ACP 适配器，不会联网安装；只有适配器握手成功后才可连接。') }}
-        </p>
-        <button type="button" class="manual-link" @click="pickCommand">
-          {{ tr('手动指定可执行文件…') }}
-        </button>
+        <NButton class="add-agent-button" type="primary" secondary block @click="pickCommand">
+          <PantryIcon name="plus" :size="16" />
+          {{ tr('添加 ACP 可执行文件…') }}
+        </NButton>
 
-        <div v-if="store.agents.length === 0" class="side-empty">
-          {{ tr('尚未发现 Agent。点击「扫描」或手动选择 CLI。') }}
+        <div v-if="store.agents.length === 0" class="agent-empty">
+          <strong>{{ tr('还没有本机 Agent') }}</strong>
+          <span>{{ tr('扫描已安装的 ACP 工具，或手动添加可执行文件。') }}</span>
         </div>
-        <article v-for="agent in store.agents" :key="agent.id" class="agent-card">
-          <div class="agent-name">{{ agentLabel(agent) }}</div>
-          <div class="agent-meta">
-            <span>{{ agent.version || tr('版本未知') }}</span>
-            <span v-if="!agent.enabled">{{ tr('已停用') }}</span>
-            <span v-if="agent.instructions.trim()">{{ tr('已配置提示词') }}</span>
-            <span v-if="agent.probeError" class="probe-error" :title="agent.probeError">
-              {{ tr('探测失败') }}
-            </span>
-          </div>
-          <p v-if="agent.description.trim()" class="agent-description">
-            {{ agent.description }}
-          </p>
-          <div class="agent-path" :title="agent.command">{{ shortPath(agent.command) }}</div>
-          <div class="agent-actions">
-            <NButton size="tiny" type="primary" ghost @click="create(agent)">
-              {{ tr('新建会话') }}
-            </NButton>
-            <NButton size="tiny" quaternary @click="pickCwdAndCreate(agent)">
-              {{ tr('选择目录') }}
-            </NButton>
-            <NButton size="tiny" quaternary @click="openAgentSettings(agent)">
-              {{ tr('设置') }}
-            </NButton>
-          </div>
-        </article>
+        <div v-else class="agent-list">
+          <article v-for="agent in store.agents" :key="agent.id" class="agent-card">
+            <div class="agent-card-head">
+              <span class="agent-dot" :data-ready="!agent.probeError && agent.enabled"></span>
+              <div class="agent-identity">
+                <strong class="agent-name">{{ agentLabel(agent) }}</strong>
+                <span class="agent-version" :class="{ 'probe-error': agent.probeError }" :title="agent.probeError">
+                  {{ agent.probeError ? tr('探测失败') : agent.version || tr('版本未知') }}
+                </span>
+              </div>
+              <button
+                type="button"
+                class="agent-settings-button"
+                :title="tr('Agent 设置')"
+                :aria-label="tr('Agent 设置')"
+                @click="openAgentSettings(agent)"
+              >
+                <PantryIcon name="settings" :size="15" />
+              </button>
+            </div>
+            <div class="agent-path" :title="agent.command">{{ shortPath(agent.command) }}</div>
+            <p v-if="agent.description.trim()" class="agent-description">
+              {{ agent.description }}
+            </p>
+            <div class="agent-badges">
+              <span v-if="!agent.enabled" class="agent-badge">{{ tr('已停用') }}</span>
+              <span v-if="agent.model" class="agent-badge model-badge" :title="agent.model">{{ agent.model }}</span>
+              <span v-if="agent.instructions.trim()" class="agent-badge">{{ tr('已配置提示词') }}</span>
+            </div>
+            <div class="agent-actions">
+              <NButton size="small" type="primary" secondary @click="create(agent)">
+                {{ tr('新建会话') }}
+              </NButton>
+              <NButton size="small" quaternary @click="pickCwdAndCreate(agent)">
+                {{ tr('选择目录') }}
+              </NButton>
+            </div>
+          </article>
+        </div>
+
         <div
           v-for="client in store.clients.filter((item) => !item.adapterReady)"
           :key="client.id"
@@ -715,6 +878,7 @@ onMounted(() => {
 
         <div class="side-head sessions-head">
           <h2>{{ tr('会话') }}</h2>
+          <span class="agent-count">{{ store.sessions.length }}</span>
         </div>
         <div v-if="store.sessions.length === 0" class="side-empty">{{ tr('还没有 Agent 会话') }}</div>
         <button
@@ -830,7 +994,21 @@ onMounted(() => {
               :maxlength="80"
               :placeholder="settingsAgent.name"
             />
-            <small>{{ tr('用于识别和展示；留空时使用扫描到的名称。') }}</small>
+          </label>
+
+          <label class="settings-field">
+            <span>{{ tr('模型') }}</span>
+            <NSelect
+              v-model:value="settingsModel"
+              :options="settingsModelOptions"
+              :loading="settingsModelState.loading"
+              filterable
+              clearable
+              :placeholder="tr('默认（CLI 默认模型）')"
+            />
+            <small v-if="settingsModelState.error" class="model-error">
+              {{ settingsModelState.error }}
+            </small>
           </label>
 
           <label class="settings-field">
@@ -842,7 +1020,6 @@ onMounted(() => {
               :maxlength="1000"
               :placeholder="tr('说明这个 Agent 擅长什么、适合承担什么角色。')"
             />
-            <small>{{ tr('只在本机界面展示，不会自动发送给模型。') }}</small>
           </label>
 
           <label class="settings-field">
@@ -854,9 +1031,6 @@ onMounted(() => {
               :maxlength="16000"
               :placeholder="tr('例如：优先编写测试，修改前先说明影响范围，不要改动无关文件。')"
             />
-            <small>
-              {{ tr('发送单聊消息和分派协作步骤时，阳鸽会把它与用户输入一起交给该 Agent。') }}
-            </small>
           </label>
 
           <NCheckbox v-model:checked="settingsEnabled">
@@ -978,18 +1152,6 @@ onMounted(() => {
   border-right: 1px solid var(--line);
 }
 
-.mode-mark {
-  margin: 0 4px 18px;
-  padding: 8px 0;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.18em;
-  text-align: center;
-  color: var(--primary);
-  background: var(--primary-weak);
-  border: 1px solid var(--primary-border);
-  border-radius: 10px;
-}
 
 .mode-button {
   display: flex;
@@ -1000,6 +1162,7 @@ onMounted(() => {
   margin-bottom: 6px;
   font: inherit;
   font-size: var(--font-xs);
+  white-space: nowrap;
   color: var(--text-3);
   background: transparent;
   border: 1px solid transparent;
@@ -1018,10 +1181,6 @@ onMounted(() => {
   border-color: var(--primary-border);
 }
 
-.mode-glyph {
-  font-size: 18px;
-  line-height: 1;
-}
 
 .agent-side {
   display: flex;
@@ -1029,10 +1188,73 @@ onMounted(() => {
   width: 292px;
   flex-shrink: 0;
   min-height: 0;
-  padding: 14px 12px;
+  /* 顶部 32px 是窗口拖拽/控制条，内容从安全间距下开始。 */
+  padding: 46px 12px 14px;
   overflow-y: auto;
   background: var(--bg-list);
   border-right: 1px solid var(--line);
+}
+
+.chat-side {
+  padding: 46px 12px 16px;
+}
+
+.agent-library-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.agent-library-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.agent-library-title h2 {
+  margin: 0;
+  color: var(--text-1);
+  font-size: var(--font-md);
+  font-weight: 650;
+}
+
+.agent-count {
+  display: inline-grid;
+  min-width: 20px;
+  height: 20px;
+  place-items: center;
+  padding: 0 6px;
+  color: var(--text-2);
+  background: var(--bg-window);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+
+.add-agent-button {
+  margin: 8px 0 4px;
+}
+
+.agent-empty {
+  display: grid;
+  gap: 5px;
+  margin-top: 12px;
+  padding: 16px 13px;
+  color: var(--text-2);
+  background: var(--bg-window);
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-control);
+  font-size: var(--font-xs);
+  line-height: 1.5;
+}
+
+.agent-empty strong {
+  color: var(--text-1);
+  font-size: var(--font-sm);
 }
 
 .task-side {
@@ -1066,12 +1288,6 @@ onMounted(() => {
   margin-top: 18px;
 }
 
-.side-hint {
-  margin: 8px 0 6px;
-  font-size: var(--font-xs);
-  line-height: 1.55;
-  color: var(--text-3);
-}
 
 .manual-link {
   align-self: flex-start;
@@ -1114,6 +1330,7 @@ onMounted(() => {
   border: 1px solid var(--line);
   border-radius: var(--radius-control);
   cursor: pointer;
+  transition: border-color 150ms ease, background-color 150ms ease;
 }
 
 .task-card:hover,
@@ -1160,6 +1377,16 @@ onMounted(() => {
   background: var(--danger-weak, #fef2f2);
 }
 
+.task-status[data-status='completed'] {
+  color: var(--success, #047857);
+  background: var(--success-weak, #ecfdf5);
+}
+.task-status[data-status='awaiting_approval'],
+.task-status[data-status='paused'] {
+  color: var(--warning, #b45309);
+  background: var(--warning-weak, #fffbeb);
+}
+
 .task-card-meta {
   grid-column: 1 / -1;
   overflow: hidden;
@@ -1193,7 +1420,7 @@ onMounted(() => {
 
 .mini-agent {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-columns: auto minmax(70px, 1fr) minmax(0, 90px) auto;
   align-items: center;
   gap: 6px;
   padding: 5px 2px;
@@ -1201,8 +1428,16 @@ onMounted(() => {
   color: var(--text-2);
 }
 
+.mini-agent-name,
+.mini-agent-version {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .mini-agent small {
-  font-size: 9px;
+  font-size: 11px;
   color: var(--text-3);
 }
 
@@ -1247,58 +1482,165 @@ onMounted(() => {
   color: var(--text-3);
 }
 
-.agent-card {
-  margin-top: 10px;
-  padding: 10px;
-  background: var(--bg-input);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-control);
-}
-
-.agent-name {
-  font-size: var(--font-sm);
-  font-weight: 600;
-  color: var(--text-1);
-}
-
-.agent-meta {
-  display: flex;
-  gap: 8px;
-  margin-top: 2px;
-  font-size: var(--font-xs);
-  color: var(--text-3);
-}
-
 .probe-error {
   color: var(--warning, #b45309);
 }
 
-.agent-path {
-  margin-top: 4px;
+
+.agent-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.agent-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 11px 10px 10px;
+  background: var(--bg-window);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.agent-card:hover {
+  border-color: var(--primary-border);
+  box-shadow: var(--shadow-soft);
+}
+
+.agent-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.agent-card-head .agent-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+}
+
+.agent-identity {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+}
+
+.agent-name {
   overflow: hidden;
-  font-size: 11px;
+  color: var(--text-1);
+  font-size: var(--font-sm);
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-version {
+  overflow: hidden;
   color: var(--text-3);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-settings-button {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  place-items: center;
+  color: var(--text-2);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  cursor: pointer;
+}
+
+.agent-settings-button:hover {
+  color: var(--primary);
+  background: var(--primary-weak);
+  border-color: var(--primary-border);
+}
+
+.agent-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  font-size: var(--font-xs);
+  color: var(--text-3);
+}
+
+.agent-path {
+  min-width: 0;
+  margin-top: 0;
+  overflow: hidden;
+  padding: 4px 7px;
+  background: var(--bg-list);
+  border-radius: 5px;
+  font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .agent-description {
-  display: -webkit-box;
-  margin: 6px 0 0;
-  overflow: hidden;
+  margin: 0;
+  overflow-wrap: anywhere;
   font-size: 11px;
-  line-height: 1.45;
+}
+
+.agent-badges {
+  display: flex;
+  flex-wrap: wrap;
+  min-width: 0;
+  gap: 5px;
+}
+
+.agent-badge {
+  box-sizing: border-box;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 2px 7px;
   color: var(--text-2);
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  background: var(--bg-list);
+  border-radius: var(--radius-pill);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-badge {
+  color: var(--primary);
+  background: var(--primary-weak);
 }
 
 .agent-actions {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 6px;
-  margin-top: 8px;
+  margin: 0;
 }
 
+.agent-actions > :deep(button) {
+  width: 100%;
+  min-width: 0;
+  justify-content: center;
+}
+
+.sessions-head {
+  margin-top: 16px;
+  padding-top: 13px;
+  border-top: 1px solid var(--line);
+}
+
+.sessions-head h2 {
+  color: var(--text-1);
+}
 .agent-settings-mask {
   position: fixed;
   inset: 0;
@@ -1309,6 +1651,9 @@ onMounted(() => {
   background: var(--scrim);
 }
 
+.model-error {
+  color: var(--danger);
+}
 .agent-settings-card {
   display: flex;
   flex-direction: column;
@@ -1481,7 +1826,7 @@ onMounted(() => {
 .create-screen {
   width: min(940px, 100%);
   margin: 0 auto;
-  padding: 28px 32px 56px;
+  padding: 46px 32px 56px;
 }
 
 .screen-head,
@@ -1553,6 +1898,38 @@ onMounted(() => {
   gap: 8px;
 }
 
+.workdir-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.mode-switch {
+  display: inline-flex;
+  padding: 2px;
+  background: var(--bg-list);
+  border-radius: var(--r-control);
+}
+
+.mode-switch button {
+  padding: 3px 10px;
+  font: inherit;
+  font-size: var(--font-xs);
+  color: var(--text-3);
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.mode-switch button.on {
+  color: var(--primary);
+  font-weight: 600;
+  background: var(--bg-window);
+  box-shadow: 0 1px 3px rgba(15, 18, 30, 0.12);
+}
+
 .role-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1589,7 +1966,7 @@ onMounted(() => {
   top: 0;
   z-index: 4;
   align-items: center;
-  padding: 18px 24px;
+  padding: 46px 24px 18px;
   background: color-mix(in srgb, var(--bg-chat) 92%, transparent);
   border-bottom: 1px solid var(--line);
   backdrop-filter: blur(12px);
@@ -1600,8 +1977,10 @@ onMounted(() => {
 }
 
 .room-title h1 {
-  display: inline;
-  margin-right: 10px;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
   font-size: var(--font-lg);
   line-height: 1.35;
   overflow-wrap: anywhere;
@@ -1704,7 +2083,7 @@ onMounted(() => {
 }
 
 .plan-panel {
-  border-left: 3px solid var(--primary-border);
+  border-color: var(--primary-border);
 }
 
 .approval-chip {
@@ -1770,6 +2149,21 @@ onMounted(() => {
   font-size: 10px;
   color: var(--text-3);
 }
+.step-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.step-meta > span {
+  padding: 2px 6px;
+  border-radius: var(--radius-control);
+  background: var(--bg-list);
+  color: var(--text-2);
+}
+.step-meta .step-state[data-status='completed'] { color: var(--success, #047857); }
+.step-meta .step-state[data-status='failed'] { color: var(--danger, #b91c1c); }
+.step-meta .step-state[data-status='running'] { color: var(--primary); }
 
 .panel-empty {
   padding: 28px 0;
@@ -1792,6 +2186,56 @@ onMounted(() => {
   border-radius: 0 var(--radius-control) var(--radius-control) 0;
 }
 
+.timeline-item.chat-item {
+  padding: 2px 0;
+}
+.chat-bubble {
+  width: fit-content;
+  max-width: 86%;
+  padding: 8px 12px;
+  border-radius: var(--radius-panel);
+  font-size: var(--font-sm);
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.chat-bubble.user {
+  margin-left: auto;
+  background: var(--primary);
+  color: var(--on-primary);
+}
+.chat-bubble.coordinator {
+  background: var(--bg-window);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-soft);
+}
+.chat-bubble.coordinator p {
+  margin: 0;
+}
+.chat-author {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text-3);
+  font-size: 11px;
+}
+.task-chat-composer {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 0 6px;
+  background: var(--bg-chat);
+}
+.composer-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.composer-actions small {
+  color: var(--text-3);
+}
 .timeline-item[data-kind='error'] {
   border-left-color: var(--danger, #dc2626);
 }
@@ -2129,7 +2573,7 @@ onMounted(() => {
   padding: 20px;
   overflow-y: auto;
   background: var(--bg-window);
-  border-radius: var(--radius-panel);
+  border-radius: 8%;
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.24);
 }
 
@@ -2217,13 +2661,23 @@ onMounted(() => {
   }
 }
 
+.chat-side .session-item {
+  margin-top: 4px;
+}
+
 @media (max-width: 760px) {
   .agent-side {
     width: 230px;
   }
+  .agent-side.chat-side {
+    width: 250px;
+  }
+  .chat-side .agent-actions {
+    grid-template-columns: 1fr;
+  }
 
   .create-screen {
-    padding: 20px;
+    padding: 46px 20px 20px;
   }
 
   .role-grid {

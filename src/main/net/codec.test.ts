@@ -886,3 +886,79 @@ it.each([MSG_TYPES.entry, MSG_TYPES.alive])('%s 校验可选探活关联标识�
     expect(decode(encode(makeEnvelope(type, 'node-aaaa', { profile: makeProfile(), probeId }))).ok).toBe(false)
   }
 })
+
+describe('tsk1 任务同步报文', () => {
+  const task = {
+    id: 'task-1',
+    ownerNodeId: 'node-alice',
+    projectId: 'project-1',
+    title: '回归测试',
+    description: '登录与支付',
+    startDate: '2026-11-01',
+    dueDate: '2026-11-05',
+    status: 'in_progress',
+    revision: 3,
+    createdAt: 1000,
+    updatedAt: 2000
+  }
+  const project = {
+    id: 'project-1',
+    ownerNodeId: 'node-alice',
+    name: '五期',
+    updatedAt: 2000
+  }
+  const upsert = { op: 'upsert', toNodeId: 'node-bob', task, project }
+
+  it('合法 upsert 与 revoke 能通过编解码', () => {
+    for (const payload of [
+      upsert,
+      { op: 'revoke', toNodeId: 'node-bob', ownerNodeId: 'node-alice', taskId: 'task-1', revision: 3 }
+    ]) {
+      expect(
+        decodeTcpEnvelopeObject(makeEnvelope(MSG_TYPES.task, 'node-alice', payload))
+      ).toMatchObject({ ok: true, known: true })
+    }
+  })
+
+  it('离线补发标记 resend 放行，非布尔值拒绝', () => {
+    const revoke = {
+      op: 'revoke',
+      toNodeId: 'node-bob',
+      ownerNodeId: 'node-alice',
+      taskId: 'task-1',
+      revision: 3
+    }
+    for (const payload of [{ ...upsert, resend: true }, { ...revoke, resend: true }]) {
+      expect(
+        decodeTcpEnvelopeObject(makeEnvelope(MSG_TYPES.task, 'node-alice', payload))
+      ).toMatchObject({ ok: true, known: true })
+    }
+    expect(
+      decodeTcpEnvelopeObject(
+        makeEnvelope(MSG_TYPES.task, 'node-alice', { ...upsert, resend: 'yes' })
+      )
+    ).toEqual({ ok: false, reason: 'bad-payload:task' })
+  })
+
+  it.each([
+    { ...upsert, op: 'delete' },
+    { ...upsert, toNodeId: '' },
+    { ...upsert, extra: true },
+    { ...upsert, task: { ...task, ownerNodeId: 'node-mallory' } },
+    { ...upsert, task: { ...task, projectId: 'other-project' } },
+    { ...upsert, task: { ...task, title: '' } },
+    { ...upsert, task: { ...task, title: 'x'.repeat(201) } },
+    { ...upsert, task: { ...task, description: 'x'.repeat(8001) } },
+    { ...upsert, task: { ...task, startDate: '2026-02-31' } },
+    { ...upsert, task: { ...task, startDate: '2026-11-06' } },
+    { ...upsert, task: { ...task, status: 'overdue' } },
+    { ...upsert, task: { ...task, revision: 0 } },
+    { ...upsert, task: { ...task, leaked: 'field' } },
+    { op: 'revoke', toNodeId: 'node-bob', taskId: 'task-1', revision: 3 },
+    { op: 'revoke', toNodeId: 'node-bob', ownerNodeId: 'node-alice', taskId: 'task-1', revision: 0 }
+  ])('非法任务报文安全丢弃：%j', (payload) => {
+    expect(
+      decodeTcpEnvelopeObject(makeEnvelope(MSG_TYPES.task, 'node-alice', payload))
+    ).toEqual({ ok: false, reason: 'bad-payload:task' })
+  })
+})

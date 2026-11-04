@@ -16,6 +16,7 @@ const agent: AgentView = {
   displayName: '',
   description: '',
   instructions: '',
+  model: '',
   command: 'C:\\agents\\codex-acp.exe',
   args: [],
   cwd: 'C:\\project',
@@ -36,6 +37,7 @@ const task: AgentTaskView = {
   baseCommit: 'a'.repeat(40),
   worktreePath: 'C:\\worktrees\\task-1',
   taskBranch: 'yangge/task-task-1',
+  mode: 'git' as const,
   coordinatorAgentId: 'coordinator',
   teamAgentIds: ['implementer', 'reviewer'],
   status: 'draft',
@@ -89,6 +91,16 @@ function installApi() {
     removeAgentTaskWorktree: vi.fn(async () => ({ ok: true as const, value: null })),
     respondAgentTaskPermission: vi.fn(async () => ({ ok: true as const, value: null })),
     listAgents: vi.fn(async () => [agent]),
+    scanAgents: vi.fn(async () => ({
+      ok: true as const,
+      value: {
+        agents: [agent],
+        found: 1,
+        clients: [],
+        failures: [{ command: 'C:\\Tools\\opencode.cmd', error: 'ACP 握手失败：超时' }],
+        scannedAt: 12_345
+      }
+    })),
     updateAgentProfile: vi.fn(async (input: AgentProfileUpdate) => ({
       ok: true as const,
       value: { ...agent, ...input }
@@ -104,6 +116,19 @@ beforeEach(() => {
 })
 
 describe('agent task store', () => {
+  it('records scan completion time and names the failed executable', async () => {
+    const api = installApi()
+    const store = useAgentStore()
+
+    await store.scan()
+
+    expect(api.scanAgents).toHaveBeenCalledTimes(1)
+    expect(store.agents).toEqual([agent])
+    expect(store.scannedAt).toBe(12_345)
+    expect(store.error).toContain('opencode.cmd')
+    expect(store.error).toContain('超时')
+  })
+
   it('replaces the saved local Agent profile in reactive state', async () => {
     const api = installApi()
     const store = useAgentStore()
@@ -124,6 +149,7 @@ describe('agent task store', () => {
       displayName: 'Builder',
       description: '实现与测试',
       instructions: '先写测试。',
+      model: '',
       enabled: false
     }
 

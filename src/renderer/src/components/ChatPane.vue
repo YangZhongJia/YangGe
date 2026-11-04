@@ -6,6 +6,7 @@ import { usePeersStore } from '../stores/peers'
 import { useChatStore } from '../stores/chat'
 import { useGroupsStore } from '../stores/groups'
 import { useTransfersStore } from '../stores/transfers'
+import { useDuelStore } from '../stores/duel'
 import { splitEmojiText } from '../utils/compat-emoji'
 import {
   hasClipboardText,
@@ -43,8 +44,10 @@ import FileCabinetPanel from './FileCabinetPanel.vue'
 import GroupAvatar from './GroupAvatar.vue'
 import ForwardDialog from './ForwardDialog.vue'
 import ScreenRequestDialog from './ScreenRequestDialog.vue'
+import DuelArena from './DuelArena.vue'
 import PantryIcon from './PantryIcon.vue'
 import PendingAttachments from './PendingAttachments.vue'
+import NudgeEffect from './NudgeEffect.vue'
 import { usePendingAttachments, type PendingAttachment } from '../utils/pending-attachments'
 import Win7ChatEditor from './Win7ChatEditor.vue'
 import type {
@@ -58,13 +61,15 @@ import type {
 import { IMAGE_FILE_EXTENSIONS } from '../../../shared/media'
 import { vCachedImage } from '../directives/cached-image'
 import type { PkGame } from '../../../shared/pk'
+import type { DuelAction } from '../../../shared/duel'
 import {
   CAPS,
   MENTION_ALL,
   NUDGE_MIN_INTERVAL_MS,
   RECALL_WINDOW_MS,
   TEXT_TCP_LIMIT,
-  TEXT_UDP_LIMIT
+  TEXT_UDP_LIMIT,
+  type NudgeStyle
 } from '../../../shared/protocol'
 
 const props = withDefaults(defineProps<{ win7ImeCompat?: boolean }>(), {
@@ -75,6 +80,7 @@ const peersStore = usePeersStore()
 const chatStore = useChatStore()
 const groupsStore = useGroupsStore()
 const transfersStore = useTransfersStore()
+const duelStore = useDuelStore()
 transfersStore.init()
 
 const draft = ref('')
@@ -263,6 +269,10 @@ const nudgeSending = ref(false)
 const nudgeRetryUntil = ref(0)
 const nudgeNow = ref(Date.now())
 const nudgeFeedback = ref<{ text: string; kind: 'ok' | 'warn' } | null>(null)
+const nudgeMenu = ref<{ x: number; y: number } | null>(null)
+const nudgeFx = ref<{ play: (direction: 'out' | 'in', style: NudgeStyle) => void } | null>(null)
+const NUDGE_MENU_WIDTH = 248
+const NUDGE_MENU_HEIGHT = 188
 let nudgeFeedbackTimer: ReturnType<typeof setTimeout> | null = null
 let nudgeRetryTimer: ReturnType<typeof setInterval> | null = null
 // 表格粘贴提示条（决议 #270）：粘贴只插入文本，发不发图片由用户决定
@@ -344,9 +354,30 @@ const canSendPk = computed(() =>
 )
 const pkDisabledReason = computed(() => tr('PK 只能和在线的人玩'))
 const pkToolTip = computed(() => (canSendPk.value ? 'PK' : pkDisabledReason.value))
+// 角斗场只支持单聊：对方必须在线且声明 duel1（新版本），避免向旧端发送未知报文。
+const duelDisabledReason = computed(() => {
+  if (isGroup.value) return tr('角斗仅支持私聊')
+  if (!peer.value) return tr('对方资料还没同步到')
+  if (!peer.value.online) return tr('角斗只能和在线的人玩')
+  if (!peer.value.caps.includes(CAPS.duel)) return tr('对方版本不支持角斗')
+  if (duelStore.view && duelStore.view.phase !== 'ended') return tr('当前已有角斗对局')
+  return ''
+})
+const duelTitle = computed(() => duelDisabledReason.value || tr('邀请对方进入双人角斗场'))
+const canStartDuel = computed(() => duelDisabledReason.value === '')
+const activeDuel = computed(() => {
+  const conv = chatStore.activeConv
+  if (!conv || conv.type === 'group') return null
+  const view = duelStore.view
+  return view && view.peerId === conv.peerId ? view : null
+})
 const nudgeRetryRemainingMs = computed(() => Math.max(0, nudgeRetryUntil.value - nudgeNow.value))
 const canSendNudge = computed(
   () => !isGroup.value && peerOnline.value && !nudgeSending.value && nudgeRetryRemainingMs.value <= 0
+)
+// 纸飞机 / 墨弹不限次数与间隔，只要求私聊、在线、没有正在发送。
+const canSendInteraction = computed(
+  () => !isGroup.value && peerOnline.value && !nudgeSending.value
 )
 const nudgeToolTip = computed(() => {
   if (isGroup.value) return tr('窗口震动仅支持私聊')
@@ -356,6 +387,9 @@ const nudgeToolTip = computed(() => {
   }
   return tr('窗口震动')
 })
+const nudgeMenuHint = computed(() =>
+  peerOnline.value ? '' : tr('对方离线，扔不过去')
+)
 const mentionMembers = computed(() =>
   group.value ? group.value.members.filter((id) => id !== chatStore.selfId) : []
 )
@@ -480,6 +514,7 @@ function onEscape(event: KeyboardEvent): void {
 }
 
 onMounted(async () => {
+  void duelStore.init()
   stopScreenState = window.pantry.onScreenState(receiveScreenState)
   void window.pantry.getScreenState().then(receiveScreenState)
   void refreshScreenAvailability()
@@ -1286,6 +1321,11 @@ async function sendClipboardNow(): Promise<void> {
 const aiMenu = ref<{ x: number; y: number } | null>(null)
 const aiSummary = ref<{ state: 'loading' | 'done' | 'error'; text?: string; message?: string } | null>(null)
 function openTranscriptMenu(event: MouseEvent): void {
+  const target = event.target as HTMLElement | null
+  if (!isGroup.value && target?.closest('.row.peer .msg-avatar')) {
+    openNudgeMenu(event)
+    return
+  }
   if (!isGroup.value || !canSend.value) return
   aiMenu.value = clampMenuPosition(event, MSG_MENU_WIDTH, MSG_MENU_ITEM_HEIGHT + MSG_MENU_PADDING)
 }
@@ -1343,13 +1383,43 @@ function startNudgeRetry(ms: number): void {
   }, 250)
 }
 
-async function sendNudge(): Promise<void> {
-  if (!canSendNudge.value) return
+function openNudgeMenu(event: MouseEvent): void {
+  if (isGroup.value || !peer.value) return
+  nudgeMenu.value = clampMenuPosition(event, NUDGE_MENU_WIDTH, NUDGE_MENU_HEIGHT)
+}
+
+function closeNudgeMenu(): void {
+  nudgeMenu.value = null
+}
+
+watch(nudgeMenu, (menu) => {
+  if (menu) document.addEventListener('click', closeNudgeMenu)
+  else document.removeEventListener('click', closeNudgeMenu)
+})
+
+async function throwNudge(style: NudgeStyle): Promise<void> {
+  nudgeMenu.value = null
+  await performNudge(style)
+}
+
+async function performNudge(style?: NudgeStyle): Promise<void> {
+  if (style ? !canSendInteraction.value : !canSendNudge.value) {
+    if (style) setNudgeFeedback(nudgeMenuHint.value, 'warn')
+    return
+  }
   nudgeSending.value = true
   try {
-    const result = await chatStore.sendNudge()
+    const result = await chatStore.sendNudge(style)
     if (result.ok) {
-      startNudgeRetry(NUDGE_MIN_INTERVAL_MS)
+      if (!style) startNudgeRetry(NUDGE_MIN_INTERVAL_MS)
+      if (style) {
+        if (settings.value?.nudgeEffects === false) {
+          setNudgeFeedback(tr('已送达'))
+        } else {
+          await nextTick()
+          nudgeFx.value?.play('out', style)
+        }
+      }
       return
     }
     if (result.reason === 'rate-limited') {
@@ -1363,16 +1433,62 @@ async function sendNudge(): Promise<void> {
       setNudgeFeedback(tr('对方暂时无响应'), 'warn')
       return
     }
-    setNudgeFeedback(tr('当前会话无法震动'), 'warn')
+    setNudgeFeedback(style ? tr('当前会话无法互动') : tr('当前会话无法震动'), 'warn')
   } finally {
     nudgeSending.value = false
   }
 }
 
+watch(
+  () => chatStore.lastNudge,
+  (event) => {
+    if (!event?.style || settings.value?.nudgeEffects === false) return
+    void nextTick(() => nudgeFx.value?.play('in', event.style!))
+  }
+)
+
 async function sendPk(game: PkGame): Promise<void> {
   if (!canSendPk.value) return
   showPk.value = false
   await chatStore.sendPk(game)
+}
+
+async function startDuel(): Promise<void> {
+  const target = peer.value
+  if (!target || !canStartDuel.value) {
+    if (duelDisabledReason.value) setNudgeFeedback(duelDisabledReason.value, 'warn')
+    return
+  }
+  showPk.value = false
+  const result = await duelStore.invite(target.nodeId)
+  if (result.ok) return
+  if (result.reason === 'unsupported') setNudgeFeedback(tr('对方版本不支持角斗'), 'warn')
+  else if (result.reason === 'busy') setNudgeFeedback(tr('对方正在另一场对局中'), 'warn')
+  else if (result.reason === 'rate-limited') setNudgeFeedback(tr('邀请冷却中，请稍后再试'), 'warn')
+  else if (result.reason === 'offline') setNudgeFeedback(tr('对方离线'), 'warn')
+  else setNudgeFeedback(tr('邀请失败，请稍后再试'), 'warn')
+}
+
+async function onDuelAct(action: DuelAction): Promise<void> {
+  const view = activeDuel.value
+  if (!view) return
+  const result = await duelStore.move(view.matchId, action)
+  if (!result.ok) setNudgeFeedback(tr('出招失败，请稍后再试'), 'warn')
+}
+
+async function onDuelRespond(accept: boolean): Promise<void> {
+  const view = activeDuel.value
+  if (!view) return
+  const result = await duelStore.respond(view.matchId, accept)
+  if (!result.ok) setNudgeFeedback(accept ? tr('接受邀请失败') : tr('拒绝邀请失败'), 'warn')
+}
+
+async function closeDuel(): Promise<void> {
+  const view = activeDuel.value
+  if (!view) return
+  if (view.phase === 'incoming') await duelStore.respond(view.matchId, false)
+  else if (view.phase === 'ended') await duelStore.close(view.matchId)
+  else await duelStore.quit(view.matchId)
 }
 
 /** 输入值里出现新插入的 @/＠ 时打开面板；中文输入法下不经过按键分流（决议 #318） */
@@ -2123,6 +2239,7 @@ async function onDrop(event: DragEvent): Promise<void> {
           type="button"
           :aria-label="tr('查看对方资料')"
           @click.stop="togglePeerProfile"
+          @contextmenu.prevent.stop="openNudgeMenu"
         >
           <AvatarMark
             class="head-avatar"
@@ -2156,6 +2273,7 @@ async function onDrop(event: DragEvent): Promise<void> {
               :avatar-hash="peer.avatarHash"
               :name="peer.remark || peer.nick"
               :offline="!peer.online"
+              @contextmenu.prevent.stop="openNudgeMenu"
             />
             <span class="profile-title">
               <strong>{{ peer.remark || peer.nick }}</strong>
@@ -2230,6 +2348,16 @@ async function onDrop(event: DragEvent): Promise<void> {
     </header>
 
     <p v-if="screenFeedback" class="screen-status" role="status">{{ screenFeedback }}</p>
+
+    <!-- 双人角斗场：浮在聊天区上方，保留消息可见；只对当前会话的对端显示 -->
+    <DuelArena
+      v-if="!isGroup && activeDuel && peer"
+      :view="activeDuel"
+      :peer="peer"
+      @act="onDuelAct"
+      @respond="onDuelRespond"
+      @close="closeDuel"
+    />
 
     <!-- 对方的文件柜（决议 #273）：与群信息面板同一形态，覆盖右侧一整列 -->
     <FileCabinetPanel
@@ -2324,6 +2452,46 @@ async function onDrop(event: DragEvent): Promise<void> {
       <button @click="startAiSummary">{{ tr('AI 总结今天的未读') }}</button>
     </div>
 
+    <div
+      v-if="nudgeMenu"
+      class="nudge-menu"
+      role="menu"
+      :style="{ left: `${nudgeMenu.x}px`, top: `${nudgeMenu.y}px` }"
+      @click.stop
+    >
+      <p class="nudge-menu-title">{{ tr('扔点什么给 {0}', { 0: peerName }) }}</p>
+      <button
+        type="button"
+        role="menuitem"
+        class="nudge-menu-item"
+        :disabled="!canSendInteraction"
+        @click="throwNudge('plane')"
+      >
+        <svg class="nudge-menu-plane" viewBox="0 0 40 32" aria-hidden="true">
+          <path class="menu-plane-wing" d="M3 3.5 37 16 3 28.5 9 18.5 3 16 9 13.5Z" />
+          <path class="menu-plane-fold" d="M9 13.5 37 16 9 18.5 13 16Z" />
+          <path class="menu-plane-crease" d="M3 3.5 13 16 3 28.5 M13 16h24" />
+        </svg>
+        <span class="nudge-menu-copy">
+          <strong>{{ tr('纸飞机') }}</strong>
+        </span>
+      </button>
+      <button
+        type="button"
+        role="menuitem"
+        class="nudge-menu-item"
+        :disabled="!canSendInteraction"
+        @click="throwNudge('ink')"
+      >
+        <span class="nudge-menu-ink" aria-hidden="true"></span>
+        <span class="nudge-menu-copy">
+          <strong>{{ tr('墨弹') }}</strong>
+        </span>
+      </button>
+      <p v-if="nudgeMenuHint" class="nudge-menu-hint">{{ nudgeMenuHint }}</p>
+    </div>
+
+    <Teleport to="body">
     <div v-if="aiSummary" class="ai-summary-mask" @click.self="aiSummary = null">
       <div class="ai-summary-card" role="dialog" :aria-label="tr('AI 总结')">
         <header>
@@ -2345,6 +2513,7 @@ async function onDrop(event: DragEvent): Promise<void> {
         </footer>
       </div>
     </div>
+    </Teleport>
 
     <footer class="input-area">
       <!-- 桌面端在分隔线上保留拖拽热区，通过鼠标光标提示，不显示额外手柄。 -->
@@ -2395,6 +2564,15 @@ async function onDrop(event: DragEvent): Promise<void> {
               <span class="pk-pop-window"><PantryIcon name="pk-dice" :size="28" /></span>
               <span>{{ tr('骰子') }}</span>
             </button>
+            <button
+              type="button"
+              :disabled="!canStartDuel"
+              :title="duelTitle"
+              @click="startDuel"
+            >
+              <span class="pk-pop-window duel-window"><PantryIcon name="shield" :size="28" /></span>
+              <span>{{ tr('角斗场') }}</span>
+            </button>
           </div>
           <span class="tool-wrap" :data-tip="pkToolTip">
             <button
@@ -2416,7 +2594,7 @@ async function onDrop(event: DragEvent): Promise<void> {
             type="button"
             :aria-label="tr('窗口震动')"
             :disabled="!canSendNudge"
-            @click="sendNudge"
+            @click="performNudge()"
           >
             <PantryIcon name="nudge" :size="26" />
           </button>
@@ -2667,6 +2845,7 @@ async function onDrop(event: DragEvent): Promise<void> {
         <button class="send" :disabled="sendDisabled" @click="send">{{ attachmentsSending ? tr('正在发送…') : pendingAttachments.length ? tr('发送（{0}）', { 0: pendingAttachments.length }) : tr('发送') }}</button>
       </div>
     </footer>
+    <NudgeEffect ref="nudgeFx" />
   </div>
 </template>
 
@@ -2721,7 +2900,7 @@ async function onDrop(event: DragEvent): Promise<void> {
   left: 0;
   bottom: calc(100% + 8px);
   display: grid;
-  grid-template-columns: repeat(2, 74px);
+  grid-template-columns: repeat(3, 74px);
   gap: 6px;
   padding: 8px;
   border: 1px solid var(--line);
@@ -2760,6 +2939,11 @@ async function onDrop(event: DragEvent): Promise<void> {
 }
 .pk-popover button:hover:not(:disabled) {
   background: var(--surface-hover);
+}
+/* 角斗场入口用靛蓝浅底与其它 PK 玩法区分，但不抢主按钮视觉。 */
+.pk-pop-window.duel-window {
+  background: var(--primary-weak);
+  border-color: var(--primary-border);
 }
 .pk-popover button:hover:not(:disabled) .pk-pop-window {
   border-color: var(--primary);
@@ -3112,7 +3296,7 @@ async function onDrop(event: DragEvent): Promise<void> {
   flex-direction: column;
   background: var(--bg-window);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 8%;
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.22);
   overflow: hidden;
 }
@@ -3879,6 +4063,113 @@ async function onDrop(event: DragEvent): Promise<void> {
 .msg-menu button:disabled:hover {
   background: transparent;
 }
+
+.nudge-menu {
+  animation: iris-pop-in 140ms ease-out;
+  position: fixed;
+  z-index: 30;
+  width: 248px;
+  box-sizing: border-box;
+  padding: 8px;
+  background: var(--material-strong);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--highlight-edge), var(--shadow-float);
+}
+
+.nudge-menu-title {
+  margin: 2px 6px 7px;
+  color: var(--text-3);
+  font-size: var(--font-xs);
+}
+
+.nudge-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 8px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-1);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 120ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.nudge-menu-item:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+
+.nudge-menu-item:active:not(:disabled) {
+  transform: scale(0.985);
+}
+
+.nudge-menu-item:disabled {
+  opacity: 0.48;
+  cursor: default;
+}
+
+.nudge-menu-plane {
+  flex: 0 0 26px;
+  width: 26px;
+  height: 26px;
+  color: var(--primary);
+}
+
+.menu-plane-wing {
+  fill: var(--bg-window);
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+
+.menu-plane-fold {
+  fill: currentColor;
+  opacity: 0.26;
+}
+
+.menu-plane-crease {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.15;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.nudge-menu-ink {
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+  margin: 0 3px;
+  border-radius: 48% 52% 56% 44%;
+  background:
+    radial-gradient(circle at 34% 28%, rgb(255 255 255 / 0.42), transparent 46%),
+    var(--primary);
+  box-shadow: 0 3px 8px rgb(32 28 74 / 0.28);
+}
+
+.nudge-menu-copy {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.nudge-menu-copy strong {
+  font-size: var(--font-sm);
+  font-weight: 600;
+}
+
+
+.nudge-menu-hint {
+  margin: 8px 6px 2px;
+  padding-top: 7px;
+  border-top: 1px solid var(--line);
+  color: var(--text-3);
+  font-size: 11px;
+}
 .input-area {
   flex: 0 0 auto;
   margin: 0 16px 14px;
@@ -4153,7 +4444,7 @@ async function onDrop(event: DragEvent): Promise<void> {
   flex-direction: column;
   background: var(--material-strong);
   border: 1px solid var(--line);
-  border-radius: var(--radius-panel);
+  border-radius: 8%;
   box-shadow: var(--highlight-edge), var(--shadow-float);
   overflow: hidden;
 }

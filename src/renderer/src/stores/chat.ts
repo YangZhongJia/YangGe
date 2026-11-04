@@ -12,7 +12,7 @@ import type {
 } from '../../../shared/ipc'
 import type { PkGame } from '../../../shared/pk'
 import { isWindowAttended } from '../utils/window-attention'
-import { TYPING_SHOW_MS, TYPING_THROTTLE_MS } from '../../../shared/protocol'
+import { TYPING_SHOW_MS, TYPING_THROTTLE_MS, type NudgeStyle } from '../../../shared/protocol'
 import type { PendingAttachment } from '../utils/pending-attachments'
 
 // 主进程聊天数据的投影 + 乐观更新（tech-design §7 状态流）
@@ -191,6 +191,18 @@ export const useChatStore = defineStore('chat', {
       })
       window.pantry.onNudgeReceived((event) => {
         if (this.hiddenConvId) return
+        if (event.style) {
+          // 纸飞机 / 墨弹是纯视觉互动：只在当前会话里顺带出现，不切换会话、不抢焦点。
+          if (this.activeConvId !== event.convId) return
+          this.lastNudge = event
+          if (nudgeClearTimer) clearTimeout(nudgeClearTimer)
+          nudgeClearTimer = setTimeout(() => {
+            if (this.lastNudge?.ts === event.ts && this.lastNudge.peerId === event.peerId) {
+              this.lastNudge = null
+            }
+          }, 3000)
+          return
+        }
         const run = ++nudgeOpenRun
         void this.openConv(event.convId, { scroll: 'latest' }).then(() => {
           if (run !== nudgeOpenRun) return
@@ -536,10 +548,10 @@ export const useChatStore = defineStore('chat', {
       return window.pantry.recallMessage(msgId)
     },
 
-    async sendNudge(): Promise<NudgeResult> {
+    async sendNudge(style?: NudgeStyle): Promise<NudgeResult> {
       const conv = this.activeConv
       if (!conv || conv.type !== 'single') return { ok: false, reason: 'invalid' }
-      return window.pantry.sendNudge(conv.peerId)
+      return window.pantry.sendNudge(conv.peerId, style)
     },
 
     async sendPk(game: PkGame): Promise<boolean> {

@@ -8,11 +8,13 @@ import type {
   CaptureFailureNotice,
   MainWindowShownEvent,
   ScanProgressView,
-  SettingsView
+  SettingsView,
+  WorkTaskBadgeEvent
 } from '../../shared/ipc'
 import { usePeersStore } from './stores/peers'
 import { useChatStore } from './stores/chat'
 import { useUpdateStore } from './stores/update'
+import { useDuelStore } from './stores/duel'
 import PeerList from './components/PeerList.vue'
 import ConvList from './components/ConvList.vue'
 import ChatPane from './components/ChatPane.vue'
@@ -27,6 +29,7 @@ import RailNavIcon from './components/RailNavIcon.vue'
 import WindowControls from './components/WindowControls.vue'
 import WindowDragStrip from './components/WindowDragStrip.vue'
 import StartupParticle from './components/StartupParticle.vue'
+import DuelInviteToast from './components/DuelInviteToast.vue'
 import startupIconUrl from '../../../build/icons/pantry-logo-icon.png?url'
 import { useGroupsStore } from './stores/groups'
 import type { PeerView } from '../../shared/ipc'
@@ -36,13 +39,14 @@ import { isPlainEscape } from './utils/escape'
 import AvatarMark from './components/AvatarMark.vue'
 import CabinetList from './components/CabinetList.vue'
 import CabinetPane from './components/CabinetPane.vue'
+import WorkTasksPane from './components/WorkTasksPane.vue'
 import { useCabinetStore } from './stores/cabinet'
 import { randomQuote } from './utils/quotes'
 import doveMarkUrl from './assets/brand/yangge-mark.svg?url'
 import { teahouseDarkThemeOverrides, teahouseLightThemeOverrides } from './ui/naive-theme'
 import { accentPalette, normalizeAccent } from './utils/accents'
 
-type Tab = 'chat' | 'contacts' | 'cabinet' | 'agent'
+type Tab = 'chat' | 'contacts' | 'cabinet' | 'agent' | 'tasks'
 
 const tab = ref<Tab>('chat')
 // Agent 面板较重（权限弹窗/转录样式）；首次切到 Agent 页签时再加载，
@@ -52,19 +56,25 @@ let agentPaneRequested = false
 watch(
   tab,
   (next) => {
-    const loaded: Component | null = AgentPane.value
-    if (next !== 'agent' || loaded || agentPaneRequested) return
-    agentPaneRequested = true
-    void import('./components/AgentPane.vue')
-      .then((module) => {
-        AgentPane.value = module.default
-      })
-      .catch(() => {
-        agentPaneRequested = false
-      })
+    const loadedAgentPane: Component | null = AgentPane.value
+    if (next === 'agent' && !loadedAgentPane && !agentPaneRequested) {
+      agentPaneRequested = true
+      void import('./components/AgentPane.vue')
+        .then((module) => {
+          AgentPane.value = module.default as Component
+        })
+        .catch(() => {
+          agentPaneRequested = false
+        })
+    }
   },
   { immediate: true }
 )
+
+const taskBadge = ref<WorkTaskBadgeEvent>({ dueToday: 0, overdue: 0 })
+const taskBadgeTotal = computed(() => taskBadge.value.dueToday + taskBadge.value.overdue)
+let stopTaskBadge: (() => void) | null = null
+let stopOpenTasks: (() => void) | null = null
 
 const searchQuery = ref('')
 const selectedPeerId = ref<string | null>(null)
@@ -93,6 +103,13 @@ async function chatWith(nodeId: string): Promise<void> {
   tab.value = 'chat'
 }
 
+/** 接受角斗邀请后切到对应会话，让角斗场浮层可见。 */
+async function openDuelConversation(nodeId: string): Promise<void> {
+  tab.value = 'chat'
+  selectedPeerId.value = null
+  await chatStore.openPeer(nodeId)
+}
+
 function openSettings(event?: Event): void {
   releaseRailFocus(event)
   void window.pantry.openSettings()
@@ -108,6 +125,7 @@ function openCabinet(event?: Event): void {
 
 // 局域网自更新提示（决议 #166/#172）：发现同平台更高版本的在线源时，导航栏出现升级入口；机制说明收进问号提示。
 const updateStore = useUpdateStore()
+const duelStore = useDuelStore()
 const showUpdatePanel = ref(false)
 const updateRequesting = ref(false)
 const updateRequestMsg = ref('')
@@ -173,6 +191,14 @@ let stopSettings: (() => void) | null = null
 let stopSettingsWindowState: (() => void) | null = null
 let stopCabinetOpen: (() => void) | null = null
 let stopWindowShown: (() => void) | null = null
+/** 当前会话已由聊天面板展示角斗邀请时，不再叠右下角提示卡。 */
+const duelInviteVisible = computed(() => {
+  const invite = duelStore.pendingInvite
+  if (!invite) return false
+  if (!chatStore.activeConv || chatStore.activeConv.peerId !== invite.peerId) return true
+  const chatPaneVisible = tab.value === 'chat' || (tab.value === 'contacts' && !selectedPeer.value)
+  return !chatPaneVisible
+})
 const motionRef = ref<InstanceType<typeof StartupParticle> | null>(null)
 const motionPending = ref(false)
 let motionPendingReason: MainWindowShownEvent['reason'] = 'startup'
@@ -431,6 +457,15 @@ function onMainKeydown(event: KeyboardEvent): void {
 }
 
 onMounted(async () => {
+  stopTaskBadge = window.pantry.onWorkTaskBadge((badge) => {
+    taskBadge.value = badge
+  })
+  stopOpenTasks = window.pantry.onOpenTasks(() => {
+    tab.value = 'tasks'
+  })
+  void window.pantry.getWorkTaskBadge().then((badge) => {
+    taskBadge.value = badge
+  }).catch(() => undefined)
   try {
     systemThemeQuery = window.matchMedia('(prefers-color-scheme: dark)')
     systemDark.value = systemThemeQuery.matches
@@ -455,6 +490,7 @@ onMounted(async () => {
   stopWindowShown = window.pantry.onMainWindowShown((event) => requestMotion(event.reason))
   void peersStore.init()
   void chatStore.init()
+  void duelStore.init()
   void groupsStore.init()
   void updateStore.init()
   document.addEventListener('visibilitychange', onVisibilityChange)
@@ -495,6 +531,11 @@ onUnmounted(() => {
   stopCaptureFailed?.()
   stopTransferBlocked?.()
   stopNetState?.()
+  stopTaskBadge?.()
+  stopOpenTasks?.()
+  stopTaskBadge = null
+  stopOpenTasks = null
+  duelStore.dispose()
   dismissCaptureFailure()
   clearScanProgressHideTimer()
   hideRailHint()
@@ -517,6 +558,8 @@ onUnmounted(() => {
     ref="motionRef"
     :icon-url="startupIconUrl"
   />
+  <!-- 角斗邀请：当前会话已有角斗浮层时不再叠加提示。 -->
+  <DuelInviteToast v-if="duelInviteVisible" @open="openDuelConversation" />
   <!-- 沉浸式无标题栏（决议 #49/#52）：顶部 32px 隐形拖拽带 + Win/Linux 自绘窗口控制按钮 -->
   <WindowDragStrip />
   <WindowControls />
@@ -593,6 +636,21 @@ onUnmounted(() => {
         @click="activateTab('contacts', $event)"
       >
         <RailNavIcon name="contacts" />
+      </button>
+      <button
+        type="button"
+        class="rail-btn rail-hint"
+        :class="{ active: tab === 'tasks', 'show-hint': activeRailHint === 'tasks' }"
+        :data-label="tr('任务')"
+        :aria-label="tr('任务')"
+        @pointermove="scheduleRailHint('tasks')"
+        @pointerleave="hideRailHint('tasks')"
+        @click="activateTab('tasks', $event)"
+      >
+        <RailNavIcon name="tasks" />
+        <span v-if="taskBadgeTotal > 0" class="rail-badge">{{
+          taskBadgeTotal > 99 ? '99+' : taskBadgeTotal
+        }}</span>
       </button>
       <button
         type="button"
@@ -721,7 +779,7 @@ onUnmounted(() => {
       </NButton>
     </div>
 
-    <aside v-if="tab !== 'agent'" class="list">
+    <aside v-if="tab !== 'agent' && tab !== 'tasks'" class="list">
       <div v-if="tab !== 'cabinet'" class="search-box">
         <NInput
           v-model:value="searchQuery"
@@ -761,7 +819,8 @@ onUnmounted(() => {
     </aside>
 
     <main class="content">
-      <component :is="AgentPane" v-if="tab === 'agent' && AgentPane" />
+      <WorkTasksPane v-if="tab === 'tasks'" />
+      <component :is="AgentPane" v-else-if="tab === 'agent' && AgentPane" />
       <CabinetPane v-else-if="tab === 'cabinet'" />
       <ProfileCard
         v-else-if="tab === 'contacts' && selectedPeer"
@@ -1497,7 +1556,7 @@ onUnmounted(() => {
   width: min(300px, 100%);
   padding: 20px 18px 14px;
   border: 1px solid var(--line);
-  border-radius: var(--radius-panel);
+  border-radius: 8%;
   background: var(--material-strong);
   box-shadow: var(--highlight-edge), var(--shadow-float);
   text-align: center;

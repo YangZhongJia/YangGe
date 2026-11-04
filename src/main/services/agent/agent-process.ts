@@ -167,6 +167,31 @@ function errorMessage(error: unknown): string {
   return String(error).slice(0, 300)
 }
 
+/**
+ * 有上限的并发 map，按输入顺序返回结果。
+ * 扫描要同时冷启动多个 Agent CLI：一次性全部拉起会把弱机压到所有握手都超时，
+ * 所以每个任务最多同时跑 `limit` 个。worker 抛错会让整体 reject（调用方负责兜底）。
+ */
+export async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  const results = new Array<R>(items.length)
+  const width = Math.max(1, Math.min(Math.floor(limit) || 1, items.length))
+  let cursor = 0
+  const runners = Array.from({ length: width }, async () => {
+    while (true) {
+      const index = cursor
+      cursor += 1
+      if (index >= items.length) return
+      results[index] = await worker(items[index], index)
+    }
+  })
+  await Promise.all(runners)
+  return results
+}
+
 /** 可执行文件校验：绝对路径、文件存在、扩展名在白名单内（Windows）。 */
 export function validateExecutable(
   input: string,

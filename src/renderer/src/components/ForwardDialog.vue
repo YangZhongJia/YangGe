@@ -165,7 +165,7 @@ onBeforeUnmount(() => {
   box-sizing: border-box;
   background: var(--material-strong);
   border: 1px solid var(--line);
-  border-radius: var(--radius-panel);
+  border-radius: 8%;
   padding: 18px 20px;
   box-shadow: var(--highlight-edge), var(--shadow-float);
   animation: forward-dialog-in 180ms cubic-bezier(0.16, 1, 0.3, 1);

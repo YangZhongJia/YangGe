@@ -337,7 +337,9 @@ export class AcpClient extends EventEmitter {
     return result
   }
 
-  async newSession(cwd: string = this.cwd): Promise<{ sessionId: string }> {
+  async newSession(
+    cwd: string = this.cwd
+  ): Promise<{ sessionId: string; models?: unknown; configOptions?: unknown }> {
     if (!this.initialized) throw new AcpError(-32000, '必须先完成 initialize')
     const absolute = assertAbsolutePath(cwd, 'cwd')
     const stat = await fsp.stat(absolute).catch(() => null)
@@ -354,7 +356,25 @@ export class AcpClient extends EventEmitter {
     }
     this.sessions.add(result.sessionId)
     this.emit('session', result)
-    return { sessionId: result.sessionId }
+    return {
+      sessionId: result.sessionId,
+      models: result['models'],
+      configOptions: result['configOptions']
+    }
+  }
+
+  /** ACP 旧版模型选择（Codex 等）：session/set_model */
+  async setSessionModel(sessionId: string, modelId: string): Promise<void> {
+    await this.request('session/set_model', { sessionId, modelId }, { timeoutMs: 20000 })
+  }
+
+  /** ACP 配置项（OpenCode / omp / DeepSeek Harness）：session/set_config_option */
+  async setSessionConfigOption(sessionId: string, configId: string, value: string): Promise<void> {
+    await this.request(
+      'session/set_config_option',
+      { sessionId, configId, value },
+      { timeoutMs: 20000 }
+    )
   }
 
   async prompt(

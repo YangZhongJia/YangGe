@@ -216,6 +216,7 @@ function mockAgentView(id, name) {
     displayName: '',
     description: '',
     instructions: '',
+    model: '',
     command: process.execPath,
     args: [mockAgent],
     cwd: dir,
@@ -374,6 +375,7 @@ try {
     displayName: '档案助手',
     description: localOnlyDescription,
     instructions: normalProfileInstruction,
+    model: '',
     enabled: true
   }))
   assert.equal(profiledAgent.displayName, '档案助手')
@@ -393,6 +395,7 @@ try {
     displayName: '档案助手',
     description: localOnlyDescription,
     instructions: normalProfileInstruction,
+    model: '',
     enabled: false
   }))
   const rejectedSession = await service.newSession('agent_mock', dir)
@@ -406,6 +409,7 @@ try {
     displayName: '',
     description: '',
     instructions: '',
+    model: '',
     enabled: true
   }))
   await service.closeSession(profileSession.id)
@@ -490,6 +494,7 @@ try {
       displayName: `档案-${id}`,
       description,
       instructions: instruction,
+      model: '',
       enabled: true
     }))
   }
@@ -524,7 +529,7 @@ try {
   )
   const taskRuns = [...store.runs.values()]
   const coordinatorRun = taskRuns.find((run) =>
-    run.prompt.includes('你是阳鸽编码任务的协调者')
+    run.prompt.includes('你是阳鸽任务的协调者')
   )
   const implementerRun = taskRuns.find((run) =>
     run.prompt.includes('你是阳鸽编码团队中的 implement Agent')
@@ -624,5 +629,5 @@ try {
 } finally {
   for (const coordinator of coordinators) coordinator.dispose()
   service?.dispose()
-  await rm(dir, { recursive: true, force: true })
+  await rm(dir, { recursive: true, force: true, maxRetries: 30, retryDelay: 100 })
 }

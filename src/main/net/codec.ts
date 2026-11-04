@@ -37,13 +37,16 @@ import {
   type ProfilePayload,
   type ScanRangesPayload,
   type SharePayload,
+  type TaskSyncPayload,
   type UpdateReqPayload
 } from '../../shared/protocol'
 import { isShareDenyReason } from '../../shared/protocol'
 import { isAvatarHash } from '../../shared/protocol'
 import { PEERS_PER_PACKET } from '../../shared/protocol'
 import { isPkGame, isPkRef } from '../../shared/pk'
+import { validateDuelPayload } from '../../shared/duel'
 import { normalizeCidr } from './cidr'
+import { isWorkTaskDate, isWorkTaskStatus } from '../../shared/work-task'
 
 // 信封编解码 + 入站校验（protocol §1/§4）：
 // 一切来自网络的报文按不可信输入处理 —— 字段白名单、类型、长度全检；
@@ -458,11 +461,119 @@ function validatePayload(type: string, payload: unknown, textLimit = TEXT_UDP_LI
       if (u.arch !== undefined && !isRuntimeArch(u.arch)) return false
       return u.platform === 'win' || u.platform === 'mac' || u.platform === 'linux'
     }
+    case MSG_TYPES.task: {
+      // 个人/共享任务记录（tsk1）：完整快照或撤销；字段白名单与长度先于业务校验。
+      if (!isRecord(payload)) return false
+      const p = payload as Partial<TaskSyncPayload> & Record<string, unknown>
+      if (!isStr(p.toNodeId, LIMITS.from)) return false
+      // 离线补发的信封由 Messenger 补发队列打上 resend 标记（与 msg 的 resend 语义一致），
+      // 不做业务处理，只要求类型合法；任务本身按 revision 幂等。
+      if (p.resend !== undefined && typeof p.resend !== 'boolean') return false
+      if (p.op === 'upsert') {
+        const task = p.task
+        const project = p.project
+        if (!isRecord(task) || !isRecord(project)) return false
+        if (
+          !Object.keys(task).every((key) => TASK_UPSERT_TASK_KEYS[key]) ||
+          !Object.keys(project).every((key) => TASK_UPSERT_PROJECT_KEYS[key]) ||
+          !Object.keys(payload).every((key) => TASK_UPSERT_KEYS[key])
+        ) {
+          return false
+        }
+        if (
+          !isStr(task.id, LIMITS.id) ||
+          !isStr(task.ownerNodeId, LIMITS.from) ||
+          !isStr(task.projectId, LIMITS.id) ||
+          !isStr(project.id, LIMITS.id) ||
+          !isStr(project.ownerNodeId, LIMITS.from) ||
+          !isStr(project.name, 100) ||
+          task.ownerNodeId !== project.ownerNodeId ||
+          task.projectId !== project.id
+        ) {
+          return false
+        }
+        if (
+          typeof task.title !== 'string' ||
+          task.title.trim().length === 0 ||
+          task.title.length > 200 ||
+          typeof task.description !== 'string' ||
+          utf8ByteLength(task.description) > 8_000
+        ) {
+          return false
+        }
+        if (
+          (task.startDate !== null && !isWorkTaskDate(task.startDate)) ||
+          (task.dueDate !== null && !isWorkTaskDate(task.dueDate))
+        ) {
+          return false
+        }
+        if (
+          typeof task.startDate === 'string' &&
+          typeof task.dueDate === 'string' &&
+          task.dueDate < task.startDate
+        ) {
+          return false
+        }
+        if (!isWorkTaskStatus(task.status)) return false
+        if (!isInt(task.revision) || task.revision < 1) return false
+        if (!isInt(task.createdAt) || task.createdAt <= 0) return false
+        if (!isInt(task.updatedAt) || task.updatedAt <= 0) return false
+        if (!isInt(project.updatedAt) || project.updatedAt <= 0) return false
+        return true
+      }
+      if (p.op === 'revoke') {
+        if (!Object.keys(payload).every((key) => TASK_REVOKE_KEYS[key])) return false
+        return (
+          isStr(p.ownerNodeId, LIMITS.from) &&
+          isStr(p.taskId, LIMITS.id) &&
+          isInt(p.revision) &&
+          (p.revision as number) >= 1
+        )
+      }
+      return false
+    }
+    case MSG_TYPES.duel:
+      return validateDuelPayload(payload)
     case MSG_TYPES.exit:
       return isRecord(payload)
     default:
       return isRecord(payload)
   }
+}
+
+const TASK_UPSERT_KEYS: Record<string, true> = {
+  op: true,
+  toNodeId: true,
+  task: true,
+  project: true,
+  resend: true
+}
+const TASK_REVOKE_KEYS: Record<string, true> = {
+  op: true,
+  toNodeId: true,
+  ownerNodeId: true,
+  taskId: true,
+  revision: true,
+  resend: true
+}
+const TASK_UPSERT_TASK_KEYS: Record<string, true> = {
+  id: true,
+  ownerNodeId: true,
+  projectId: true,
+  title: true,
+  description: true,
+  startDate: true,
+  dueDate: true,
+  status: true,
+  revision: true,
+  createdAt: true,
+  updatedAt: true
+}
+const TASK_UPSERT_PROJECT_KEYS: Record<string, true> = {
+  id: true,
+  ownerNodeId: true,
+  name: true,
+  updatedAt: true
 }
 
 /** 共享文件柜相对路径的格式校验（§8.2）：空串=共享根；深度与越界另由 ShareService 复核 */

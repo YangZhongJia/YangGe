@@ -3,6 +3,12 @@ import { normalizeAi, normalizeClipboardFollow } from './store/app-state'
 import { AcpAgentService } from './services/agent/agent-service'
 import { AgentCoordinator } from './services/agent/agent-coordinator'
 import { AgentTaskIpcController } from './services/agent/agent-task-ipc'
+import { WorkTaskIpcController } from './services/work-task-ipc'
+import { WorkTaskService } from './services/work-task-service'
+import { WorkTaskSyncService } from './services/work-task-sync'
+import { WorkTaskReminderService } from './services/work-task-reminders'
+import { WorkTaskRepo } from './store/work-task-repo'
+import { DirectoryTaskWorkspace } from './services/agent/directory-workspace'
 import { GitTaskWorkspace } from './services/agent/git-worktree'
 import { AgentRepo } from './store/agent-repo'
 import { AgentTaskRepo } from './store/agent-task-repo'
@@ -12,6 +18,7 @@ const aiPortRef: {
   current: import('./services/ai-replier').AiPortHolder['current']
 } = { current: null }
 import { RangeScanScheduler } from './services/range-scan'
+import { isDuelAction } from '../shared/duel'
 import { truncateUtf8 } from './util/utf8'
 import { DiagnosticsService, diagnosticEnvironment } from './services/diagnostics'
 import { setupDiagnosticsUi } from './services/diagnostics-ui'
@@ -114,12 +121,14 @@ import {
   CLIPBOARD_TEXT_LIMIT,
   isAvatarPresetValue,
   isShareMode,
+  normalizeNudgeStyle,
   type ClipboardPayload,
   type Envelope,
   type SharePayload,
   type Platform,
   type RuntimeArch,
   type ScanRangeSummary,
+  type TaskSyncPayload,
   type TypingPayload,
   type UpdateReqPayload
 } from '../shared/protocol'
@@ -189,6 +198,7 @@ import { Messenger } from './net/messenger'
 import { PeerClock } from './net/peer-clock'
 import { makeEnvelope } from './net/codec'
 import { ChatService } from './services/chat'
+import { DuelService } from './services/duel'
 import { ImageOcrResultCache } from './services/image-ocr-cache'
 import { ImagePreviewService } from './services/image-preview'
 import { getImageViewerNavigation } from './services/image-navigation'
@@ -329,6 +339,7 @@ if (!gotLock) {
   let peersRepo: PeersRepo | null = null
   let persistTimer: ReturnType<typeof setTimeout> | null = null
   let chat: ChatService | null = null
+  let duel: DuelService | null = null
   let files: FilesService | null = null
   let groups: GroupsService | null = null
   let groupRepo: GroupRepo | null = null
@@ -343,6 +354,10 @@ if (!gotLock) {
   let agentService: AcpAgentService | null = null
   let agentCoordinator: AgentCoordinator | null = null
   let agentTaskController: AgentTaskIpcController | null = null
+  let workTaskService: WorkTaskService | null = null
+  let workTaskSync: WorkTaskSyncService | null = null
+  let workTaskController: WorkTaskIpcController | null = null
+  let workTaskReminders: WorkTaskReminderService | null = null
   let capturing = false
   let pruneTimer: ReturnType<typeof setInterval> | null = null
   let avatarPruneTimer: ReturnType<typeof setTimeout> | null = null
@@ -1422,10 +1437,12 @@ if (!gotLock) {
             : null
         }
       )
+      const plainWorkspaces = new DirectoryTaskWorkspace()
       agentCoordinator = new AgentCoordinator({
         store: taskRepo,
         agents: agentService,
         workspaces: taskWorkspaces,
+        plainWorkspaces,
         emit: (channel, payload) => mainWindow?.webContents.send(channel, payload)
       })
       agentTaskController = new AgentTaskIpcController({
@@ -1456,8 +1473,48 @@ if (!gotLock) {
         else if (env.type === MSG_TYPES.share) handleShareCtl(env as Envelope<SharePayload>)
         else if (env.type === MSG_TYPES.screen && source) remoteView.service?.receive(env.from, source.address, env.payload as ScreenPayload)
         else if (env.type === MSG_TYPES.clipboard) handleClipboardFrame(env as Envelope<ClipboardPayload>)
+        else if (env.type === MSG_TYPES.task) workTaskSync?.handleEnvelope(env as Envelope<TaskSyncPayload>)
       })
       messenger.on('typing', (env: Envelope<TypingPayload>) => handleTypingFrame(env))
+      const workTaskRepo = new WorkTaskRepo(db)
+      workTaskSync = new WorkTaskSyncService({
+        selfId: state.nodeId,
+        messenger,
+        peerCaps: (peerId) => registry?.get(peerId)?.profile.caps ?? null,
+        service: {
+          applyRemoteUpsert: (snapshot) => workTaskService?.applyRemoteUpsert(snapshot) ?? false,
+          applyRemoteRevoke: (ownerNodeId, taskId, revision) =>
+            workTaskService?.applyRemoteRevoke(ownerNodeId, taskId, revision) ?? false,
+          handleShareStatus: (messageId, status) =>
+            workTaskService?.handleShareStatus(messageId, status) ?? false
+        }
+      })
+      workTaskService = new WorkTaskService({
+        store: workTaskRepo,
+        selfId: state.nodeId,
+        sync: workTaskSync,
+        emit: (task) => {
+          mainWindow?.webContents.send(IpcEvents.workTaskUpdated, task)
+          workTaskReminders?.handleTaskChange()
+        }
+      })
+      workTaskController = new WorkTaskIpcController(workTaskService)
+      workTaskReminders = new WorkTaskReminderService({
+        store: workTaskRepo,
+        isEnabled: () => appState?.config.notifications !== false,
+        notify: ({ title, body }) => {
+          if (!Notification.isSupported()) return
+          const icon = systemNotificationIcon()
+          const notification = new Notification({ title, body, ...(icon ? { icon } : {}) })
+          notification.on('click', () => {
+            showMainWindow()
+            mainWindow?.webContents.send(IpcEvents.openTasks)
+          })
+          notification.show()
+        },
+        emitBadge: (badge) => mainWindow?.webContents.send(IpcEvents.workTaskBadge, badge)
+      })
+      workTaskReminders.start()
       remoteView.attach({
         selfId: state.nodeId,
         peer: id => {
@@ -1495,6 +1552,19 @@ if (!gotLock) {
           applyIncomingRecall: (row) => files?.applyRecallMessage(row.id) ?? false
         }
       })
+      duel = new DuelService({
+        selfId: state.nodeId,
+        messenger,
+        isOnline: (peerId) => registry?.get(peerId)?.online === true,
+        peerCaps: (peerId) => registry?.get(peerId)?.profile.caps ?? null,
+        peerName: (peerId) => resolvePeerDisplayName(peerId) || registry?.get(peerId)?.profile.nick || peerId,
+        emit: (event) => {
+          if (event.view?.phase === 'ended' && event.view.outcome) {
+            chat?.recordDuelResult(event.peerId, event.view.matchId, event.view.outcome)
+          }
+          mainWindow?.webContents.send(IpcEvents.duelState, event)
+        }
+      })
       const onMessage = (msg: MessageView): void => {
         diagnostics.record('message.state', { id: msg.id, status: msg.status, kind: msg.kind })
         mainWindow?.webContents.send(IpcEvents.msgNew, msg)
@@ -1506,7 +1576,8 @@ if (!gotLock) {
       }
       const onNudge = (ev: NudgeEvent): void => {
         mainWindow?.webContents.send(IpcEvents.nudgeReceived, ev)
-        shakeMainWindowForNudge()
+        // 纸飞机 / 墨弹是纯视觉互动：不抢焦点，也不震动窗口。
+        if (!ev.style) shakeMainWindowForNudge()
       }
       const onConvs = (convs: Array<{ unread: number }>): void => {
         mainWindow?.webContents.send(IpcEvents.convsUpdated, convs)
@@ -1649,6 +1720,7 @@ if (!gotLock) {
     let pushTimer: ReturnType<typeof setTimeout> | null = null
     registry.on('updated', () => {
       remoteView.service?.checkPeer()
+      duel?.handleRegistryChange()
       if (pushTimer) return
       pushTimer = setTimeout(() => {
         pushTimer = null
@@ -2200,6 +2272,13 @@ if (!gotLock) {
     return agentService.updateAgentProfile(input as AgentProfileUpdate)
   })
 
+  ipcMain.handle(IpcChannels.agentModels, (_event, agentId: unknown) =>
+    agentService?.listAgentModels(typeof agentId === 'string' ? agentId : '') ?? {
+      ok: false,
+      error: 'Agent 服务不可用'
+    }
+  )
+
   ipcMain.handle(IpcChannels.agentScan, () => {
     if (!agentService) return { ok: false, error: 'Agent 存储不可用' }
     return agentService.scanAgents()
@@ -2338,6 +2417,13 @@ if (!gotLock) {
     }
   )
 
+  ipcMain.handle(IpcChannels.agentTaskChat, (_event, taskId: unknown, text: unknown) =>
+    agentTaskController?.chat(taskId, text) ?? {
+      ok: false,
+      error: 'Agent 任务存储不可用'
+    }
+  )
+
   ipcMain.handle(IpcChannels.agentTaskEvents, (_event, taskId: unknown, limit: unknown) =>
     agentTaskController?.events(taskId, limit) ?? []
   )
@@ -2370,6 +2456,51 @@ if (!gotLock) {
         ok: false,
         error: 'Agent 任务存储不可用'
       }
+  )
+
+  ipcMain.handle(IpcChannels.workTaskProjectList, () => workTaskController?.listProjects() ?? [])
+
+  ipcMain.handle(IpcChannels.workTaskList, (_event, filter: unknown) =>
+    workTaskController?.listTasks(filter) ?? []
+  )
+
+  ipcMain.handle(IpcChannels.workTaskProjectCreate, (_event, name: unknown) =>
+    workTaskController?.createProject(name) ?? { ok: false, error: '任务存储不可用' }
+  )
+
+  ipcMain.handle(IpcChannels.workTaskProjectRename, (_event, projectId: unknown, name: unknown) =>
+    workTaskController?.renameProject(projectId, name) ?? {
+      ok: false,
+      error: '任务存储不可用'
+    }
+  )
+
+  ipcMain.handle(IpcChannels.workTaskProjectDelete, (_event, projectId: unknown) =>
+    workTaskController?.deleteProject(projectId) ?? { ok: false, error: '任务存储不可用' }
+  )
+
+  ipcMain.handle(IpcChannels.workTaskCreate, (_event, input: unknown) =>
+    workTaskController?.createTask(input) ?? { ok: false, error: '任务存储不可用' }
+  )
+
+  ipcMain.handle(IpcChannels.workTaskUpdate, (_event, taskId: unknown, patch: unknown) =>
+    workTaskController?.updateTask(taskId, patch) ?? { ok: false, error: '任务存储不可用' }
+  )
+
+  ipcMain.handle(IpcChannels.workTaskDelete, (_event, taskId: unknown) =>
+    workTaskController?.deleteTask(taskId) ?? { ok: false, error: '任务存储不可用' }
+  )
+
+  ipcMain.handle(IpcChannels.workTaskShare, (_event, taskId: unknown, peerIds: unknown) =>
+    workTaskController?.shareTask(taskId, peerIds) ?? { ok: false, error: '任务存储不可用' }
+  )
+
+  ipcMain.handle(IpcChannels.workTaskUnshare, (_event, taskId: unknown, peerId: unknown) =>
+    workTaskController?.unshareTask(taskId, peerId) ?? { ok: false, error: '任务存储不可用' }
+  )
+
+  ipcMain.handle(IpcChannels.workTaskBadgeGet, () =>
+    workTaskReminders?.getBadge() ?? { dueToday: 0, overdue: 0 }
   )
 
   ipcMain.handle(IpcChannels.convList, () => chat?.listConversations() ?? [])
@@ -2425,11 +2556,11 @@ if (!gotLock) {
     return chat?.recall(msgId) ?? false
   })
 
-  ipcMain.handle(IpcChannels.msgNudge, async (_event, peerId: unknown): Promise<NudgeResult> => {
+  ipcMain.handle(IpcChannels.msgNudge, async (_event, peerId: unknown, style: unknown): Promise<NudgeResult> => {
     if (typeof peerId !== 'string' || peerId.length === 0 || peerId.length > 64) {
       return { ok: false, reason: 'invalid' }
     }
-    return chat?.sendNudge(peerId) ?? { ok: false, reason: 'invalid' }
+    return chat?.sendNudge(peerId, normalizeNudgeStyle(style)) ?? { ok: false, reason: 'invalid' }
   })
 
   ipcMain.handle(IpcChannels.msgPk, (_event, convId: unknown, game: unknown) => {
@@ -2439,6 +2570,45 @@ if (!gotLock) {
     if (convId.startsWith('group:')) return groups?.sendPk(convId.slice(6), game) ?? null
     return null
   })
+
+  ipcMain.handle(IpcChannels.duelInvite, (_event, peerId: unknown) => {
+    if (typeof peerId !== 'string' || peerId.length === 0 || peerId.length > 64) {
+      return { ok: false, reason: 'invalid' }
+    }
+    return duel?.invite(peerId) ?? { ok: false, reason: 'no-session' }
+  })
+
+  ipcMain.handle(IpcChannels.duelRespond, (_event, matchId: unknown, accept: unknown) => {
+    if (typeof matchId !== 'string' || matchId.length === 0 || matchId.length > 64) {
+      return { ok: false, reason: 'invalid' }
+    }
+    if (typeof accept !== 'boolean') return { ok: false, reason: 'invalid' }
+    return duel?.respond(matchId, accept) ?? { ok: false, reason: 'no-session' }
+  })
+
+  ipcMain.handle(IpcChannels.duelMove, (_event, matchId: unknown, action: unknown) => {
+    if (typeof matchId !== 'string' || matchId.length === 0 || matchId.length > 64) {
+      return { ok: false, reason: 'invalid' }
+    }
+    if (!isDuelAction(action)) return { ok: false, reason: 'invalid' }
+    return duel?.move(matchId, action) ?? { ok: false, reason: 'no-session' }
+  })
+
+  ipcMain.handle(IpcChannels.duelQuit, (_event, matchId: unknown) => {
+    if (typeof matchId !== 'string' || matchId.length === 0 || matchId.length > 64) {
+      return { ok: false, reason: 'invalid' }
+    }
+    return duel?.quit(matchId) ?? { ok: false, reason: 'no-session' }
+  })
+
+  ipcMain.handle(IpcChannels.duelClose, (_event, matchId: unknown) => {
+    if (typeof matchId !== 'string' || matchId.length === 0 || matchId.length > 64) {
+      return { ok: false, reason: 'invalid' }
+    }
+    return duel?.close(matchId) ?? { ok: false, reason: 'no-session' }
+  })
+
+  ipcMain.handle(IpcChannels.duelGet, () => duel?.currentView() ?? null)
 
   ipcMain.handle(IpcChannels.msgForward, async (_event, msgId: unknown, targets: unknown) => {
     if (typeof msgId !== 'string' || msgId.length === 0 || msgId.length > 64) {
@@ -2494,6 +2664,7 @@ if (!gotLock) {
       autoLaunch: c?.autoLaunch !== false,
       closeToTray: c?.closeToTray !== false,
       startupMotion: c?.startupMotion !== false,
+      nudgeEffects: c?.nudgeEffects !== false,
       language: c?.language ?? 'zh-CN',
       theme: c?.theme === 'dark' ? 'dark' : 'light',
       fontScale,
@@ -3191,6 +3362,7 @@ if (!gotLock) {
       if (typeof p.autoLaunch === 'boolean') clean.autoLaunch = p.autoLaunch
       if (typeof p.closeToTray === 'boolean') clean.closeToTray = p.closeToTray
       if (typeof p.startupMotion === 'boolean') clean.startupMotion = p.startupMotion
+      if (typeof p.nudgeEffects === 'boolean') clean.nudgeEffects = p.nudgeEffects
       if (isLanguage(p.language)) clean.language = p.language
       if (p.theme === 'light' || p.theme === 'dark' || p.theme === 'auto') clean.theme = p.theme
       const ACCENT_IDS = ['indigo', 'teal', 'rose', 'amber', 'forest'] as const
@@ -3731,6 +3903,8 @@ if (!gotLock) {
       CAPS.groupRoles,
       CAPS.avatarImages,
       CAPS.fileCabinet,
+      CAPS.taskSharing,
+      CAPS.duel,
       ...updateCaps
     ], app.getPreferredSystemLanguages()[0] || app.getLocale())
     await setLanguage(appState.config.language)
@@ -3840,7 +4014,10 @@ if (!gotLock) {
 
   app.on('activate', () => showMainWindow()) // macOS 点 Dock 唤起
 
-  app.on('will-quit', () => globalShortcut.unregisterAll())
+  app.on('will-quit', () => {
+    globalShortcut.unregisterAll()
+    duel?.dispose()
+  })
 
   let diagnosticQuit = false
   let diagnosticClosing = false
@@ -3873,6 +4050,11 @@ if (!gotLock) {
     agentCoordinator?.checkpointAndDispose()
     agentCoordinator = null
     agentTaskController = null
+    workTaskController = null
+    workTaskReminders?.stop()
+    workTaskReminders = null
+    workTaskService = null
+    workTaskSync = null
     agentService?.dispose()
     agentService = null
     void files?.stop()

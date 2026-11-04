@@ -22,5 +22,6 @@ The established Simplified Chinese documents are the canonical product, protocol
 | [Technical design](tech-design.md) | Architecture, storage, risks, tests, and CI | [技术设计](../tech-design.md) |
 | [Neiwangtong compatibility](nwt-compat-design.md) | Paused compatibility-mode design | [内网通兼容设计](../nwt-compat-design.md) |
 | [Optimization plan](optimization-plan.md) | Optimization status and execution boundaries | [代码优化方案](../optimization-plan.md) |
+| [Duel arena](duel-arena.md) | Entry, rules, protocol convergence, and compatibility | [双人角斗场](../duel-arena.md) |
 
 Historical implementation plans remain Chinese engineering records. Local target-platform packaging notes remain private under the repository's existing ignore policy.

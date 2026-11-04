@@ -113,6 +113,14 @@ const sections = computed<Array<{ id: Section; icon: string; label: string; summ
 ]))
 
 const section = ref<Section>('profile')
+const settingsBody = ref<HTMLElement | null>(null)
+
+async function selectSection(next: Section): Promise<void> {
+  if (section.value === next) return
+  section.value = next
+  await nextTick()
+  if (settingsBody.value) settingsBody.value.scrollTop = 0
+}
 const settings = ref<SettingsView | null>(null)
 const info = ref<AppInfo | null>(null)
 // 关于页「更多信息」折叠（决议 #90）：默认收起开发者向运行时信息
@@ -566,6 +574,10 @@ async function toggleStartupMotion(value: boolean): Promise<void> {
   await saveApp({ startupMotion: value })
 }
 
+async function toggleNudgeEffects(value: boolean): Promise<void> {
+  await saveApp({ nudgeEffects: value })
+}
+
 async function toggleMessagePreview(value: boolean): Promise<void> {
   await saveApp({ showMessagePreview: value })
 }
@@ -653,6 +665,7 @@ async function resetAppSettings(): Promise<void> {
       autoLaunch: true,
       closeToTray: true,
       startupMotion: true,
+      nudgeEffects: true,
       theme: 'light',
       fontScale: 100,
       showMessagePreview: true,
@@ -933,6 +946,7 @@ async function confirmRemove(cidr: string): Promise<void> {
 
 <template>
   <NConfigProvider
+    class="settings-provider"
     :theme="naiveTheme"
     :theme-overrides="naiveThemeOverrides"
     :locale="language === 'en' ? enUS : zhCN"
@@ -954,7 +968,7 @@ async function confirmRemove(cidr: string): Promise<void> {
           :title="item.label"
           :aria-label="item.label"
           :class="{ on: section === item.id }"
-          @click="section = item.id"
+          @click="selectSection(item.id)"
         >
           <SettingsNavIcon class="nav-icon" :name="item.icon" :size="22" />
           <span>{{ item.label }}</span>
@@ -962,7 +976,7 @@ async function confirmRemove(cidr: string): Promise<void> {
       </nav>
     </aside>
 
-    <main class="body">
+    <main ref="settingsBody" class="body">
       <header class="page-head">
         <div>
           <h1>{{ currentSection.label }}</h1>
@@ -1159,7 +1173,7 @@ async function confirmRemove(cidr: string): Promise<void> {
                 class="preference-segment theme-segment"
                 role="radiogroup"
                 :aria-label="tr('主题')"
-                :data-second="settings.theme === 'dark'"
+                :data-pos="settings.theme === 'light' ? 0 : settings.theme === 'auto' ? 1 : 2"
               >
                 <button
                   type="button"
@@ -1273,6 +1287,13 @@ async function confirmRemove(cidr: string): Promise<void> {
                 <small>{{ tr('关闭后通知只显示会话名称。') }}</small>
               </div>
               <NSwitch :value="settings.showMessagePreview" @update:value="toggleMessagePreview" />
+            </div>
+            <div class="setting-line">
+              <div>
+                <strong>{{ tr('互动特效') }}</strong>
+                <small>{{ tr('收到纸飞机或墨弹时播放飞行动画，关闭后只保留文字提示。') }}</small>
+              </div>
+              <NSwitch :value="settings.nudgeEffects" @update:value="toggleNudgeEffects" />
             </div>
             <div class="setting-line">
               <div>
@@ -1845,6 +1866,11 @@ async function confirmRemove(cidr: string): Promise<void> {
 </template>
 
 <style scoped>
+.settings-provider {
+  height: 100%;
+  min-height: 0;
+}
+
 .settings {
   /* 设置页专属标尺（决议 #150）：间距 4px 基准台阶 / 圆角 Shape Lock（容器 8 · 控件 6 · 胶囊 999）/
      字号 4 级阶梯，收敛全页魔数、统一节奏；仅设置页作用域，不影响聊天等其他界面 */
@@ -1864,10 +1890,21 @@ async function confirmRemove(cidr: string): Promise<void> {
   display: flex;
   position: relative;
   isolation: isolate;
-  height: 100vh;
-  min-width: 620px;
+  width: 100%;
+  height: 100%;
   background: var(--bg-chat);
   color: var(--text-1);
+  /* 透明窗口的阴影画在 32px 衬距内（见 settings-window.ts）。 */
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow:
+    0 10px 20px rgba(15, 18, 30, 0.32),
+    0 2px 8px rgba(15, 18, 30, 0.2);
+}
+
+/* 关闭按钮跟随圆角面板，避开窗口的透明衬距。 */
+:deep(.win-controls) {
+  position: absolute;
 }
 
 .settings::after {
@@ -1970,6 +2007,7 @@ async function confirmRemove(cidr: string): Promise<void> {
 .body {
   flex: 1;
   min-width: 0;
+  min-height: 0;
   /* 滚动视口从拖拽带下方开始，内容滚动时不会钻进顶部 32px 不可交互区 */
   margin-top: 32px;
   padding: 4px 28px 24px;
@@ -2176,7 +2214,21 @@ async function confirmRemove(cidr: string): Promise<void> {
 }
 
 .theme-segment {
-  width: 140px;
+  /* 三档（浅色 / 跟随系统 / 深色）单行排布：跟随系统文案最长，228px 保证不换行 */
+  width: 228px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.theme-segment::before {
+  width: calc((100% - 4px) / 3);
+}
+
+.theme-segment[data-pos='1']::before {
+  transform: translateX(100%);
+}
+
+.theme-segment[data-pos='2']::before {
+  transform: translateX(200%);
 }
 
 .theme-segment button {
@@ -3070,9 +3122,10 @@ async function confirmRemove(cidr: string): Promise<void> {
     visibility 0.14s ease;
 }
 
-/* 端口修改风险确认（决议 #240）：纯色遮罩 + 静态卡片，兼顾 Win7 / UOS 软渲染。 */
+/* 端口修改风险确认（决议 #240）：纯色遮罩 + 静态卡片，兼顾 Win7 / UOS 软渲染。
+   absolute 而非 fixed：窗口四周有透明衬距，遮罩只允许盖住圆角面板。 */
 .port-warning-mask {
-  position: fixed;
+  position: absolute;
   inset: 0;
   z-index: 50;
   display: grid;
@@ -3089,7 +3142,7 @@ async function confirmRemove(cidr: string): Promise<void> {
   width: min(392px, 100%);
   padding: 22px;
   border: 1px solid var(--line);
-  border-radius: var(--r-card);
+  border-radius: 8%;
   outline: none;
   background: var(--material-strong);
   box-shadow: var(--highlight-edge), var(--shadow-float);
@@ -3292,7 +3345,7 @@ async function confirmRemove(cidr: string): Promise<void> {
    固定在设置窗口整体水平居中、底部上浮；
    深色胶囊对比当前主题、currentColor 对勾保证两主题对比、蓝色味柔影（非纯黑）；淡入 + 上移 / 淡出 + 下移，尊重 reduced-motion */
 .toast {
-  position: fixed;
+  position: absolute;
   left: 50%;
   bottom: 22px;
   transform: translateX(-50%);

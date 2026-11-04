@@ -397,7 +397,7 @@ function confirmRemove(): void {
   width: 320px;
   background: var(--material-strong);
   border: 1px solid var(--line);
-  border-radius: var(--radius-panel);
+  border-radius: 8%;
   box-shadow: var(--highlight-edge), var(--shadow-float);
   padding: 20px 20px 16px;
 }

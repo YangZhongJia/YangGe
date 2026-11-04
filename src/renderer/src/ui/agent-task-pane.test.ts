@@ -18,7 +18,6 @@ describe('Agent task room', () => {
     expect(source).toContain("tr('角色提示词')")
     expect(source).toContain('v-model:checked="settingsEnabled"')
     expect(source).toContain('store.updateAgentProfile({')
-    expect(source).toContain('只在本机界面展示，不会自动发送给模型。')
     expect(source).toContain('角色提示词会随任务内容发送给该 CLI 配置的模型供应商')
     expect(source).toContain('它不是工具授权，也不是系统沙箱')
   })
@@ -29,9 +28,12 @@ describe('Agent task room', () => {
     expect(source).toContain('{{ tr(\'单聊\') }}')
   })
 
-  it('requires a Git repository and explains the clean-tree and provider boundary', () => {
-    expect(source).toContain('{{ tr(\'选择 Git 仓库\') }}')
+  it('requires a working folder and explains both modes and the provider boundary', () => {
+    expect(source).toContain('taskMode')
+    expect(source).toContain("tr('Git 仓库')")
+    expect(source).toContain("tr('普通目录')")
     expect(source).toContain('仓库必须干净')
+    expect(source).toContain('改动实时生效且没有版本回滚')
     expect(source).toContain('任务内容可能由对应 Agent CLI 发送给其模型供应商')
     expect(source).toContain('worktree')
   })

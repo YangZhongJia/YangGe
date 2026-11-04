@@ -10,6 +10,11 @@ import { applyWindowZoom } from '../util/window-zoom'
 
 const SETTINGS_WIDTH = 640
 const SETTINGS_HEIGHT = 480
+// 无边框透明窗需要用 CSS 绘制阴影，
+// 四周留 32px 透明衬距由 CSS 画阴影；面板仍为 640×480，窗口外框整体放大，居中按外框计算。
+const SHEET_MARGIN = 32
+const SHEET_WIDTH = SETTINGS_WIDTH + SHEET_MARGIN * 2
+const SHEET_HEIGHT = SETTINGS_HEIGHT + SHEET_MARGIN * 2
 
 let win: BrowserWindow | null = null
 let currentFontScale: SettingsView['fontScale'] = 100
@@ -25,11 +30,11 @@ function centeredOverParent(
   if (!parent || parent.isDestroyed()) return {}
   const p = parent.getBounds()
   const area = screen.getDisplayMatching(p).workArea
-  const cx = Math.round(p.x + (p.width - SETTINGS_WIDTH) / 2)
-  const cy = Math.round(p.y + (p.height - SETTINGS_HEIGHT) / 2)
+  const cx = Math.round(p.x + (p.width - SHEET_WIDTH) / 2)
+  const cy = Math.round(p.y + (p.height - SHEET_HEIGHT) / 2)
   return {
-    x: Math.max(area.x, Math.min(cx, area.x + area.width - SETTINGS_WIDTH)),
-    y: Math.max(area.y, Math.min(cy, area.y + area.height - SETTINGS_HEIGHT))
+    x: Math.max(area.x, Math.min(cx, area.x + area.width - SHEET_WIDTH)),
+    y: Math.max(area.y, Math.min(cy, area.y + area.height - SHEET_HEIGHT))
   }
 }
 
@@ -85,8 +90,8 @@ export function openSettingsWindow(
     return
   }
   win = new BrowserWindow({
-    width: SETTINGS_WIDTH,
-    height: SETTINGS_HEIGHT,
+    width: SHEET_WIDTH,
+    height: SHEET_HEIGHT,
     ...centeredOverParent(activeParent),
     resizable: false,
     minimizable: false,
@@ -96,6 +101,8 @@ export function openSettingsWindow(
     parent: activeParent ?? undefined,
     ...(process.platform !== 'darwin' && activeParent ? { modal: true } : {}),
     hasShadow: true,
+    // 设置窗使用透明背景与 CSS 圆角、阴影（见 SettingsApp.vue）。
+    transparent: true,
     // 沉浸式无标题栏（决议 #49）：mac 红绿灯内嵌（最小化/最大化自动灰显），Win/Linux 自绘关闭按钮
     ...(process.platform === 'darwin'
       ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 12, y: 10 } }

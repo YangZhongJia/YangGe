@@ -80,6 +80,7 @@
 | `peers` | 单播 | UDP | gossip：已知节点摘要交换 |
 | `scan-ranges` | 单播 | UDP | 低频同步扫描 CIDR 记录（不触发即时扫描） |
 | `msg` | 单播 | UDP/TCP | 用户消息（kind 细分，见 §7） |
+| `task` | 单播 | UDP/TCP | 个人/共享任务快照与撤销（`tsk1`，见 §7.6） |
 | `ack` | 单播 | UDP/TCP | `{ackFor: id}`，对 `msg` 与 `file-ctl` 的确认 |
 | `file-ctl` | 单播 | UDP | 文件控制：offer / accept / decline / cancel / direct（`direct` 为发送方在私聊文件卡片上请求直接发送；`offer.purpose:"update"` 为自更新包，见 §8） |
 | `update` | 单播 | UDP/TCP | 局域网自更新：可靠控制报文；`req` 请求对端发来其平台安装包（决议 #166/#170，见 §8） |
@@ -225,6 +226,16 @@ UI 概念，协议上不存在：对每个收件人各发一条独立 `msg`，�
 - 新端只向声明 `av1` 的在线来源请求未知哈希，同一哈希并发请求合并。用户头像只向资料所属节点请求，来源仅在哈希等于自己的当前 `Profile.avatarHash` 时返回。群头像优先向发送群元数据的成员请求，失败后尝试其他在线 `av1` 群成员；请求方与响应方都必须是当前成员，且本地群元数据哈希与请求一致。来源收到通过成员/权限校验的 `get` 但无法提供数据（哈希不匹配当前资料或群元数据、本地缓存缺失）时回 `miss`；请求方只接受当前请求源发来的 `miss`：群头像立即改试下一个未尝试的在线 `av1` 成员源，用户头像不再等待数据、请求登记保留至超时作为冷却，之后由资料或注册表变化触发重试（决议 #249）。
 - 接收数据后重新计算 SHA-256，并校验 WebP 类型、静态 192×192 尺寸和 32768B 上限；校验通过后原子写入受管缓存。异常响应只丢弃当前头像数据，不影响聊天和节点在线状态。未知头像报文或旧端缺字段按向前兼容规则忽略。
 - 受管头像的 renderer 读取地址固定为本地 `pantry-avatar://asset/<sha256>`，scheme 在应用就绪前登记为标准安全协议；短主机名只用于统一 Chromium URL 解析，真实定位仍以路径中的 64 位哈希完成并由主进程复核。该本地地址不进入线上报文，`avatarHash` 与 `avatar` 请求 / 响应格式保持不变。
+
+### 7.6 个人/共享任务记录（tsk1）
+
+- 能力位 `CAPS.taskSharing = "tsk1"`；只向通讯录中声明该能力的节点发送任务报文，未声明者不接收也不展示。
+- `task` 载荷为 `TaskSyncPayload`：
+  - `{op:"upsert", toNodeId, task, project}`：任务完整快照（标题、说明、项目、开始/截止日期、状态、revision）与项目快照。`task.ownerNodeId` 必须等于 `project.ownerNodeId`，且两者都必须等于信封 `from`。
+  - `{op:"revoke", toNodeId, ownerNodeId, taskId, revision}`：撤销共享；接收端隐藏副本但保留本地历史。
+- 接收端校验 `toNodeId` 等于本机、`from` 就是 owner、发送者在通讯录且声明 `tsk1`、revision 严格递增；重复或旧版本报文幂等丢弃。撤销在 revision 大于等于本地副本时生效，之后更高 revision 的 upsert 可重新激活。
+- 复用 `msg` 同款可靠投递与离线补发；共享沿用现有不加密、不签名的局域网信任模型，撤销不能强制擦除接收端已保存的数据，也不经过群聊或 Agent 通道。
+- 传输层细节：`task` 属于 Messenger 可靠控制报文集合——UDP 逐封 ACK + 1s/2s/4s 退避重传；信封超过 UDP 单包上限（任务说明上限 8000B，常超）或短包三轮无 ACK 时走 TCP 控制帧兜底；仍失败才标对端离线并进入持久化补发队列。补发队列重新投递时由 Messenger 写入 `resend:true`，`task` 载荷白名单必须放行该字段，否则补发的任务会被接收端按 `bad-payload` 丢弃。
 
 ## 8. 文件传输（TCP，拉取式）
 

@@ -21,6 +21,7 @@ interface AgentTaskCoordinatorPort {
   pause(taskId: string): Promise<AgentResult<AgentTaskView>>
   resume(taskId: string): Promise<AgentResult<AgentTaskView>>
   cancel(taskId: string): Promise<AgentResult<AgentTaskView>>
+  chat(taskId: string, text: string): Promise<AgentResult<AgentTaskEventView>>
   respondPermission(
     taskId: string,
     requestId: string,
@@ -64,6 +65,7 @@ function validAgentId(value: unknown): value is string {
 function parseCreateInput(value: unknown): AgentTaskCreateInput {
   if (!isRecord(value)) throw new Error('invalid_task_payload')
   const { repoPath, prompt, coordinatorAgentId, teamAgentIds } = value
+  const mode = value['mode'] === 'plain' ? 'plain' as const : 'git' as const
   if (typeof repoPath !== 'string' || repoPath.length > 4_096 || !isAbsolute(repoPath)) {
     throw new Error('repository_path_must_be_absolute')
   }
@@ -90,7 +92,8 @@ function parseCreateInput(value: unknown): AgentTaskCreateInput {
     repoPath,
     prompt,
     coordinatorAgentId,
-    teamAgentIds: [...teamAgentIds]
+    teamAgentIds: [...teamAgentIds],
+    mode
   }
 }
 
@@ -158,6 +161,18 @@ export class AgentTaskIpcController {
     return this.taskAction(taskId, (id) => this.coordinator.cancel(id))
   }
 
+  chat(taskId: unknown, text: unknown): Promise<AgentResult<AgentTaskEventView>> {
+    if (!validTaskId(taskId)) return Promise.resolve(fail('invalid_task_id'))
+    if (
+      typeof text !== 'string' ||
+      text.trim().length === 0 ||
+      Buffer.byteLength(text, 'utf8') > MAX_TASK_BYTES
+    ) {
+      return Promise.resolve(fail('task_chat_invalid'))
+    }
+    return this.coordinator.chat(taskId, text)
+  }
+
   apply(taskId: unknown): Promise<AgentResult<null>> {
     return this.taskAction(taskId, (id) => this.coordinator.apply(id))
   }
@@ -193,7 +208,9 @@ export class AgentTaskIpcController {
 
   async diff(taskId: unknown): Promise<AgentResult<AgentTaskDiffView>> {
     if (!validTaskId(taskId)) return fail('invalid_task_id')
-    if (!this.store.getTask(taskId)) return fail('task_not_found')
+    const task = this.store.getTask(taskId)
+    if (!task) return fail('task_not_found')
+    if (task.mode === 'plain') return fail('patch_unsupported_plain_directory')
     try {
       const [patch, changedFiles] = await Promise.all([
         this.workspaces.buildPatch(taskId),

@@ -31,7 +31,7 @@ function keydown(event: KeyboardEvent): void {
 </template>
 
 <style scoped>
-.screen-confirm { width: min(400px, calc(100vw - 40px)); margin: auto; padding: 20px; border: 1px solid var(--line); border-radius: var(--radius-panel); color: var(--text-1); background: var(--bg-window); box-shadow: var(--shadow-float); font-size: var(--font-sm); }
+.screen-confirm { width: min(400px, calc(100vw - 40px)); margin: auto; padding: 20px; border: 1px solid var(--line); border-radius: 8%; color: var(--text-1); background: var(--bg-window); box-shadow: var(--shadow-float); font-size: var(--font-sm); }
 .screen-confirm::backdrop { background: var(--scrim); }
 h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 16px; font-size: var(--font-lg); }
 p { margin: 0 0 16px; line-height: 1.7; overflow-wrap: anywhere; }

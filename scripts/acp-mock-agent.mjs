@@ -329,7 +329,7 @@ async function handlePrompt(id, params) {
       return
     }
 
-    if (promptText.includes('你是阳鸽编码任务的协调者')) {
+    if (promptText.includes('你是阳鸽任务的协调者')) {
       await handleCoordinatorPrompt(id, turn, params.sessionId, promptText)
       return
     }

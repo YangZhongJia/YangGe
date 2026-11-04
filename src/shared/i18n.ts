@@ -10,6 +10,13 @@ export const LANGUAGE_OPTIONS = [
 export const SYSTEM_MESSAGE_TEMPLATES = {
   'nudge.sent': '你发送了一次窗口震动',
   'nudge.received': '对方发来一次窗口震动',
+  'nudge.sent.plane': '你向对方扔了一架纸飞机',
+  'nudge.received.plane': '对方向你扔了一架纸飞机',
+  'nudge.sent.ink': '你向对方扔了一颗墨弹',
+  'nudge.received.ink': '对方向你扔了一颗墨弹',
+  'duel.win': '角斗结束：你获胜了',
+  'duel.lose': '角斗结束：对方获胜了',
+  'duel.draw': '角斗结束：平局',
   'recall.self': '你撤回了一条消息',
   'recall.peer': '对方撤回了一条消息',
   'group.invited': '{actor}邀请你加入群聊',

@@ -40,3 +40,5 @@ bchk*/\ndbg*/
 release2/
 release/
 *.log
+
+release-fix/

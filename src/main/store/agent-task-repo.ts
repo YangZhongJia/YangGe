@@ -16,9 +16,15 @@ const MAX_STEPS = 5
 
 export interface AgentTaskRecordInput extends AgentTaskCreateInput {
   id: string
+  /** 任务工作模式；缺省视为 git（兼容旧记录） */
+  mode: 'git' | 'plain'
+  /** git 任务：源分支；plain 任务为空串 */
   sourceBranch: string
+  /** git 任务：基线提交；plain 任务为空串 */
   baseCommit: string
+  /** git 任务：worktree 目录；plain 任务与 repoPath 相同 */
   worktreePath: string
+  /** git 任务：任务分支；plain 任务为空串 */
   taskBranch: string
   createdAt: number
 }
@@ -27,6 +33,7 @@ interface TaskRow {
   id: string
   prompt: string
   repo_root: string
+  mode: string
   source_branch: string
   base_commit: string
   worktree_path: string
@@ -91,14 +98,16 @@ function parsePlan(value: string | null): AgentCoordinatorPlan | null {
 }
 
 function toTask(row: TaskRow): AgentTaskView {
+  const mode = row.mode === 'plain' ? 'plain' : 'git'
   return {
     id: row.id,
     prompt: row.prompt,
     repoPath: row.repo_root,
-    sourceBranch: row.source_branch,
-    baseCommit: row.base_commit,
-    worktreePath: row.worktree_path,
-    taskBranch: row.task_branch,
+    mode,
+    sourceBranch: mode === 'plain' ? '' : row.source_branch,
+    baseCommit: mode === 'plain' ? '' : row.base_commit,
+    worktreePath: mode === 'plain' ? row.repo_root : row.worktree_path,
+    taskBranch: mode === 'plain' ? '' : row.task_branch,
     coordinatorAgentId: row.coordinator_agent_id,
     teamAgentIds: parseStrings(row.team_agent_ids),
     status: row.status as AgentTaskStatus,
@@ -160,9 +169,9 @@ export class AgentTaskRepo {
   constructor(private readonly db: DatabaseT.Database) {
     this.insertTaskStmt = db.prepare(`
       INSERT INTO agent_tasks (
-        id, prompt, repo_root, source_branch, base_commit, worktree_path,
+        id, prompt, repo_root, mode, source_branch, base_commit, worktree_path,
         task_branch, coordinator_agent_id, team_agent_ids, status, created_ts, updated_ts
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?)
     `)
     this.selectTaskStmt = db.prepare('SELECT * FROM agent_tasks WHERE id = ?')
     this.selectTasksStmt = db.prepare('SELECT * FROM agent_tasks ORDER BY updated_ts DESC LIMIT ?')
@@ -212,6 +221,7 @@ export class AgentTaskRepo {
       task.id,
       task.prompt,
       task.repoPath,
+      task.mode,
       task.sourceBranch,
       task.baseCommit,
       task.worktreePath,

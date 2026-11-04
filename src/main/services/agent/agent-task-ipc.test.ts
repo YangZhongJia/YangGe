@@ -17,6 +17,7 @@ const task: AgentTaskView = {
   baseCommit: 'a'.repeat(40),
   worktreePath: 'C:\\worktrees\\task-1',
   taskBranch: 'yangge/task-task-1',
+  mode: 'git' as const,
   coordinatorAgentId: 'coordinator',
   teamAgentIds: ['implementer', 'reviewer'],
   status: 'draft',
@@ -46,6 +47,7 @@ function createHarness() {
     pause: vi.fn(async () => ok(task)),
     resume: vi.fn(async () => ok(task)),
     cancel: vi.fn(async () => ok(task)),
+    chat: vi.fn(async () => ok({} as AgentTaskEventView)),
     respondPermission: vi.fn(
       async (taskId: string, requestId: string, decision: AgentPermissionDecision) => {
         calls.push(`permission:${taskId}:${requestId}:${decision}`)
@@ -156,6 +158,25 @@ describe('AgentTaskIpcController', () => {
       ok: false,
       error: 'patch_empty'
     })
+  })
+
+  it('validates task group chat messages and forwards them to the coordinator', async () => {
+    const { controller, coordinator } = createHarness()
+
+    await expect(controller.chat('task-1', '   ')).resolves.toEqual({
+      ok: false,
+      error: 'task_chat_invalid'
+    })
+    await expect(controller.chat('bad id!', '你好')).resolves.toEqual({
+      ok: false,
+      error: 'invalid_task_id'
+    })
+    expect(coordinator.chat).not.toHaveBeenCalled()
+
+    await expect(controller.chat('task-1', '请先说说你的分工计划')).resolves.toMatchObject({
+      ok: true
+    })
+    expect(coordinator.chat).toHaveBeenCalledWith('task-1', '请先说说你的分工计划')
   })
 
   it('rejects worktree cleanup while a task is active', async () => {

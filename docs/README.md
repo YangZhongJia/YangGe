@@ -22,5 +22,6 @@
 | [技术设计](tech-design.md) | 选型、分层、存储、风险与 CI | [Technical design](en/tech-design.md) |
 | [内网通兼容设计](nwt-compat-design.md) | 暂缓功能的隔离式兼容方案 | [Neiwangtong compatibility](en/nwt-compat-design.md) |
 | [代码优化方案](optimization-plan.md) | 优化项、状态与执行边界 | [Optimization plan](en/optimization-plan.md) |
+| [双人角斗场](duel-arena.md) | 入口、规则、协议收敛与兼容边界 | [Duel arena](en/duel-arena.md) |
 
 历史实施计划保留为中文工程记录，不属于对外维护的当前规范。目标平台私有打包记录继续按仓库现有忽略规则留在本地。

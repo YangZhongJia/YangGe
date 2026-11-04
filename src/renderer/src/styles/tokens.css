@@ -273,6 +273,18 @@ html[data-window='capture'] #app {
   background: #000;
 }
 
+/* 设置弹窗透明窗：html 透明，#app 四周 32px 衬距承载 CSS 阴影，
+   与 settings-window.ts 的 SHEET_MARGIN 对应；面板自身圆角见 SettingsApp.vue。 */
+html[data-window='settings'],
+html[data-window='settings'] body,
+html[data-window='settings'] #app {
+  background: transparent;
+}
+html[data-window='settings'] #app {
+  box-sizing: border-box;
+  padding: 32px;
+}
+
 button, input, textarea, select {
   font-family: inherit;
 }
@@ -335,14 +347,15 @@ html[data-theme='dark'] ::-webkit-scrollbar-thumb:hover {
   }
 }
 
-/* ===== 会话背景（决议 #327）：plain 默认，其余由 ChatPane 覆盖 ===== */
+/* ===== 会话背景（决议 #327）：dots 默认，其余由 ChatPane 覆盖 ===== */
 
 /* ===== 会话背景（决议 #327）：全局规则，作用于聊天滚动区 ===== */
+/* 飞鸽水印：阳鸽应用图标（build/icons 母版派生 220px WebP），明暗双版烘焙不透明度 */
 html[data-chat-bg='dove'] .msgs {
-  background: var(--bg-chat) url('data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20width=%22220%22%20height=%22220%22%20viewBox=%220%200%20256%20256%22%3E%3Cg%20transform=%22translate(30%2030)%20scale(0.76)%22%3E%3Cpath%20fill=%22rgba(88,80,236,0.05)%22%20fill-rule=%22evenodd%22%20d=%22M213.6%20129.3%20L208.5%20148.3%20L203.4%20158.4%20L200.9%20159.7%20L200.9%20162.2%20L184%20185.9%20L177.9%20207.4%20L172.5%20212.4%20L166.9%20217.4%20L160.4%20222.1%20L152.5%20226.5%20L143.6%20230.4%20L133.5%20233.7%20L122.2%20236.3%20L109.6%20238%20L95.5%20238.6%20L79.8%20238%20L62.4%20236.1%20L43.1%20232.7%20L21.8%20227.6%20L21.6%20225.1%20L25.5%20220.9%20L35.1%20214.9%20L47.9%20206.4%20L61.5%20195.2%20L74.3%20181.5%20L84.6%20165.4%20L90.8%20147.1%20L91.4%20126.8%20L84.8%20104.8%20L69.4%2081.4%20L43.4%2057.1%20L4.9%2033.3%20L3.6%2030.5%20L5.4%2028.3%20L63.9%2052.1%20L112.5%2078.7%20L151%20103.6%20L181%20126.9%20L204%20148.6%20L210.9%20129.3%20Z%22/%3E%3C/g%3E%3C/svg%3E') repeat-y center top / 220px auto;
+  background: var(--bg-chat) url('../assets/brand/chat-bg-dove-light.webp') repeat-y center top / 220px auto;
 }
 html[data-theme='dark'][data-chat-bg='dove'] .msgs {
-  background: var(--bg-chat) url('data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20width=%22220%22%20height=%22220%22%20viewBox=%220%200%20256%20256%22%3E%3Cg%20transform=%22translate(30%2030)%20scale(0.76)%22%3E%3Cpath%20fill=%22rgba(255,255,255,0.035)%22%20fill-rule=%22evenodd%22%20d=%22M213.6%20129.3%20L208.5%20148.3%20L203.4%20158.4%20L200.9%20159.7%20L200.9%20162.2%20L184%20185.9%20L177.9%20207.4%20L172.5%20212.4%20L166.9%20217.4%20L160.4%20222.1%20L152.5%20226.5%20L143.6%20230.4%20L133.5%20233.7%20L122.2%20236.3%20L109.6%20238%20L95.5%20238.6%20L79.8%20238%20L62.4%20236.1%20L43.1%20232.7%20L21.8%20227.6%20L21.6%20225.1%20L25.5%20220.9%20L35.1%20214.9%20L47.9%20206.4%20L61.5%20195.2%20L74.3%20181.5%20L84.6%20165.4%20L90.8%20147.1%20L91.4%20126.8%20L84.8%20104.8%20L69.4%2081.4%20L43.4%2057.1%20L4.9%2033.3%20L3.6%2030.5%20L5.4%2028.3%20L63.9%2052.1%20L112.5%2078.7%20L151%20103.6%20L181%20126.9%20L204%20148.6%20L210.9%20129.3%20Z%22/%3E%3C/g%3E%3C/svg%3E') repeat-y center top / 220px auto;
+  background: var(--bg-chat) url('../assets/brand/chat-bg-dove-dark.webp') repeat-y center top / 220px auto;
 }
 html[data-chat-bg='dots'] .msgs {
   background-color: var(--bg-chat);

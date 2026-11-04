@@ -175,7 +175,11 @@ export const CAPS = {
    */
   fileCabinet: 'shr1',
   remoteView: 'rv1',
-  remoteShare: 'rvs1'
+  remoteShare: 'rvs1',
+  /** 个人/共享任务记录：能收发 `task` 报文的 upsert/revoke（只声明能力，不代表已共享）。 */
+  taskSharing: 'tsk1',
+  /** 双人角斗场：能收发 `duel` 报文（内存会话，不落聊天库）。 */
+  duel: 'duel1'
 } as const
 
 /**
@@ -263,6 +267,14 @@ export const NUDGE_MIN_INTERVAL_MS = TIMINGS.nudgeMinInterval
 export const NUDGE_RATE_WINDOW_MS = TIMINGS.nudgeRateWindow
 export const NUDGE_MAX_PER_WINDOW = TIMINGS.nudgeMaxPerWindow
 
+/** 震动附带的互动样式；旧版本忽略该字段，退化为普通窗口震动。 */
+export const NUDGE_STYLES = ['plane', 'ink'] as const
+export type NudgeStyle = (typeof NUDGE_STYLES)[number]
+
+export function normalizeNudgeStyle(value: unknown): NudgeStyle | undefined {
+  return value === 'plane' || value === 'ink' ? value : undefined
+}
+
 /** 输入中提示：发送端节流间隔 / 接收端展示时长（决议 #321） */
 export const TYPING_THROTTLE_MS = 2_500
 export const TYPING_SHOW_MS = 4_000
@@ -279,6 +291,8 @@ export type MsgPayload =
     }
   | {
       kind: 'nudge'
+      /** 纸飞机 / 墨弹；缺省为普通震动 */
+      style?: NudgeStyle
     }
   | {
       kind: 'pk'
@@ -308,6 +322,52 @@ export type MsgPayload =
       groupId?: string
       groupRev?: number
       /** 补发标记：消息保持原 id/ts，落在历史正确位置 */
+      resend?: boolean
+    }
+
+/** 个人/共享任务记录（tsk1）：完整任务快照或撤销指令，定向单播、可靠补发。 */
+export interface WorkTaskSyncTask {
+  id: string
+  ownerNodeId: string
+  projectId: string
+  title: string
+  description: string
+  startDate: string | null
+  dueDate: string | null
+  status: WorkTaskStatus
+  revision: number
+  createdAt: number
+  updatedAt: number
+}
+
+export interface WorkTaskSyncProject {
+  id: string
+  ownerNodeId: string
+  name: string
+  updatedAt: number
+}
+
+export interface WorkTaskSyncSnapshot {
+  task: WorkTaskSyncTask
+  project: WorkTaskSyncProject
+}
+
+export type TaskSyncPayload =
+  | {
+      op: 'upsert'
+      /** 收件人 nodeId；接收端必须与自身 nodeId 一致。 */
+      toNodeId: string
+      task: WorkTaskSyncTask
+      project: WorkTaskSyncProject
+      /** 离线补发标记：Messenger 补发队列发送时会置 true，接收端按 revision 幂等处理。 */
+      resend?: boolean
+    }
+  | {
+      op: 'revoke'
+      toNodeId: string
+      ownerNodeId: string
+      taskId: string
+      revision: number
       resend?: boolean
     }
 
@@ -646,10 +706,14 @@ export const MSG_TYPES = {
   share: 'share',
   screen: 'screen',
   typing: 'typing',
-  clipboard: 'clipboard'
+  clipboard: 'clipboard',
+  task: 'task',
+  /** 双人角斗场（duel1）：定向可靠控制帧，不进入消息历史。 */
+  duel: 'duel'
 } as const
 
 export function isAvatarHash(value: unknown): value is string {
   return typeof value === 'string' && /^[a-f0-9]{64}$/.test(value)
 }
 import type { PkGame, PkResult } from './pk'
+import type { WorkTaskStatus } from './work-task'

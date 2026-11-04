@@ -3,7 +3,7 @@
 // Keep these navigation glyphs separate from the smaller in-content icon family.
 withDefaults(
   defineProps<{
-    name: 'chat' | 'contacts' | 'cabinet' | 'refresh' | 'settings' | 'agent'
+    name: 'chat' | 'contacts' | 'cabinet' | 'refresh' | 'settings' | 'agent' | 'tasks'
     size?: number
   }>(),
   { size: 28 }
@@ -57,6 +57,14 @@ withDefaults(
       <path d="M20 14h2" />
       <path d="M15 13v2" />
       <path d="M9 13v2" />
+    </g>
+    <!-- lucide: list-checks; local geometry for the task records entry. -->
+    <g v-else-if="name === 'tasks'">
+      <path d="m3 17 2 2 4-4" />
+      <path d="m3 7 2 2 4-4" />
+      <path d="M13 6h8" />
+      <path d="M13 12h8" />
+      <path d="M13 18h8" />
     </g>
     <!-- lucide: settings; original geometry, optical stroke weight set on the root. -->
     <g v-else-if="name === 'settings'">

@@ -32,6 +32,7 @@ function agent(id: string): AgentView {
     displayName: '',
     description: '',
     instructions: '',
+    model: '',
     command: `/agents/${id}`,
     args: [],
     cwd: '',
@@ -392,6 +393,18 @@ async function waitFor(predicate: () => boolean, label: string): Promise<void> {
   throw new Error(`timeout_waiting_for_${label}`)
 }
 
+class MemoryPlainWorkspace {
+  async create(_taskId: string, dirPath: string): Promise<TaskWorkspace> {
+    return {
+      repoRoot: dirPath,
+      sourceBranch: '',
+      baseCommit: '',
+      worktreePath: dirPath,
+      taskBranch: ''
+    }
+  }
+}
+
 function harness() {
   const store = new MemoryTaskStore()
   const agents = new MemoryAgents()
@@ -402,6 +415,7 @@ function harness() {
     store,
     agents,
     workspaces,
+    plainWorkspaces: new MemoryPlainWorkspace(),
     emit: (channel, payload) => emitted.push({ channel, payload }),
     now: () => 100,
     id: () => `generated-${++sequence}`
@@ -474,6 +488,108 @@ describe('AgentCoordinator', () => {
       expect(store.listSteps(created.id)).toHaveLength(0)
       expect(agents.prompts.some((prompt) => prompt.agentId === IMPLEMENTER)).toBe(false)
     }
+  })
+
+  it('accepts research-and-review plans for plain folder tasks without implement steps', async () => {
+    const { coordinator, store, agents } = harness()
+    agents.queue(COORDINATOR, JSON.stringify(plan([
+      {
+        id: 'test-run',
+        title: '执行测试',
+        role: 'research',
+        agentId: RESEARCHER,
+        dependsOn: [],
+        input: '按需求文档执行测试',
+        expectedOutput: '测试结果'
+      },
+      {
+        id: 'verify-report',
+        title: '复核报告',
+        role: 'review',
+        agentId: REVIEWER,
+        dependsOn: ['test-run'],
+        input: '复核测试报告',
+        expectedOutput: '复核结论'
+      }
+    ])))
+
+    const created = await createTask(coordinator, {
+      ...createInput(),
+      repoPath: 'C:\\plain',
+      mode: 'plain'
+    })
+    value(await coordinator.start(created.id))
+    await waitFor(
+      () => store.getTask(created.id)?.status === 'awaiting_approval',
+      'plain plan approval'
+    )
+    expect(store.listSteps(created.id)).toHaveLength(2)
+    expect(store.getTask(created.id)?.mode).toBe('plain')
+  })
+  it('executes an approved plain-folder research and review plan', async () => {
+    const { coordinator, store, agents } = harness()
+    agents.queue(COORDINATOR, JSON.stringify(plan([
+      {
+        id: 'test-run',
+        title: '执行测试',
+        role: 'research',
+        agentId: RESEARCHER,
+        dependsOn: [],
+        input: '执行指定测试',
+        expectedOutput: '测试结果'
+      },
+      {
+        id: 'verify-report',
+        title: '复核报告',
+        role: 'review',
+        agentId: REVIEWER,
+        dependsOn: ['test-run'],
+        input: '复核测试结果',
+        expectedOutput: '复核结论'
+      }
+    ])))
+    agents.queue(RESEARCHER, '测试完成：发现 1 个问题')
+    agents.queue(REVIEWER, '复核确认 1 个问题')
+
+    const created = await createTask(coordinator, {
+      ...createInput(),
+      repoPath: 'C:\\plain',
+      mode: 'plain'
+    })
+    value(await coordinator.start(created.id))
+    await waitFor(
+      () => store.getTask(created.id)?.status === 'awaiting_approval',
+      'plain plan approval'
+    )
+
+    value(await coordinator.approvePlan(created.id))
+    await waitFor(
+      () => ['completed', 'failed'].includes(store.getTask(created.id)?.status ?? ''),
+      'plain task execution'
+    )
+
+    expect(store.getTask(created.id)?.status).toBe('completed')
+    expect(store.getTask(created.id)?.error).toBeNull()
+    expect(store.listSteps(created.id).map((step) => step.status)).toEqual([
+      'completed',
+      'completed'
+    ])
+    expect(agents.prompts.filter((prompt) => prompt.agentId !== COORDINATOR)).toHaveLength(2)
+  })
+
+  it('retries once when the coordinator first returns prose without JSON', async () => {
+    const { coordinator, store, agents } = harness()
+    agents.queue(COORDINATOR, '我先看看项目结构，再给出计划。')
+    agents.queue(COORDINATOR, JSON.stringify(plan()))
+
+    const created = await createTask(coordinator)
+    value(await coordinator.start(created.id))
+    await waitFor(() => store.getTask(created.id)?.status === 'awaiting_approval', 'retry plan')
+
+    const prompts = agents.prompts.filter((prompt) => prompt.agentId === COORDINATOR)
+    expect(prompts).toHaveLength(2)
+    expect(prompts[1].text).toContain('请只输出 JSON 对象本身')
+    expect(store.listSteps(created.id)).toHaveLength(plan().steps.length)
   })
 
   it('waits for plan approval, hands results forward, and enforces one writer', async () => {

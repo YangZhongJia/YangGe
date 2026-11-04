@@ -27,6 +27,7 @@ function taskInput(id = 'task-1'): AgentTaskRecordInput {
     id,
     prompt: '修复登录流程',
     repoPath: 'C:\\project',
+    mode: 'git' as const,
     sourceBranch: 'main',
     baseCommit: 'abc123',
     worktreePath: 'C:\\app-data\\agent-tasks\\task-1',
@@ -78,6 +79,7 @@ function makeAgent(): AgentView {
     displayName: '',
     description: '',
     instructions: '',
+    model: '',
     command: 'C:\\agents\\agent.exe',
     args: [],
     cwd: 'C:\\project',
@@ -102,12 +104,14 @@ function assertAgentProfilePersistence(): void {
     displayName: 'Builder',
     description: '测试与实现',
     instructions: '先写测试。',
+    model: 'deepseek/deepseek-flash',
     enabled: false
   }), {
     ...makeAgent(),
     displayName: 'Builder',
     description: '测试与实现',
     instructions: '先写测试。',
+    model: 'deepseek/deepseek-flash',
     enabled: false
   })
   repo.createSession({
@@ -139,6 +143,7 @@ function assertAgentProfilePersistence(): void {
     displayName: 'Builder',
     description: '测试与实现',
     instructions: '先写测试。',
+    model: 'deepseek/deepseek-flash',
     enabled: false,
     lastProbeTs: 200
   })
@@ -152,6 +157,7 @@ function assertAgentProfilePersistence(): void {
       displayName: 'Builder',
       description: '测试与实现',
       instructions: '先写测试。',
+      model: 'deepseek/deepseek-flash',
       enabled: false,
       lastProbeTs: 200
     })

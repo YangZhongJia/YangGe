@@ -30,6 +30,15 @@ describe('v18 Agent 协调任务迁移', () => {
   })
 })
 
+describe('v20 Agent 模型迁移', () => {
+  it('为已有 Agent 增加模型字段', () => {
+    expect(MIGRATIONS.length).toBeGreaterThanOrEqual(20)
+    const v20 = MIGRATIONS[19]
+    expect(v20).toContain('ALTER TABLE agent_agents ADD COLUMN model')
+    expect(v20).not.toMatch(/\b(?:peers|conversations|messages|groups)\b/)
+  })
+})
+
 describe('v19 Agent 档案迁移', () => {
   it('为已有 Agent 增加本地展示与提示词字段', () => {
     expect(MIGRATIONS.length).toBeGreaterThanOrEqual(19)

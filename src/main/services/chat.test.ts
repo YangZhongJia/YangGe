@@ -339,6 +339,52 @@ describe('ChatService 私聊窗口震动', () => {
     expect(msgRepo.inserted).toHaveLength(1)
   })
 
+  it('纸飞机与墨弹沿用可靠通道、限流和各自提示', async () => {
+    const msgRepo = new FakeMsgRepo()
+    const messenger = new FakeMessenger()
+    const convRepo = new FakeConvRepo()
+    const chat = new ChatService({
+      selfId: 'node-self',
+      convRepo: convRepo as unknown as ConvRepo,
+      msgRepo: msgRepo as unknown as MsgRepo,
+      groupRepo: new FakeGroupRepo() as unknown as GroupRepo,
+      messenger: messenger as unknown as Messenger
+    })
+
+    await expect(chat.sendNudge('node-peer', 'plane')).resolves.toEqual({ ok: true })
+    await expect(chat.sendNudge('node-peer', 'ink')).resolves.toEqual({ ok: true })
+    expect(messenger.reliableSent).toHaveLength(2)
+    expect(messenger.reliableSent[0]).toMatchObject({
+      peerId: 'node-peer',
+      env: { type: 'msg', payload: { kind: 'nudge', style: 'plane' } }
+    })
+    expect(messenger.reliableSent[1]).toMatchObject({
+      peerId: 'node-peer',
+      env: { type: 'msg', payload: { kind: 'nudge', style: 'ink' } }
+    })
+    expect(msgRepo.inserted.map((row) => row.content)).toEqual([
+      '你向对方扔了一架纸飞机',
+      '你向对方扔了一颗墨弹'
+    ])
+  })
+
+  it('未知样式退回普通震动，不阻塞消息', async () => {
+    const msgRepo = new FakeMsgRepo()
+    const messenger = new FakeMessenger()
+    const convRepo = new FakeConvRepo()
+    const chat = new ChatService({
+      selfId: 'node-self',
+      convRepo: convRepo as unknown as ConvRepo,
+      msgRepo: msgRepo as unknown as MsgRepo,
+      groupRepo: new FakeGroupRepo() as unknown as GroupRepo,
+      messenger: messenger as unknown as Messenger
+    })
+
+    await expect(chat.sendNudge('node-peer', 'firework' as never)).resolves.toEqual({ ok: true })
+    expect(messenger.reliableSent[0].env.payload).toEqual({ kind: 'nudge' })
+    expect(msgRepo.inserted[0]).toMatchObject({ content: '你发送了一次窗口震动' })
+  })
+
   it('收到震动写本地系统提示并触发定位事件；重复入站被接收端限流', () => {
     const msgRepo = new FakeMsgRepo()
     const messenger = new FakeMessenger()
@@ -385,6 +431,68 @@ describe('ChatService 私聊窗口震动', () => {
     })
     expect(convRepo.bumped).toHaveLength(1)
     expect(convRepo.unread).toHaveLength(0)
+  })
+
+  it('收到带样式的互动写入对应提示并透传样式', () => {
+    const msgRepo = new FakeMsgRepo()
+    const messenger = new FakeMessenger()
+    const convRepo = new FakeConvRepo()
+    const chat = new ChatService({
+      selfId: 'node-self',
+      convRepo: convRepo as unknown as ConvRepo,
+      msgRepo: msgRepo as unknown as MsgRepo,
+      groupRepo: new FakeGroupRepo() as unknown as GroupRepo,
+      messenger: messenger as unknown as Messenger
+    })
+    const nudges: Array<{ peerId: string; convId: string; style?: string }> = []
+    chat.on('nudge', (event: { peerId: string; convId: string; style?: string }) => nudges.push(event))
+
+    const env: Envelope<MsgPayload> = {
+      v: 1,
+      type: 'msg',
+      id: 'nudge-ink',
+      from: 'node-peer',
+      ts: Date.now(),
+      payload: { kind: 'nudge', style: 'ink' }
+    }
+    messenger.emit('incoming', env)
+
+    messenger.emit('incoming', { ...env, id: 'nudge-ink-2' })
+
+    expect(nudges).toHaveLength(2)
+    expect(nudges[0]).toMatchObject({ peerId: 'node-peer', style: 'ink' })
+    expect(nudges[1]).toMatchObject({ peerId: 'node-peer', style: 'ink' })
+    expect(msgRepo.inserted).toHaveLength(2)
+    expect(msgRepo.inserted[0]).toMatchObject({ content: '对方向你扔了一颗墨弹' })
+  })
+
+  it('未知样式的入站互动按普通震动处理', () => {
+    const msgRepo = new FakeMsgRepo()
+    const messenger = new FakeMessenger()
+    const convRepo = new FakeConvRepo()
+    const chat = new ChatService({
+      selfId: 'node-self',
+      convRepo: convRepo as unknown as ConvRepo,
+      msgRepo: msgRepo as unknown as MsgRepo,
+      groupRepo: new FakeGroupRepo() as unknown as GroupRepo,
+      messenger: messenger as unknown as Messenger
+    })
+    const nudges: Array<{ peerId: string; convId: string; style?: string }> = []
+    chat.on('nudge', (event: { peerId: string; convId: string; style?: string }) => nudges.push(event))
+
+    const env: Envelope<MsgPayload> = {
+      v: 1,
+      type: 'msg',
+      id: 'nudge-unknown',
+      from: 'node-peer',
+      ts: Date.now(),
+      payload: { kind: 'nudge', style: 'firework' as never }
+    }
+    messenger.emit('incoming', env)
+
+    expect(nudges).toHaveLength(1)
+    expect(nudges[0].style).toBeUndefined()
+    expect(msgRepo.inserted[0]).toMatchObject({ content: '对方发来一次窗口震动' })
   })
 
   it('免打扰会话收到震动只写提示，不触发窗口震动事件', () => {
@@ -500,6 +608,20 @@ describe('ChatService PK', () => {
     expect(messenger.reliableSent).toHaveLength(2)
     expect(messenger.reliableSent[1].env.id).toBe(view!.id)
     expect(messenger.reliableSent[1].env.payload).toEqual(firstPayload)
+  })
+
+  it('角斗结果写入对应聊天，重复结算不重复写入', () => {
+    const msgRepo = new FakeMsgRepo()
+    const chat = new ChatService({
+      selfId: 'node-self',
+      convRepo: new FakeConvRepo() as unknown as ConvRepo,
+      msgRepo: msgRepo as unknown as MsgRepo,
+      messenger: new FakeMessenger() as unknown as Messenger
+    })
+    chat.recordDuelResult('node-peer', 'match-12345678', 'win')
+    chat.recordDuelResult('node-peer', 'match-12345678', 'win')
+    expect(msgRepo.inserted).toHaveLength(1)
+    expect(msgRepo.inserted[0]).toMatchObject({ convId: 'single:node-peer', kind: 'system', content: '角斗结束：你获胜了' })
   })
 
   it('收到 PK 落库为安全摘要，真实结果只放 file_ref', () => {

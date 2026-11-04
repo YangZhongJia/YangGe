@@ -324,6 +324,70 @@ export const MIGRATIONS: ReadonlyArray<string> = [
   ALTER TABLE agent_agents ADD COLUMN display_name TEXT NOT NULL DEFAULT '';
   ALTER TABLE agent_agents ADD COLUMN description TEXT NOT NULL DEFAULT '';
   ALTER TABLE agent_agents ADD COLUMN instructions TEXT NOT NULL DEFAULT '';
+  `,
+
+  // v20：每个 Agent 可指定模型（空串 = 使用 CLI 默认；会话建立后经 ACP 切换）。
+  `
+  ALTER TABLE agent_agents ADD COLUMN model TEXT NOT NULL DEFAULT '';
+  `,
+
+  // v21：任务支持普通目录模式（git 任务沿用 worktree 字段；普通目录模式这些字段为空/占位）。
+  `
+  ALTER TABLE agent_tasks ADD COLUMN mode TEXT NOT NULL DEFAULT 'git'
+    CHECK(mode IN ('git','plain'));
+  `,
+
+  // v22：个人/共享任务记录（独立于 Agent 编码任务；owner_node_id 区分本机任务与只读副本）。
+  `
+  CREATE TABLE work_task_projects (
+    id            TEXT NOT NULL CHECK(length(id) BETWEEN 1 AND 64),
+    owner_node_id TEXT NOT NULL CHECK(length(owner_node_id) BETWEEN 1 AND 64),
+    name          TEXT NOT NULL CHECK(length(name) BETWEEN 1 AND 100),
+    created_ts    INTEGER NOT NULL,
+    updated_ts    INTEGER NOT NULL,
+    PRIMARY KEY (owner_node_id, id)
+  );
+  CREATE INDEX idx_work_task_projects_owner ON work_task_projects(owner_node_id, updated_ts DESC);
+
+  CREATE TABLE work_tasks (
+    id            TEXT NOT NULL CHECK(length(id) BETWEEN 1 AND 64),
+    owner_node_id TEXT NOT NULL CHECK(length(owner_node_id) BETWEEN 1 AND 64),
+    project_id    TEXT NOT NULL CHECK(length(project_id) BETWEEN 1 AND 64),
+    title         TEXT NOT NULL CHECK(length(title) BETWEEN 1 AND 200),
+    description   TEXT NOT NULL DEFAULT '' CHECK(length(description) <= 8000),
+    start_date    TEXT,
+    due_date      TEXT,
+    status        TEXT NOT NULL CHECK(status IN ('not_started','in_progress','completed')),
+    revision      INTEGER NOT NULL DEFAULT 1 CHECK(revision >= 1),
+    active        INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
+    created_ts    INTEGER NOT NULL,
+    updated_ts    INTEGER NOT NULL,
+    PRIMARY KEY (owner_node_id, id)
+  );
+  CREATE INDEX idx_work_tasks_owner_updated ON work_tasks(owner_node_id, updated_ts DESC);
+  CREATE INDEX idx_work_tasks_project ON work_tasks(owner_node_id, project_id);
+
+  CREATE TABLE work_task_shares (
+    task_id         TEXT NOT NULL CHECK(length(task_id) BETWEEN 1 AND 64),
+    peer_id         TEXT NOT NULL CHECK(length(peer_id) BETWEEN 1 AND 64),
+    revision        INTEGER NOT NULL DEFAULT 1 CHECK(revision >= 1),
+    last_message_id TEXT,
+    delivery_state  TEXT NOT NULL CHECK(delivery_state IN ('sent','queued','failed','unsupported','revoked')),
+    created_ts      INTEGER NOT NULL,
+    updated_ts      INTEGER NOT NULL,
+    PRIMARY KEY (task_id, peer_id)
+  );
+  CREATE INDEX idx_work_task_shares_peer ON work_task_shares(peer_id);
+  `,
+
+  // v23：任务提醒。due_reminded_on 记录本机最近一次到期提醒日期；汇总表记录每日逾期提醒去重。
+  `
+  ALTER TABLE work_tasks ADD COLUMN due_reminded_on TEXT;
+  CREATE TABLE work_task_reminder_state (
+    key        TEXT PRIMARY KEY CHECK(length(key) BETWEEN 1 AND 64),
+    value      TEXT NOT NULL CHECK(length(value) BETWEEN 1 AND 64),
+    updated_ts INTEGER NOT NULL
+  );
   `
 ]
 

@@ -108,7 +108,7 @@ async function finish(): Promise<void> {
 .card {
   width: 380px;
   background: var(--bg-window);
-  border-radius: 8px;
+  border-radius: 8%;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
   padding: 32px 36px 28px;
   text-align: center;

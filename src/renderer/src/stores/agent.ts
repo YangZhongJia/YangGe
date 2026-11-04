@@ -6,6 +6,7 @@ import type {
   AgentProfileUpdate,
   AgentSessionUpdate,
   AgentSessionView,
+  AgentModelOption,
   AgentTaskCreateInput,
   AgentTaskDetailView,
   AgentTaskDiffView,
@@ -75,6 +76,8 @@ export const useAgentStore = defineStore('agent', {
     pendingPermissions: [] as AgentPermissionRequestView[],
     busy: false,
     scanning: false,
+    /** 最近一次扫描的完成时间；0 表示本次运行还没扫过。 */
+    scannedAt: 0,
     initialized: false,
     error: '',
     tasks: [] as AgentTaskView[],
@@ -83,6 +86,10 @@ export const useAgentStore = defineStore('agent', {
     taskDiff: null as AgentTaskDiffView | null,
     taskPermissions: [] as AgentTaskPermissionRequestEvent[],
     taskBusy: false,
+    agentModels: {} as Record<
+      string,
+      { loading: boolean; models: AgentModelOption[]; currentModel: string; error: string }
+    >,
     taskInitialized: false,
     taskError: ''
   }),
@@ -262,6 +269,19 @@ export const useAgentStore = defineStore('agent', {
       await this.runTaskStateAction(taskId, () => window.pantry.cancelAgentTask(taskId))
     },
 
+    async chatTask(taskId: string, text: string): Promise<void> {
+      this.taskBusy = true
+      this.taskError = ''
+      try {
+        const result = await window.pantry.chatAgentTask(taskId, text)
+        if (!result.ok) this.taskError = result.error
+      } catch (error) {
+        this.taskError = error instanceof Error ? error.message : String(error)
+      } finally {
+        this.taskBusy = false
+      }
+    },
+
     async loadTaskDiff(taskId: string): Promise<void> {
       this.taskBusy = true
       this.taskError = ''
@@ -399,10 +419,13 @@ export const useAgentStore = defineStore('agent', {
         }
         this.agents = result.value.agents
         this.clients = result.value.clients
+        this.scannedAt = result.value.scannedAt
         if (result.value.failures.length > 0) {
+          const first = result.value.failures[0]
+          const name = first.command.split(/[\\/]/).pop() || first.command
           this.error = tr('有 {0} 个 Agent 探测失败：{1}', {
             0: result.value.failures.length,
-            1: result.value.failures[0].error
+            1: `${name}: ${first.error}`
           })
         }
       } catch (error) {
@@ -443,6 +466,34 @@ export const useAgentStore = defineStore('agent', {
       } catch (error) {
         this.error = error instanceof Error ? error.message : String(error)
         return false
+      }
+    },
+
+    async loadAgentModels(agentId: string): Promise<void> {
+      const previous = this.agentModels[agentId]
+      this.agentModels[agentId] = {
+        loading: true,
+        models: previous?.models ?? [],
+        currentModel: previous?.currentModel ?? '',
+        error: ''
+      }
+      try {
+        const result = await window.pantry.listAgentModels(agentId)
+        this.agentModels[agentId] = result.ok
+          ? {
+              loading: false,
+              models: result.value.models,
+              currentModel: result.value.currentModel,
+              error: ''
+            }
+          : { loading: false, models: [], currentModel: '', error: result.error }
+      } catch (error) {
+        this.agentModels[agentId] = {
+          loading: false,
+          models: [],
+          currentModel: '',
+          error: error instanceof Error ? error.message : String(error)
+        }
       }
     },
 

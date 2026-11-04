@@ -8,6 +8,7 @@ import {
   type AgentPermissionDecision,
   type AgentPermissionRequestView,
   type AgentPermissionResolvedEvent,
+  type AgentModelList,
   type AgentProfileUpdate,
   type AgentProbeResult,
   type AgentResult,
@@ -74,9 +75,17 @@ import {
   type SharePackageResult,
   type SummarizeResult,
   type UpdateAvailability,
-  type UpdatePackageReady
+  type UpdatePackageReady,
+  type WorkTaskBadgeEvent,
+  type WorkTaskCreateInput,
+  type WorkTaskFilter,
+  type WorkTaskPatch,
+  type WorkTaskProjectView,
+  type WorkTaskResult,
+  type WorkTaskView
 } from '../shared/ipc'
-import type { ShareMode } from '../shared/protocol'
+import type { NudgeStyle, ShareMode } from '../shared/protocol'
+import type { DuelAction, DuelCommandResult, DuelStateEvent, DuelView } from '../shared/duel'
 import { createCaptureInitReplay } from './capture-init-replay'
 
 function subscribe<T>(channel: string, listener: (data: T) => void): () => void {
@@ -177,9 +186,21 @@ const api: PantryApi = {
     ipcRenderer.invoke(IpcChannels.msgResend, msgId),
   recallMessage: (msgId: string): Promise<boolean> =>
     ipcRenderer.invoke(IpcChannels.msgRecall, msgId),
-  sendNudge: (peerNodeId: string): Promise<NudgeResult> =>
-    ipcRenderer.invoke(IpcChannels.msgNudge, peerNodeId),
+  sendNudge: (peerNodeId: string, style?: NudgeStyle): Promise<NudgeResult> =>
+    ipcRenderer.invoke(IpcChannels.msgNudge, peerNodeId, style),
   sendPk: (convId, game) => ipcRenderer.invoke(IpcChannels.msgPk, convId, game),
+  duelInvite: (peerNodeId: string): Promise<DuelCommandResult> =>
+    ipcRenderer.invoke(IpcChannels.duelInvite, peerNodeId),
+  duelRespond: (matchId: string, accept: boolean): Promise<DuelCommandResult> =>
+    ipcRenderer.invoke(IpcChannels.duelRespond, matchId, accept),
+  duelMove: (matchId: string, action: DuelAction): Promise<DuelCommandResult> =>
+    ipcRenderer.invoke(IpcChannels.duelMove, matchId, action),
+  duelQuit: (matchId: string): Promise<DuelCommandResult> =>
+    ipcRenderer.invoke(IpcChannels.duelQuit, matchId),
+  duelClose: (matchId: string): Promise<DuelCommandResult> =>
+    ipcRenderer.invoke(IpcChannels.duelClose, matchId),
+  getDuel: (): Promise<DuelView | null> => ipcRenderer.invoke(IpcChannels.duelGet),
+  onDuelState: (listener) => subscribe<DuelStateEvent>(IpcEvents.duelState, listener),
   forwardMessage: (msgId: string, targets: ForwardTarget[]): Promise<ForwardResult> =>
     ipcRenderer.invoke(IpcChannels.msgForward, msgId, targets),
   getSettings: (): Promise<SettingsView> => ipcRenderer.invoke(IpcChannels.settingsGet),
@@ -400,6 +421,8 @@ const api: PantryApi = {
   listAgents: (): Promise<AgentView[]> => ipcRenderer.invoke(IpcChannels.agentList),
   updateAgentProfile: (input: AgentProfileUpdate): Promise<AgentResult<AgentView>> =>
     ipcRenderer.invoke(IpcChannels.agentProfileUpdate, input),
+  listAgentModels: (agentId: string): Promise<AgentResult<AgentModelList>> =>
+    ipcRenderer.invoke(IpcChannels.agentModels, agentId),
   scanAgents: (): Promise<AgentResult<AgentScanResult>> => ipcRenderer.invoke(IpcChannels.agentScan),
   probeAgent: (path: string): Promise<AgentProbeResult> =>
     ipcRenderer.invoke(IpcChannels.agentProbe, path),
@@ -435,6 +458,8 @@ const api: PantryApi = {
     ipcRenderer.invoke(IpcChannels.agentTaskCreate, input),
   getAgentTask: (taskId: string): Promise<AgentTaskDetailView | null> =>
     ipcRenderer.invoke(IpcChannels.agentTaskGet, taskId),
+  chatAgentTask: (taskId: string, text: string): Promise<AgentResult<AgentTaskEventView>> =>
+    ipcRenderer.invoke(IpcChannels.agentTaskChat, taskId, text),
   startAgentTask: (taskId: string): Promise<AgentResult<AgentTaskView>> =>
     ipcRenderer.invoke(IpcChannels.agentTaskStart, taskId),
   approveAgentTaskPlan: (taskId: string): Promise<AgentResult<AgentTaskView>> =>
@@ -468,7 +493,36 @@ const api: PantryApi = {
   onAgentTaskPermissionResolved: (listener) =>
     subscribe<AgentTaskPermissionResolvedEvent>(IpcEvents.agentTaskPermissionResolved, listener),
   onAgentTaskError: (listener) =>
-    subscribe<AgentTaskErrorEvent>(IpcEvents.agentTaskError, listener)
+    subscribe<AgentTaskErrorEvent>(IpcEvents.agentTaskError, listener),
+  listWorkTaskProjects: (): Promise<WorkTaskProjectView[]> =>
+    ipcRenderer.invoke(IpcChannels.workTaskProjectList),
+  listWorkTasks: (filter?: WorkTaskFilter): Promise<WorkTaskView[]> =>
+    ipcRenderer.invoke(IpcChannels.workTaskList, filter),
+  createWorkTask: (input: WorkTaskCreateInput): Promise<WorkTaskResult<WorkTaskView>> =>
+    ipcRenderer.invoke(IpcChannels.workTaskCreate, input),
+  updateWorkTask: (taskId: string, patch: WorkTaskPatch): Promise<WorkTaskResult<WorkTaskView>> =>
+    ipcRenderer.invoke(IpcChannels.workTaskUpdate, taskId, patch),
+  deleteWorkTask: (taskId: string): Promise<WorkTaskResult<null>> =>
+    ipcRenderer.invoke(IpcChannels.workTaskDelete, taskId),
+  shareWorkTask: (taskId: string, peerIds: string[]): Promise<WorkTaskResult<WorkTaskView>> =>
+    // 渲染层的 ref/reactive 数组是 Proxy，结构化克隆会失败；复制成普通数组。
+    ipcRenderer.invoke(IpcChannels.workTaskShare, taskId, [...peerIds]),
+  unshareWorkTask: (taskId: string, peerId: string): Promise<WorkTaskResult<WorkTaskView>> =>
+    ipcRenderer.invoke(IpcChannels.workTaskUnshare, taskId, peerId),
+  createWorkTaskProject: (name: string): Promise<WorkTaskResult<WorkTaskProjectView>> =>
+    ipcRenderer.invoke(IpcChannels.workTaskProjectCreate, name),
+  renameWorkTaskProject: (
+    projectId: string,
+    name: string
+  ): Promise<WorkTaskResult<WorkTaskProjectView>> =>
+    ipcRenderer.invoke(IpcChannels.workTaskProjectRename, projectId, name),
+  deleteWorkTaskProject: (projectId: string): Promise<WorkTaskResult<null>> =>
+    ipcRenderer.invoke(IpcChannels.workTaskProjectDelete, projectId),
+  onWorkTaskUpdated: (listener) => subscribe<WorkTaskView>(IpcEvents.workTaskUpdated, listener),
+  getWorkTaskBadge: (): Promise<WorkTaskBadgeEvent> =>
+    ipcRenderer.invoke(IpcChannels.workTaskBadgeGet),
+  onWorkTaskBadge: (listener) => subscribe<WorkTaskBadgeEvent>(IpcEvents.workTaskBadge, listener),
+  onOpenTasks: (listener) => subscribe<void>(IpcEvents.openTasks, listener)
 }
 
 contextBridge.exposeInMainWorld('pantry', api)

@@ -248,7 +248,7 @@ onBeforeUnmount(() => {
   max-height: calc(100vh - 32px);
   overflow-y: auto;
   border: 1px solid var(--line);
-  border-radius: var(--radius-panel);
+  border-radius: 8%;
   background: var(--bg-window);
   color: var(--text-1);
   box-shadow: var(--shadow-float);

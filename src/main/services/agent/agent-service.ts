@@ -19,9 +19,11 @@ import {
   type AgentStatusEvent,
   type AgentToolLocation,
   type AgentUpdateEvent,
+  type AgentModelList,
   type AgentView
 } from '../../../shared/ipc'
 import type { AgentStore } from '../../store/agent-repo'
+import { parseAgentModels } from './agent-models'
 import {
   AcpClient,
   resolvePermissionOutcome,
@@ -34,6 +36,9 @@ import {
   inspectManualAgent,
   type DiscoveredAgent
 } from './agent-discovery'
+import { planAgentReconcile } from './agent-reconcile'
+import { applyRefreshedWindowsPath } from './agent-env'
+import { mapWithConcurrency } from './agent-process'
 
 // ACP Agent 用例层：启动配置、会话生命周期、prompt 串行化、权限路由与审计。
 // 不依赖 Electron；IPC 层只做参数校验与转发，便于用 mock agent 独立集成测试。
@@ -44,7 +49,13 @@ const MAX_LOCATIONS = 20
 const MAX_AGENT_NAME_CHARS = 80
 const MAX_AGENT_DESCRIPTION_CHARS = 1_000
 const MAX_AGENT_INSTRUCTIONS_CHARS = 16_000
+const MAX_AGENT_MODEL_CHARS = 200_000
 const DEFAULT_PERMISSION_TIMEOUT_MS = 120_000
+// 扫描时每个候选项都要冷启动一次完整 CLI：弱机、杀毒软件拦进程、npx 包装器都会
+// 明显拖慢首次 initialize。3.5s 只够热机，启动统一给 10s；同时限制并发，避免一次
+// 拉起全部 Agent 把机器压到所有握手都超时。
+const AGENT_STARTUP_TIMEOUT_MS = 10_000
+const SCAN_HANDSHAKE_CONCURRENCY = 2
 
 export interface AgentServiceOptions {
   store: AgentStore
@@ -78,6 +89,15 @@ interface PendingPermission {
 function errorText(error: unknown): string {
   if (error instanceof Error) return error.message.slice(0, 500)
   return String(error).slice(0, 500)
+}
+
+/** 扫描/手动添加前刷新本进程 PATH；注册表不可读时保持现状，不中断操作。 */
+function refreshAgentPath(): void {
+  try {
+    applyRefreshedWindowsPath()
+  } catch {
+    // 权限或安全策略限制读取注册表时沿用当前进程 PATH。
+  }
 }
 
 function cleanText(value: unknown, max: number): string {
@@ -173,6 +193,7 @@ export class AcpAgentService {
       typeof input.displayName !== 'string' ||
       typeof input.description !== 'string' ||
       typeof input.instructions !== 'string' ||
+      typeof input.model !== 'string' ||
       typeof input.enabled !== 'boolean'
     ) {
       return fail('Agent 设置不合法')
@@ -186,6 +207,9 @@ export class AcpAgentService {
     if (input.instructions.length > MAX_AGENT_INSTRUCTIONS_CHARS) {
       return fail(`角色提示词不能超过 ${MAX_AGENT_INSTRUCTIONS_CHARS} 个字符`)
     }
+    if (input.model.length > MAX_AGENT_MODEL_CHARS || /[\r\n]/.test(input.model)) {
+      return fail(`模型标识不合法（不超过 ${MAX_AGENT_MODEL_CHARS} 个字符，且不能包含换行）`)
+    }
     if (!this.store.getAgent(input.id)) return fail('Agent 不存在，请重新扫描')
     try {
       const updated = this.store.updateAgentProfile({
@@ -193,6 +217,7 @@ export class AcpAgentService {
         displayName: cleanText(input.displayName, MAX_AGENT_NAME_CHARS).replace(/\s+/g, ' '),
         description: cleanText(input.description, MAX_AGENT_DESCRIPTION_CHARS),
         instructions: cleanText(input.instructions, MAX_AGENT_INSTRUCTIONS_CHARS),
+        model: input.model.trim(),
         enabled: input.enabled
       })
       return updated ? ok(updated) : fail('Agent 不存在，请重新扫描')
@@ -226,21 +251,56 @@ export class AcpAgentService {
   async scanAgents(): Promise<AgentResult<AgentScanResult>> {
     if (this.disposed) return fail('应用正在退出')
     try {
+      // 用户可能在阳鸽启动之后才安装 CLI；先合并注册表里的最新 PATH 再扫描。
+      refreshAgentPath()
       const discovery = await discoverAgents()
       const scannedAt = this.now()
-      const checks = await Promise.all(discovery.agents.map(async (item) => {
-        const agent = this.toAgentView(item, scannedAt)
-        const probe = await this.probeAcp(agent)
-        return probe.ok
-          ? { ok: true as const, agent }
-          : { ok: false as const, failure: { command: agent.command, error: probe.error } }
-      }))
+      const checks = await mapWithConcurrency(
+        discovery.agents,
+        SCAN_HANDSHAKE_CONCURRENCY,
+        async (item) => {
+          const agent = this.toAgentView(item, scannedAt)
+          const probe = await this.probeAcp(agent)
+          return probe.ok
+            ? { ok: true as const, agent }
+            : { ok: false as const, failure: { command: agent.command, error: probe.error } }
+        }
+      )
       const agents = checks.flatMap((check) => check.ok ? [check.agent] : [])
       const failures = [
         ...discovery.failures,
         ...checks.flatMap((check) => check.ok ? [] : [check.failure])
       ]
       this.store.upsertAgents(agents)
+      // 旧版本在 Windows 上把 npm 无扩展名 POSIX 垫片当可执行文件落库（spawn 必然 ENOENT）。
+      // 修正为 .cmd/.exe 后 agent id 变化：迁移用户档案到新行并清掉旧行/失效条目。
+      const plan = planAgentReconcile(
+        this.store.listAgents(),
+        discovery.agents.map((item) => this.agentId(item.command)),
+        agents.map((agent) => agent.id)
+      )
+      for (const { staleId, keepId } of plan.migrate) {
+        const stale = this.store.getAgent(staleId)
+        if (!stale) continue
+        this.store.updateAgentProfile({
+          id: keepId,
+          displayName: stale.displayName,
+          description: stale.description,
+          instructions: stale.instructions,
+          model: stale.model,
+          enabled: stale.enabled
+        })
+        this.store.reassignAgentSessions(staleId, keepId)
+        this.store.deleteAgent(staleId)
+      }
+      for (const id of plan.remove) this.store.deleteAgent(id)
+      // 只记录数量，便于其他电脑反馈「扫描无效」时从诊断包判断是没发现还是握手失败。
+      this.diagnostics('agent.state', {
+        status: 'scanned',
+        found: agents.length,
+        failures: failures.length,
+        clients: discovery.clients.length
+      })
       return ok({
         agents: this.store.listAgents(),
         found: agents.length,
@@ -258,6 +318,8 @@ export class AcpAgentService {
     if (typeof path !== 'string' || path.length === 0 || path.length > 4096) {
       return { ok: false, error: '路径不合法' }
     }
+    // 手动添加的多为 .cmd/.bat 垫片，需要 PATH 里能找到 node；与扫描同样先刷新。
+    refreshAgentPath()
     const inspected = await inspectManualAgent(path)
     if (!inspected.ok || !inspected.agent) {
       return { ok: false, error: inspected.error || '无法识别该可执行文件' }
@@ -280,10 +342,100 @@ export class AcpAgentService {
     })
     try {
       await client.connect()
-      await client.initialize({ timeoutMs: 3500 })
+      await client.initialize({ timeoutMs: AGENT_STARTUP_TIMEOUT_MS })
       return ok(null)
     } catch (error) {
       return fail(`ACP 握手失败：${errorText(error)}`)
+    } finally {
+      await client.close({ graceMs: 500 }).catch(() => null)
+    }
+  }
+
+  /**
+   * 按用户配置切换会话模型：优先 ACP models（session/set_model），
+   * 其次是 configOptions 里的 model 选项（session/set_config_option）。
+   * 配置了不存在的模型时直接报错并列出可选值，避免静默回退到默认模型。
+   */
+  private async applyAgentModel(
+    client: AcpClient,
+    agent: AgentView,
+    session: { sessionId: string; models?: unknown; configOptions?: unknown }
+  ): Promise<void> {
+    const model = agent.model.trim()
+    if (model.length === 0) return
+    const choose = (values: string[]): string => {
+      if (values.includes(model)) return model
+      const preview = values.slice(0, 12).join('、')
+      throw new Error(
+        `该 Agent 不支持模型「${model}」${values.length > 0 ? `；可选：${preview}${values.length > 12 ? ' 等' : ''}` : ''}`
+      )
+    }
+    if (isPlainObject(session.models)) {
+      const available = Array.isArray(session.models['availableModels'])
+        ? session.models['availableModels']
+        : []
+      const ids = available
+        .filter((item): item is Record<string, unknown> => isPlainObject(item))
+        .map((item) => (typeof item['modelId'] === 'string' ? item['modelId'] : ''))
+        .filter((item) => item.length > 0)
+      if (ids.length > 0) {
+        await client.setSessionModel(session.sessionId, choose(ids))
+        return
+      }
+    }
+    const options = Array.isArray(session.configOptions) ? session.configOptions : []
+    const modelOption = options.find((item) => isPlainObject(item) && item['id'] === 'model')
+    if (isPlainObject(modelOption)) {
+      const values = (Array.isArray(modelOption['options']) ? modelOption['options'] : [])
+        .filter((item): item is Record<string, unknown> => isPlainObject(item))
+        .map((item) => (typeof item['value'] === 'string' ? item['value'] : ''))
+        .filter((item) => item.length > 0)
+      await client.setSessionConfigOption(session.sessionId, 'model', choose(values))
+      return
+    }
+    throw new Error('该 Agent 不支持模型选择')
+  }
+
+  /**
+   * 探测某个 Agent 的模型清单：临时建立 ACP 会话读取 models/configOptions 后立即关闭。
+   * 这里只读取清单，不改变任何持久会话或用户配置。
+   */
+  async listAgentModels(agentId: string): Promise<AgentResult<AgentModelList>> {
+    if (this.disposed) return fail('应用正在退出')
+    if (typeof agentId !== 'string' || agentId.length === 0 || agentId.length > 64) {
+      return fail('Agent 标识不合法')
+    }
+    const agent = this.store.getAgent(agentId)
+    if (!agent) return fail('Agent 不存在，请重新扫描')
+    if (agent.probeError) return fail(agent.probeError)
+    const candidates = [agent.cwd, this.defaultCwd].filter((item) => item && isAbsolute(item))
+    let cwd = candidates[0] ?? this.defaultCwd
+    for (const candidate of candidates) {
+      try {
+        if (statSync(candidate!).isDirectory()) {
+          cwd = candidate!
+          break
+        }
+      } catch {
+        // 继续尝试下一个
+      }
+    }
+    const client = new AcpClient({
+      command: agent.command,
+      args: agent.args,
+      cwd,
+      roots: [cwd],
+      clientInfo: { name: 'yangge', title: '阳鸽', version: this.clientVersion }
+    })
+    try {
+      await client.connect()
+      await client.initialize({ timeoutMs: AGENT_STARTUP_TIMEOUT_MS })
+      const session = await client.newSession(cwd)
+      const parsed = parseAgentModels(session)
+      if (!parsed) return fail('该 Agent 不支持模型选择')
+      return ok(parsed)
+    } catch (error) {
+      return fail(`读取模型清单失败：${errorText(error)}`)
     } finally {
       await client.close({ graceMs: 500 }).catch(() => null)
     }
@@ -356,6 +508,7 @@ export class AcpAgentService {
       await client.connect()
       await client.initialize()
       const session = await client.newSession(dir)
+      await this.applyAgentModel(client, agent, session)
       const updated = this.store.updateSession(view.id, {
         acpSessionId: session.sessionId,
         status: 'idle',
@@ -693,8 +846,12 @@ export class AcpAgentService {
     }
   }
 
+  private agentId(command: string): string {
+    return `agent_${createHash('sha1').update(command.toLowerCase()).digest('hex').slice(0, 16)}`
+  }
+
   private toAgentView(item: DiscoveredAgent, probeAt: number): AgentView {
-    const id = `agent_${createHash('sha1').update(item.command.toLowerCase()).digest('hex').slice(0, 16)}`
+    const id = this.agentId(item.command)
     const existing = this.store.getAgent(id)
     return {
       id,
@@ -702,6 +859,7 @@ export class AcpAgentService {
       displayName: existing?.displayName ?? '',
       description: existing?.description ?? '',
       instructions: existing?.instructions ?? '',
+      model: existing?.model ?? '',
       command: item.command,
       args: item.args,
       cwd: existing?.cwd || this.defaultCwd,

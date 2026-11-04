@@ -343,6 +343,11 @@ function isReliableControlType(type: string): boolean {
     // 共享文件柜控制面（§8.2）：list-ok 常超 UDP 上限，必须能走 TCP 控制帧兜底
     type === MSG_TYPES.share || type === MSG_TYPES.screen ||
     // 发剪贴板（决议 #321）：需要送达确认，失败即提示，不静默丢
-    type === MSG_TYPES.clipboard
+    type === MSG_TYPES.clipboard ||
+    // 个人/共享任务（§7.6）：任务快照必须 ACK 确认、可离线补发；
+    // 描述上限 8000B 常超 UDP 上限，必须能走 TCP 控制帧兜底
+    type === MSG_TYPES.task ||
+    // 双人角斗场：回合快照需要 ACK，避免 guest 停在旧回合；仅向声明 duel1 的对端发送
+    type === MSG_TYPES.duel
   )
 }

@@ -5,7 +5,9 @@ import { fileURLToPath } from 'node:url'
 const REQUIRED_ROOTS = ['App.vue', 'SettingsApp.vue', 'CaptureApp.vue', 'ImageViewerApp.vue', 'RemoteViewApp.vue']
 const DEFAULT_MAX_BOOTSTRAP_BYTES = 200 * 1024
 const DEFAULT_ROOT_BUDGETS = {
-  'RemoteViewApp.vue': { js: 128 * 1024, css: 16 * 1024 },
+  // 会话背景水印改用应用图标 WebP（明暗双版，构建期内联进公共 CSS），闭包增加约 4 KiB；
+  // 叠加 Iris 2.0 的公共 token 与背景规则，非主窗入口闭包整体抬升，按实测现值上调。
+  'RemoteViewApp.vue': { js: 128 * 1024, css: 22 * 1024 },
   // 主窗（决议 #284）：文件柜进主窗后带来 NSelect 与两块视图，静态闭包较 v0.49 抬了约 150 KiB。
   // 不改用动态 import——App 内再套动态 import 会让 Rollup 把 App 的 facade 并进匿名共享块，
   // manifest 里就没有 src/App.vue 这个动态入口了，四入口契约（决议 #210）随之失效。
@@ -14,11 +16,18 @@ const DEFAULT_ROOT_BUDGETS = {
   // 二开 Iris 主题：靛蓝气泡白字、悬浮输入卡与协助/PK 卡片对比度修正新增约 1 KiB CSS。
   // 决议 #323/#324：离开状态点、AI 改写弹层与系统提示新增约 2 KiB CSS。
   // 决议 #327：主题色换装色卡、会话背景选项与空态卡片新增约 10 KiB CSS。
-  'App.vue': { js: 800 * 1024, css: 137 * 1024 },
+  // 会话背景水印改为应用图标 WebP（明暗双版内联，替代原 SVG 路径），公共闭包增加约 4 KiB；
+  // 弹窗 8% 圆角与 Iris 2.0 公共规则同批计入，按实测现值上调。
+  // 个人/共享任务页必须静态进 App（App 内第二个动态入口会让 Rollup 把 App facade 并入共享块，
+  // 破坏 App.vue 动态入口契约）；任务页样式新增约 8 KiB，按实测现值上调 CSS 预算。
+  // 纸飞机 / 墨弹互动特效（静态进主窗，保证首次互动零延迟）新增约 5 KiB CSS，按实测现值上调。
+  // 双人角斗场含角色、血条与响应式动画，静态接入增加约 16 KiB CSS。
+  'App.vue': { js: 800 * 1024, css: 172 * 1024 },
   // 决议 #327：主题色/背景选择行与跟随目标下拉新增约 2 KiB CSS。
-  'SettingsApp.vue': { js: 704 * 1024, css: 43 * 1024 },
-  'CaptureApp.vue': { js: 112 * 1024, css: 15 * 1024 },
-  'ImageViewerApp.vue': { js: 160 * 1024, css: 20 * 1024 }
+  // 弹窗 8% 圆角（设置窗透明衬距 + 主题三段控件）新增约 1.3 KiB CSS。
+  'SettingsApp.vue': { js: 704 * 1024, css: 49 * 1024 },
+  'CaptureApp.vue': { js: 112 * 1024, css: 21 * 1024 },
+  'ImageViewerApp.vue': { js: 160 * 1024, css: 22 * 1024 }
 }
 
 function sourceBaseName(key, item) {

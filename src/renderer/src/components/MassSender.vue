@@ -92,7 +92,7 @@ async function sendAll(): Promise<void> {
 .dialog {
   width: 420px;
   background: var(--bg-window);
-  border-radius: 8px;
+  border-radius: 8%;
   padding: 18px 20px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.16);
 }

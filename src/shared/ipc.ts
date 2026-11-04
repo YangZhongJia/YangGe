@@ -3,8 +3,10 @@ import type { ScanRangeImportOutcome } from './cidr'
 // IPC 契约：main 与 renderer 之间唯一的对话词汇表（tech-design §4）。
 // 通道名、请求/响应类型、preload 暴露的 API 形状都只在这里定义。
 
-import type { Platform, ShareDenyReason, ShareEntry, ShareMode, TransferFailureReason } from './protocol'
+import type { NudgeStyle, Platform, ShareDenyReason, ShareEntry, ShareMode, TransferFailureReason } from './protocol'
+import type { WorkTaskDeliveryState, WorkTaskStatus } from './work-task'
 import type { PkGame, PkRefView } from './pk'
+import type { DuelAction, DuelCommandResult, DuelStateEvent, DuelView } from './duel'
 import type { ScreenAvailability, ScreenState, ScreenSource, ScreenMode, ScreenImage, ScreenSample, ScreenRequestResult } from './remote-view'
 
 export const IpcChannels = {
@@ -41,6 +43,13 @@ export const IpcChannels = {
   msgRecall: 'msg:recall',
   msgNudge: 'msg:nudge',
   msgPk: 'msg:pk',
+  /** 双人角斗场：会话只在内存存活，不写聊天库。 */
+  duelInvite: 'duel:invite',
+  duelRespond: 'duel:respond',
+  duelMove: 'duel:move',
+  duelQuit: 'duel:quit',
+  duelClose: 'duel:close',
+  duelGet: 'duel:get',
   msgForward: 'msg:forward',
   settingsGet: 'settings:get',
   settingsSaveProfile: 'settings:save-profile',
@@ -153,6 +162,7 @@ export const IpcChannels = {
   /** ACP Agent：本机 CLI 扫描、会话、提示、取消与权限应答 */
   agentList: 'agent:list',
   agentProfileUpdate: 'agent:profile-update',
+  agentModels: 'agent:models',
   agentScan: 'agent:scan',
   agentProbe: 'agent:probe',
   agentPickCommand: 'agent:pick-command',
@@ -172,11 +182,24 @@ export const IpcChannels = {
   agentTaskPause: 'agent-task:pause',
   agentTaskResume: 'agent-task:resume',
   agentTaskCancel: 'agent-task:cancel',
+  agentTaskChat: 'agent-task:chat',
   agentTaskEvents: 'agent-task:events',
   agentTaskDiff: 'agent-task:diff',
   agentTaskApply: 'agent-task:apply',
   agentTaskRemoveWorktree: 'agent-task:remove-worktree',
-  agentTaskPermissionRespond: 'agent-task:permission-respond'
+  agentTaskPermissionRespond: 'agent-task:permission-respond',
+  /** 个人/共享任务记录（独立于 Agent 编码任务） */
+  workTaskProjectList: 'work-task:project-list',
+  workTaskProjectCreate: 'work-task:project-create',
+  workTaskProjectRename: 'work-task:project-rename',
+  workTaskProjectDelete: 'work-task:project-delete',
+  workTaskList: 'work-task:list',
+  workTaskCreate: 'work-task:create',
+  workTaskUpdate: 'work-task:update',
+  workTaskDelete: 'work-task:delete',
+  workTaskShare: 'work-task:share',
+  workTaskUnshare: 'work-task:unshare',
+  workTaskBadgeGet: 'work-task:badge-get'
 } as const
 
 /** main → renderer 的事件推送 */
@@ -190,6 +213,8 @@ export const IpcEvents = {
   msgUpdated: 'msg:updated',
   msgStatus: 'msg:status',
   nudgeReceived: 'msg:nudge-received',
+  /** 角斗场视图变化（含邀请、回合、结算、离线中断）。 */
+  duelState: 'duel:state',
   convsUpdated: 'convs:updated',
   transferUpdated: 'transfer:updated',
   transferSendBlocked: 'transfer:send-blocked',
@@ -234,6 +259,10 @@ export const IpcEvents = {
   agentTaskPermissionRequest: 'agent-task:permission-request',
   agentTaskPermissionResolved: 'agent-task:permission-resolved',
   agentTaskError: 'agent-task:error',
+  workTaskUpdated: 'work-task:updated',
+  workTaskBadge: 'work-task:badge',
+  /** 任务提醒被点击：主窗切到任务页 */
+  openTasks: 'ui:open-tasks',
   /** 主窗首次显示 / 从托盘、最小化恢复：渲染层据此播放一次启动动效 */
   mainWindowShown: 'ui:main-window-shown'
 } as const
@@ -320,6 +349,8 @@ export interface AgentView {
   description: string
   /** 每次由阳鸽发起 Agent 提示时注入的角色说明 */
   instructions: string
+  /** 用户为该 Agent 指定的模型；空串表示使用 CLI 默认模型 */
+  model: string
   /** 绝对路径；禁止从聊天内容动态写入 */
   command: string
   args: string[]
@@ -336,11 +367,24 @@ export interface AgentView {
 }
 
 /** 只更新阳鸽本地的 Agent 档案，不修改命令、参数或环境。 */
+/** 从 Agent 实时探测到的可选模型（ACP models 或 configOptions.model）。 */
+export interface AgentModelOption {
+  id: string
+  name: string
+  description: string
+}
+
+export interface AgentModelList {
+  models: AgentModelOption[]
+  currentModel: string
+}
+
 export interface AgentProfileUpdate {
   id: string
   displayName: string
   description: string
   instructions: string
+  model: string
   enabled: boolean
 }
 
@@ -513,15 +557,23 @@ export interface AgentTaskCreateInput {
   prompt: string
   coordinatorAgentId: string
   teamAgentIds: string[]
+  /** 任务工作模式：git = 源仓库 worktree 隔离；plain = 直接在所选目录内工作 */
+  mode?: 'git' | 'plain'
 }
 
 export interface AgentTaskView {
   id: string
   prompt: string
   repoPath: string
+  /** 任务工作模式：git = worktree 隔离；plain = 直接在所选目录内工作 */
+  mode: 'git' | 'plain'
+  /** git 任务：源分支；plain 任务为空串 */
   sourceBranch: string
+  /** git 任务：基线提交；plain 任务为空串 */
   baseCommit: string
+  /** git 任务：worktree 目录；plain 任务与 repoPath 相同 */
   worktreePath: string
+  /** git 任务：任务分支；plain 任务为空串 */
   taskBranch: string
   coordinatorAgentId: string
   teamAgentIds: string[]
@@ -576,6 +628,83 @@ export interface AgentTaskDiffView {
   bytes: number
   truncated: boolean
 }
+
+export type WorkTaskResult<T> =
+  | { ok: true; value: T }
+  | { ok: false; error: string }
+
+/** 本地项目，或从共享任务同步来的只读项目影子记录。 */
+export interface WorkTaskProjectView {
+  id: string
+  ownerNodeId: string
+  name: string
+  /** true = 来自其他节点的只读项目 */
+  isShared: boolean
+  createdAt: number
+  updatedAt: number
+}
+
+export interface WorkTaskShareView {
+  peerId: string
+  state: WorkTaskDeliveryState
+  revision: number
+  updatedAt: number
+}
+
+export interface WorkTaskView {
+  id: string
+  ownerNodeId: string
+  projectId: string
+  title: string
+  description: string
+  startDate: string | null
+  dueDate: string | null
+  status: WorkTaskStatus
+  revision: number
+  active: boolean
+  /**
+   * true = 由其他节点创建、只有只读权限的副本。
+   * 由主进程用 appState.nodeId 判定，渲染层不得自行比较 owner 或缓存身份。
+   */
+  isShared: boolean
+  createdAt: number
+  updatedAt: number
+  /** 仅本机拥有的任务携带共享投递状态；远端副本为空数组。 */
+  shares: WorkTaskShareView[]
+}
+
+export interface WorkTaskBadgeEvent {
+  dueToday: number
+  overdue: number
+}
+
+export interface WorkTaskFilter {
+  scope: 'all' | 'owned' | 'shared'
+  projectId?: string
+  startFrom?: string
+  startTo?: string
+  dueFrom?: string
+  dueTo?: string
+}
+
+export interface WorkTaskCreateInput {
+  projectId: string
+  title: string
+  description: string
+  startDate: string | null
+  dueDate: string | null
+}
+
+export interface WorkTaskPatch {
+  projectId?: string
+  title?: string
+  description?: string
+  startDate?: string | null
+  dueDate?: string | null
+  status?: WorkTaskStatus
+}
+
+export type { WorkTaskDeliveryState, WorkTaskStatus } from './work-task'
 
 export interface AgentTaskPermissionRequestEvent {
   taskId: string
@@ -838,6 +967,8 @@ export interface NudgeEvent {
   peerId: string
   convId: string
   ts: number
+  /** 纸飞机 / 墨弹；缺省为普通震动 */
+  style?: NudgeStyle
 }
 
 export interface ForwardTarget {
@@ -992,6 +1123,8 @@ export interface SettingsView {
   closeToTray: boolean
   /** 启动/托盘唤起时的粒子动效（默认开） */
   startupMotion: boolean
+  /** 收到纸飞机 / 墨弹时播放飞行动画（默认开） */
+  nudgeEffects: boolean
   language: Language
   theme: 'light' | 'dark' | 'auto'
   fontScale: 100 | 110 | 125
@@ -1150,6 +1283,7 @@ export interface AppSettingsPatch {
   autoLaunch?: boolean
   closeToTray?: boolean
   startupMotion?: boolean
+  nudgeEffects?: boolean
   language?: Language
   theme?: SettingsView['theme']
   fontScale?: SettingsView['fontScale']
@@ -1275,8 +1409,21 @@ export interface PantryApi {
   sendText(peerNodeId: string, text: string): Promise<MessageView | null>
   resendMessage(msgId: string): Promise<boolean>
   recallMessage(msgId: string): Promise<boolean>
-  sendNudge(peerNodeId: string): Promise<NudgeResult>
+  sendNudge(peerNodeId: string, style?: NudgeStyle): Promise<NudgeResult>
   sendPk(convId: string, game: PkGame): Promise<MessageView | null>
+  /** 从私聊 PK 菜单发起双人角斗邀请（仅在线且支持 duel1 的对端）。 */
+  duelInvite(peerNodeId: string): Promise<DuelCommandResult>
+  /** 接受 / 拒绝收到的角斗邀请。 */
+  duelRespond(matchId: string, accept: boolean): Promise<DuelCommandResult>
+  /** 每回合锁定一个招式；重复点击同一招式为幂等。 */
+  duelMove(matchId: string, action: DuelAction): Promise<DuelCommandResult>
+  /** 主动退出 / 取消邀请；结算阶段调用会直接关闭画面。 */
+  duelQuit(matchId: string): Promise<DuelCommandResult>
+  /** 关闭已结束的角斗结算画面。 */
+  duelClose(matchId: string): Promise<DuelCommandResult>
+  /** 当前内存中的角斗会话（刷新 / 切换会话后恢复用）。 */
+  getDuel(): Promise<DuelView | null>
+  onDuelState(listener: (event: DuelStateEvent) => void): () => void
   forwardMessage(msgId: string, targets: ForwardTarget[]): Promise<ForwardResult>
   getSettings(): Promise<SettingsView>
   /** 保存资料（向导/设置）：资料有变自动广播刷新全网 */
@@ -1490,6 +1637,8 @@ export interface PantryApi {
   // ——— ACP Agent（本机 CLI，独立于群聊/peers） ———
   listAgents(): Promise<AgentView[]>
   updateAgentProfile(input: AgentProfileUpdate): Promise<AgentResult<AgentView>>
+  /** 探测某个 Agent 支持的模型清单（临时 ACP 会话，完成后立即关闭） */
+  listAgentModels(agentId: string): Promise<AgentResult<AgentModelList>>
   /** 扫描 PATH 与 Windows 常见安装目录，并把结果落库 */
   scanAgents(): Promise<AgentResult<AgentScanResult>>
   /** 手动指定可执行文件绝对路径（.exe/.cmd/.bat） */
@@ -1514,6 +1663,7 @@ export interface PantryApi {
   listAgentTasks(limit?: number): Promise<AgentTaskView[]>
   createAgentTask(input: AgentTaskCreateInput): Promise<AgentResult<AgentTaskView>>
   getAgentTask(taskId: string): Promise<AgentTaskDetailView | null>
+  chatAgentTask(taskId: string, text: string): Promise<AgentResult<AgentTaskEventView>>
   startAgentTask(taskId: string): Promise<AgentResult<AgentTaskView>>
   approveAgentTaskPlan(taskId: string): Promise<AgentResult<AgentTaskView>>
   pauseAgentTask(taskId: string): Promise<AgentResult<AgentTaskView>>
@@ -1537,4 +1687,20 @@ export interface PantryApi {
     listener: (event: AgentTaskPermissionResolvedEvent) => void
   ): () => void
   onAgentTaskError(listener: (event: AgentTaskErrorEvent) => void): () => void
+
+  // ——— 个人/共享任务记录（独立导航页） ———
+  listWorkTaskProjects(): Promise<WorkTaskProjectView[]>
+  listWorkTasks(filter?: WorkTaskFilter): Promise<WorkTaskView[]>
+  createWorkTask(input: WorkTaskCreateInput): Promise<WorkTaskResult<WorkTaskView>>
+  updateWorkTask(taskId: string, patch: WorkTaskPatch): Promise<WorkTaskResult<WorkTaskView>>
+  deleteWorkTask(taskId: string): Promise<WorkTaskResult<null>>
+  shareWorkTask(taskId: string, peerIds: string[]): Promise<WorkTaskResult<WorkTaskView>>
+  unshareWorkTask(taskId: string, peerId: string): Promise<WorkTaskResult<WorkTaskView>>
+  createWorkTaskProject(name: string): Promise<WorkTaskResult<WorkTaskProjectView>>
+  renameWorkTaskProject(projectId: string, name: string): Promise<WorkTaskResult<WorkTaskProjectView>>
+  deleteWorkTaskProject(projectId: string): Promise<WorkTaskResult<null>>
+  onWorkTaskUpdated(listener: (task: WorkTaskView) => void): () => void
+  getWorkTaskBadge(): Promise<WorkTaskBadgeEvent>
+  onWorkTaskBadge(listener: (badge: WorkTaskBadgeEvent) => void): () => void
+  onOpenTasks(listener: () => void): () => void
 }

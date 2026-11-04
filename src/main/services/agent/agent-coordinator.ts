@@ -55,10 +55,15 @@ export interface TaskWorkspaceService {
   remove(taskId: string): Promise<void>
 }
 
+export interface PlainTaskWorkspaceService {
+  create(taskId: string, dirPath: string): Promise<TaskWorkspace>
+}
+
 export interface AgentCoordinatorOptions {
   store: AgentTaskStore
   agents: AgentCoordinatorRuntime
   workspaces: TaskWorkspaceService
+  plainWorkspaces?: PlainTaskWorkspaceService
   emit?: (channel: string, payload: unknown) => void
   now?: () => number
   id?: () => string
@@ -139,12 +144,30 @@ function parsePlanJson(output: string): unknown {
       // 尝试下一个可提取的 JSON 片段。
     }
   }
-  throw new Error('invalid_plan: 协调者没有返回 JSON')
+  const preview = output.trim().replace(/\s+/g, ' ').slice(0, 240)
+  const bytes = Buffer.byteLength(output, 'utf8')
+  throw new Error(
+    preview.length === 0
+      ? 'invalid_plan: 协调者没有返回任何文本（可能只执行了工具调用）'
+      : `invalid_plan: 协调者没有返回 JSON（${bytes} 字节：${preview}）`
+  )
+}
+
+/** 提取 ACP 文本块；兼容对象与数组两种 content 形态。 */
+function contentText(value: unknown): string {
+  if (typeof value === 'string') return value
+  if (Array.isArray(value)) return value.map((item) => contentText(item)).join('')
+  if (isPlainObject(value)) {
+    if (typeof value['text'] === 'string') return value['text']
+    if (value['content'] !== undefined) return contentText(value['content'])
+  }
+  return ''
 }
 
 function topologicalPlanSteps(
   plan: AgentCoordinatorPlan,
-  teamAgentIds: Set<string>
+  teamAgentIds: Set<string>,
+  mode: 'git' | 'plain' = 'git'
 ): AgentCoordinatorPlanStep[] {
   if (!Array.isArray(plan.steps) || plan.steps.length === 0 || plan.steps.length > MAX_PLAN_STEPS) {
     throw new Error('invalid_plan: 步骤数量必须为 1-5')
@@ -215,8 +238,12 @@ function topologicalPlanSteps(
   const implementers = new Set(
     ordered.filter((step) => step.role === 'implement').map((step) => step.agentId)
   )
-  const reviews = ordered.filter((step) => step.role === 'review')
+  if (mode === 'plain') {
+    // 普通目录：可能是纯测试、调研或汇总任务，不强制实现步骤，也不强制审查收尾。
+    return ordered
+  }
   if (implementers.size === 0) throw new Error('invalid_plan: 至少需要一个实现步骤')
+  const reviews = ordered.filter((step) => step.role === 'review')
   if (reviews.length === 0) throw new Error('invalid_plan: 至少需要一个审查步骤')
   if (reviews.length > 2) throw new Error('invalid_plan: 最多两轮审查')
   if (reviews.some((step) => implementers.has(step.agentId))) {
@@ -241,7 +268,7 @@ function parsePlan(output: string, task: AgentTaskView): {
     summary,
     steps: rawSteps as AgentCoordinatorPlanStep[]
   }
-  const orderedSteps = topologicalPlanSteps(rawPlan, new Set(task.teamAgentIds))
+  const orderedSteps = topologicalPlanSteps(rawPlan, new Set(task.teamAgentIds), task.mode)
   return {
     plan: {
       summary,
@@ -259,11 +286,13 @@ export class AgentCoordinator {
   private readonly store: AgentTaskStore
   private readonly agents: AgentCoordinatorRuntime
   private readonly workspaces: TaskWorkspaceService
+  private readonly plainWorkspaces: PlainTaskWorkspaceService | null
   private readonly emitTask: (channel: string, payload: unknown) => void
   private readonly now: () => number
   private readonly id: () => string
   private readonly contexts = new Map<string, ActiveAgentRun>()
   private readonly activeSessions = new Map<string, Set<string>>()
+  private readonly chatSessions = new Map<string, string>()
   private readonly pendingPermissions = new Map<string, PendingTaskPermission>()
   private readonly operations = new Set<string>()
   private readonly unsubscribe: () => void
@@ -273,6 +302,7 @@ export class AgentCoordinator {
     this.store = options.store
     this.agents = options.agents
     this.workspaces = options.workspaces
+    this.plainWorkspaces = options.plainWorkspaces ?? null
     this.emitTask = options.emit ?? (() => {})
     this.now = options.now ?? (() => Date.now())
     this.id = options.id ?? (() => randomUUID())
@@ -310,16 +340,27 @@ export class AgentCoordinator {
         throw new Error('协调者不能同时加入执行团队')
       }
       this.assertAgentsAvailable(input.coordinatorAgentId, teamAgentIds)
+      const mode = input.mode === 'plain' ? 'plain' : 'git'
+      if (mode === 'plain' && !this.plainWorkspaces) {
+        throw new Error('plain_directory_unsupported')
+      }
 
       const taskId = this.id()
       if (!STEP_ID_PATTERN.test(taskId)) throw new Error('任务 id 不合法')
       let workspace: TaskWorkspace | null = null
+      let usedPlain = false
       try {
-        workspace = await this.workspaces.create(taskId, input.repoPath)
+        if (mode === 'plain') {
+          workspace = await this.plainWorkspaces!.create(taskId, input.repoPath)
+          usedPlain = true
+        } else {
+          workspace = await this.workspaces.create(taskId, input.repoPath)
+        }
         const createdAt = this.now()
         const record: AgentTaskRecordInput = {
           id: taskId,
           repoPath: workspace.repoRoot,
+          mode,
           prompt: input.prompt.trim(),
           sourceBranch: workspace.sourceBranch,
           baseCommit: workspace.baseCommit,
@@ -330,10 +371,18 @@ export class AgentCoordinator {
           createdAt
         }
         const task = this.store.createTask(record)
-        this.appendEvent(task, 'system', '任务已创建，仓库已隔离到专用 worktree', null, null, 0)
+        this.appendEvent(
+          task,
+          'system',
+          mode === 'plain' ? '任务群已建立，Agent 将直接在该目录内工作' : '任务群已建立，仓库已隔离到专用 worktree',
+          null,
+          null,
+          0
+        )
+        this.appendEvent(task, 'chat.user', task.prompt, null, null, 1)
         return ok(task)
       } catch (error) {
-        if (workspace) await this.workspaces.remove(taskId).catch(() => undefined)
+        if (workspace && !usedPlain) await this.workspaces.remove(taskId).catch(() => undefined)
         throw error
       }
     } catch (error) {
@@ -372,7 +421,7 @@ export class AgentCoordinator {
       }
       if (this.operations.has(taskId)) throw new Error('task_already_running')
       this.assertTaskAgentsAvailable(task)
-      topologicalPlanSteps(task.plan, new Set(task.teamAgentIds))
+      topologicalPlanSteps(task.plan, new Set(task.teamAgentIds), task.mode)
       const updated = this.store.updateTask(taskId, {
         status: 'running',
         error: null,
@@ -412,7 +461,7 @@ export class AgentCoordinator {
       if (this.operations.has(taskId)) throw new Error('task_already_running')
       if (!task.plan) throw new Error('task_plan_missing')
       this.assertTaskAgentsAvailable(task)
-      topologicalPlanSteps(task.plan, new Set(task.teamAgentIds))
+      topologicalPlanSteps(task.plan, new Set(task.teamAgentIds), task.mode)
 
       const interrupted = this.store.listSteps(taskId).filter((step) =>
         step.status === 'running' || step.status === 'awaiting_approval'
@@ -464,10 +513,116 @@ export class AgentCoordinator {
         this.agents.cancel(sessionId)
       }
       this.appendEvent(updated, 'system', '任务已取消，所有未完成步骤停止', null, null, 0)
+      await this.closeChatSession(taskId)
       return ok(updated)
     } catch (error) {
       return fail(error)
     }
+  }
+
+
+  /**
+   * 任务群聊：把用户消息交给统筹者（持久 ACP 会话），回复作为 chat.coordinator 事件入时间线。
+   * 统筹者只做沟通与分派建议，聊天阶段不允许改文件/执行命令（提示词约束）。
+   */
+  async chat(taskId: string, text: string): Promise<AgentResult<AgentTaskEventView>> {
+    if (this.disposed) return fail('应用正在退出')
+    try {
+      const task = this.requireTask(taskId)
+      if (typeof text !== 'string' || text.trim().length === 0) throw new Error('消息不能为空')
+      if (Buffer.byteLength(text, 'utf8') > MAX_PROMPT_BYTES) throw new Error('消息过长')
+      if (task.status === 'cancelled') throw new Error('任务已取消')
+      const content = text.trim()
+      this.appendEvent(task, 'chat.user', content, null, null, this.chatSequence(taskId, 'chat.user'))
+
+      let sessionId = await this.ensureChatSession(task)
+      const ask = () => {
+        const context = this.contexts.get(sessionId)
+        if (context) context.output = ''
+        return this.agents.prompt(sessionId, this.buildChatPrompt(this.requireTask(taskId), content))
+      }
+      let result = await ask()
+      if (!result.ok) {
+        // 会话可能已随 CLI 退出失效：重建一次再试
+        await this.closeChatSession(taskId)
+        sessionId = await this.ensureChatSession(this.requireTask(taskId))
+        result = await ask()
+      }
+      if (!result.ok) throw new Error(result.error)
+      const reply = (this.contexts.get(sessionId)?.output ?? '').trim() || '（统筹者没有返回内容）'
+      return ok(
+        this.appendEvent(
+          this.requireTask(taskId),
+          'chat.coordinator',
+          reply,
+          null,
+          task.coordinatorAgentId,
+          this.chatSequence(taskId, 'chat.coordinator')
+        )
+      )
+    } catch (error) {
+      return fail(error)
+    }
+  }
+
+  private async ensureChatSession(task: AgentTaskView): Promise<string> {
+    const existing = this.chatSessions.get(task.id)
+    if (existing && this.contexts.has(existing)) return existing
+    const created = await this.agents.newSession(task.coordinatorAgentId, task.worktreePath)
+    if (!created.ok) throw new Error(created.error)
+    const sessionId = created.value.id
+    this.chatSessions.set(task.id, sessionId)
+    this.contexts.set(sessionId, {
+      taskId: task.id,
+      sessionId,
+      agentId: task.coordinatorAgentId,
+      stepId: null,
+      output: ''
+    })
+    return sessionId
+  }
+
+  private async closeChatSession(taskId: string): Promise<void> {
+    const sessionId = this.chatSessions.get(taskId)
+    if (!sessionId) return
+    this.chatSessions.delete(taskId)
+    this.contexts.delete(sessionId)
+    await this.agents.closeSession(sessionId).catch(() => undefined)
+  }
+
+  private chatSequence(taskId: string, kind: string): number {
+    return this.store.listEvents(taskId, 2_000).filter((event) => event.kind === kind).length + 1
+  }
+
+  private eventSequence(taskId: string, kind: string): number {
+    return this.store.listEvents(taskId, 2_000).filter((event) => event.kind === kind).length + 1
+  }
+
+  private buildChatPrompt(task: AgentTaskView, text: string): string {
+    const steps = this.store
+      .listSteps(task.id)
+      .map(
+        (step) =>
+          `${step.ordinal + 1}. [${step.role}] ${step.title} — ${step.status}（${step.agentId}）`
+      )
+      .join('\n')
+    const recent = this.store
+      .listEvents(task.id, 2_000)
+      .slice(-10)
+      .map((event) => `- ${event.kind}: ${truncateUtf8(event.text, 400)}`)
+      .join('\n')
+    return [
+      '你是阳鸽任务群的统筹者（coordinator），负责与用户沟通、拆解任务并把工作分派给团队。',
+      '当前是群聊阶段：只回复用户，不要修改文件、不要执行命令、不要调用工具；用简洁中文回答。',
+      `任务目标：${task.prompt}`,
+      `任务状态：${task.status}`,
+      task.plan ? `计划摘要：${task.plan.summary}` : '还没有生成计划。',
+      steps ? `步骤进度：\n${steps}` : '',
+      recent ? `最近记录：\n${recent}` : '',
+      `用户消息：${text}`
+    ]
+      .filter(Boolean)
+      .join('\n\n')
   }
 
   async respondPermission(
@@ -498,6 +653,11 @@ export class AgentCoordinator {
           task.status === 'cancelled' ? 'task_cancelled' : 'task_not_ready_to_apply'
         )
       }
+      if (task.mode === 'plain') {
+        // 普通目录任务：改动已直接写入目录，没有补丁可应用。
+        this.appendEvent(task, 'system', '普通目录任务：改动已在目录内直接生效', null, null, 0)
+        return ok(null)
+      }
       await this.workspaces.apply(taskId, task.repoPath)
       this.appendEvent(task, 'system', '补丁已应用到源仓库工作区，未创建提交', null, null, 0)
       return ok(null)
@@ -512,8 +672,16 @@ export class AgentCoordinator {
       if (ACTIVE_TASK_STATUSES.has(task.status) || this.operations.has(taskId)) {
         throw new Error('task_is_active')
       }
-      await this.workspaces.remove(taskId)
-      this.appendEvent(task, 'system', '任务 worktree 已清理，任务记录与历史保留', null, null, 0)
+      if (task.mode === 'git') await this.workspaces.remove(taskId)
+      await this.closeChatSession(taskId)
+      this.appendEvent(
+        task,
+        'system',
+        task.mode === 'plain' ? '任务已清理，目录内容保持原样' : '任务 worktree 已清理，任务记录与历史保留',
+        null,
+        null,
+        0
+      )
       return ok(null)
     } catch (error) {
       return fail(error)
@@ -560,6 +728,11 @@ export class AgentCoordinator {
     if (this.disposed) return
     this.disposed = true
     this.unsubscribe()
+    for (const sessionId of this.chatSessions.values()) {
+      this.contexts.delete(sessionId)
+      void this.agents.closeSession(sessionId).catch(() => undefined)
+    }
+    this.chatSessions.clear()
     this.contexts.clear()
     this.pendingPermissions.clear()
   }
@@ -568,46 +741,71 @@ export class AgentCoordinator {
     let task: AgentTaskView | null = null
     try {
       task = this.requireTask(taskId)
-      const result = await this.invokeAgent(
-        task,
-        task.coordinatorAgentId,
-        this.buildPlanPrompt(task),
-        null,
-        'plan'
-      )
-      const latest = this.requireTask(taskId)
-      if (latest.status !== 'planning') return
-      const parsed = parsePlan(result.output, latest)
-      const stamp = this.now()
-      const steps: AgentTaskStepView[] = parsed.orderedSteps.map((step, ordinal) => ({
-        id: this.stepId(taskId, ordinal),
-        taskId,
-        ordinal,
-        role: step.role,
-        agentId: step.agentId,
-        title: step.title,
-        input: step.input,
-        expectedOutput: step.expectedOutput,
-        dependsOn: step.dependsOn,
-        status: 'queued',
-        attempt: 0,
-        sessionId: null,
-        runId: null,
-        result: '',
-        error: null,
-        createdAt: stamp,
-        updatedAt: stamp
-      }))
-      const updated = this.store.replacePlan(taskId, parsed.plan, steps, stamp)
-      if (!updated) throw new Error('task_not_found')
-      this.appendEvent(
-        updated,
-        'plan',
-        `计划待确认：${parsed.plan.summary}`,
-        null,
-        task.coordinatorAgentId,
-        0
-      )
+      const basePrompt = this.buildPlanPrompt(task)
+      let lastError: unknown = null
+      // 首次失败后重试一次：部分 Agent（如 Codex）可能把整轮花在工具调用上而没有输出 JSON。
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const prompt =
+          attempt === 0
+            ? basePrompt
+            : `${basePrompt}\n\n上一次回复没有包含可解析的 JSON。请只输出 JSON 对象本身：不要调用任何工具，不要读取文件或目录，不要输出解释、前言或 Markdown 代码围栏。`
+        const result = await this.invokeAgent(
+          task,
+          task.coordinatorAgentId,
+          prompt,
+          null,
+          'plan'
+        )
+        const latest = this.requireTask(taskId)
+        if (latest.status !== 'planning') return
+        try {
+          const parsed = parsePlan(result.output, latest)
+          const stamp = this.now()
+          const steps: AgentTaskStepView[] = parsed.orderedSteps.map((step, ordinal) => ({
+            id: this.stepId(taskId, ordinal),
+            taskId,
+            ordinal,
+            role: step.role,
+            agentId: step.agentId,
+            title: step.title,
+            input: step.input,
+            expectedOutput: step.expectedOutput,
+            dependsOn: step.dependsOn,
+            status: 'queued',
+            attempt: 0,
+            sessionId: null,
+            runId: null,
+            result: '',
+            error: null,
+            createdAt: stamp,
+            updatedAt: stamp
+          }))
+          const updated = this.store.replacePlan(taskId, parsed.plan, steps, stamp)
+          if (!updated) throw new Error('task_not_found')
+          this.appendEvent(
+            updated,
+            'plan',
+            `计划待确认：${parsed.plan.summary}`,
+            null,
+            task.coordinatorAgentId,
+            0
+          )
+          return
+        } catch (error) {
+          lastError = error
+          this.appendEvent(
+            latest,
+            'system',
+            `计划解析失败（第 ${attempt + 1} 次）：${errorText(error)}${
+              result.stopReason ? ` · stopReason=${result.stopReason}` : ''
+            }`,
+            null,
+            task.coordinatorAgentId,
+            this.eventSequence(taskId, 'system')
+          )
+        }
+      }
+      throw lastError ?? new Error('invalid_plan: 协调者没有返回 JSON')
     } catch (error) {
       const latest = this.store.getTask(taskId)
       if (latest && latest.status === 'planning') {
@@ -626,7 +824,8 @@ export class AgentCoordinator {
     try {
       let task = this.requireTask(taskId)
       if (!task.plan) throw new Error('task_plan_missing')
-      const ordered = topologicalPlanSteps(task.plan, new Set(task.teamAgentIds))
+      if (task.mode === 'plain' && !this.plainWorkspaces) throw new Error('plain_directory_unsupported')
+      const ordered = topologicalPlanSteps(task.plan, new Set(task.teamAgentIds), task.mode)
       const storedSteps = this.store.listSteps(taskId)
       const byOrdinal = new Map(storedSteps.map((step) => [step.ordinal, step]))
 
@@ -641,7 +840,7 @@ export class AgentCoordinator {
         if (!step) throw new Error('task_step_missing')
         if (step.status === 'completed') continue
         if (step.status === 'cancelled') return
-        if (planStep.role === 'review' && task.reviewRound >= 2) {
+        if (planStep.role === 'review' && task.mode === 'git' && task.reviewRound >= 2) {
           throw new Error('review_round_limit_reached')
         }
 
@@ -797,15 +996,24 @@ export class AgentCoordinator {
 
   private buildPlanPrompt(task: AgentTaskView): string {
     const team = task.teamAgentIds.map((id) => `- ${id}`).join('\n')
+    const plain = task.mode === 'plain'
+    const constraints = plain
+      ? '约束：1-5 个步骤；每个步骤按顺序执行（dependsOn 依次串联）。纯调研、测试或汇总任务不需要 implement 步骤，按实际工作选择 research / implement / review 角色。'
+      : '约束：1-5 个步骤；至少一个 implement 和一个 review；最终步骤必须是 review；审查 Agent 不能是实现 Agent；最多两轮 review；依赖必须存在且无环。'
+    const scope = plain
+      ? '工作目录是用户选择的普通文件夹（无 Git 隔离），改动直接生效，请谨慎描述涉及的操作。'
+      : '工作目录是隔离的 Git worktree，可以安全实验。'
     return [
-      '你是阳鸽编码任务的协调者。只制定计划，不要修改文件，不要执行实现。',
+      '你是阳鸽任务的协调者。只制定计划，不要修改文件，不要执行实现。',
+      '不要调用任何工具：不要读取文件、列目录、搜索或运行命令；直接输出 JSON 对象。',
       `用户目标：${task.prompt}`,
+      scope,
       '可选团队成员：',
       team,
       '必须输出单个 JSON 对象，不要输出 Markdown 代码围栏或其他说明。',
       'JSON 格式：',
       '{"summary":"不超过100字","steps":[{"id":"唯一短ID","title":"步骤标题","role":"research|implement|review","agentId":"团队成员ID","dependsOn":["前序步骤ID"],"input":"交给该 Agent 的任务","expectedOutput":"完成条件"}]}',
-      '约束：1-5 个步骤；至少一个 implement 和一个 review；最终步骤必须是 review；审查 Agent 不能是实现 Agent；最多两轮 review；依赖必须存在且无环。'
+      constraints
     ].join('\n')
   }
 
@@ -840,7 +1048,9 @@ export class AgentCoordinator {
         `完成条件：${step.expectedOutput}`,
         dependencies,
         `已保存的协调记录：\n${recentEvents}`,
-        '请直接在当前 worktree 内工作；不要提交、合并或推送。完成后说明改动、验证和遗留风险。'
+        task.mode === 'plain'
+          ? '用户选择的目录就是工作现场，改动直接生效且无法回滚，请谨慎操作。完成后说明改动、验证和遗留风险。'
+          : '请直接在当前 worktree 内工作；不要提交、合并或推送。完成后说明改动、验证和遗留风险。'
       ]
         .filter(Boolean)
         .join('\n\n'),
@@ -877,7 +1087,7 @@ export class AgentCoordinator {
     stepId: string | null,
     agentId: string | null,
     sequence: number
-  ): void {
+  ): AgentTaskEventView {
     const stable = createHash('sha1')
       .update(`${task.id}:${stepId ?? ''}:${kind}:${sequence}`)
       .digest('hex')
@@ -902,6 +1112,7 @@ export class AgentCoordinator {
       }
       this.emitTask(IpcEvents.agentTaskError, failure)
     }
+    return event
   }
 
   private launch(taskId: string, run: () => Promise<void>): void {
@@ -930,16 +1141,31 @@ export class AgentCoordinator {
       const context = this.contexts.get(sessionId)
       const update = payload['update']
       if (!context || !isPlainObject(update)) return
-      const content = update['content']
-      if (
-        update['sessionUpdate'] === 'agent_message_chunk' &&
-        isPlainObject(content) &&
-        typeof content['text'] === 'string'
-      ) {
-        context.output = truncateUtf8(
-          context.output + content['text'],
-          MAX_PLAN_OUTPUT_BYTES
-        )
+      const kind = update['sessionUpdate']
+      if (kind === 'agent_message_chunk') {
+        const chunk = contentText(update['content'])
+        if (chunk) {
+          context.output = truncateUtf8(
+            context.output + chunk,
+            MAX_PLAN_OUTPUT_BYTES
+          )
+        }
+        return
+      }
+      if (kind === 'plan' && Array.isArray(update['entries'])) {
+        // 部分 Agent（如 Codex 计划模式）把计划放在 plan 更新里，作为 JSON 提取的兜底。
+        const text = update['entries']
+          .map((entry) =>
+            isPlainObject(entry) && typeof entry['content'] === 'string' ? entry['content'] : ''
+          )
+          .filter(Boolean)
+          .join('\n')
+        if (text) {
+          context.output = truncateUtf8(
+            `${context.output}\n${text}`,
+            MAX_PLAN_OUTPUT_BYTES
+          )
+        }
       }
       return
     }

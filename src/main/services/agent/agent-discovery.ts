@@ -2,7 +2,7 @@ import { accessSync, constants as fsConstants, readdirSync, statSync } from 'nod
 import { homedir } from 'node:os'
 import { basename, delimiter, extname, isAbsolute, join, resolve } from 'node:path'
 import type { AgentCliInfo, AgentScanFailure, AgentSource } from '../../../shared/ipc'
-import { probeVersion, validateExecutable } from './agent-process'
+import { mapWithConcurrency, probeVersion, validateExecutable } from './agent-process'
 
 // 本机 ACP CLI 发现：PATH + Windows 常见安装目录 + 用户手动路径。
 // 只探测已经存在的可执行文件；不做在线 registry / npx 拉取（纯内网可用）。
@@ -24,8 +24,10 @@ export interface KnownCli {
 /** 官方 Registry 给出的常见启动形态；找不到时用户可手动指定。 */
 export const KNOWN_AGENTS: readonly KnownAgent[] = [
   { name: 'Codex ACP', commands: ['codex-acp'], args: [] },
-  { name: 'Claude Agent', commands: ['claude-acp', 'claude-agent-acp'], args: [] },
+  { name: 'Claude Agent', commands: ['claude-acp', 'claude-agent-acp', 'claude-code-acp'], args: [] },
   { name: 'OpenCode', commands: ['opencode'], args: ['acp'] },
+  { name: 'omp', commands: ['omp'], args: ['acp'] },
+  { name: 'DeepSeek Harness', commands: ['dsh'], args: ['acp'] },
   { name: 'Pi ACP', commands: ['pi-acp'], args: [] },
   { name: 'Gemini CLI', commands: ['gemini'], args: ['--acp'] },
   { name: 'GitHub Copilot', commands: ['copilot'], args: ['--acp'] }
@@ -44,7 +46,7 @@ export const KNOWN_CLIS: readonly KnownCli[] = [
     id: 'claude',
     name: 'Claude Code',
     commands: ['claude'],
-    adapterCommands: ['claude-acp', 'claude-agent-acp'],
+    adapterCommands: ['claude-acp', 'claude-agent-acp', 'claude-code-acp'],
     adapterCommand: 'claude-acp'
   },
   {
@@ -60,6 +62,20 @@ export const KNOWN_CLIS: readonly KnownCli[] = [
     commands: ['opencode'],
     adapterCommands: ['opencode'],
     adapterCommand: 'opencode acp'
+  },
+  {
+    id: 'omp',
+    name: 'omp',
+    commands: ['omp'],
+    adapterCommands: ['omp'],
+    adapterCommand: 'omp acp'
+  },
+  {
+    id: 'dsh',
+    name: 'DeepSeek Harness',
+    commands: ['dsh'],
+    adapterCommands: ['dsh'],
+    adapterCommand: 'dsh acp'
   },
   {
     id: 'gemini',
@@ -101,6 +117,11 @@ export interface DiscoveredAgent {
 }
 
 const WINDOWS_EXECUTABLE_EXTENSIONS = ['.exe', '.cmd', '.bat']
+
+// 版本探测同样要冷启动一次 CLI：弱机 + 杀毒软件环境下 probeVersion 的 3.5s 默认值
+// 会把可用 Agent 误标成「探测失败」。扫描放宽到 8s，并限制同时探测的数量。
+const DEFAULT_VERSION_PROBE_TIMEOUT_MS = 8_000
+const VERSION_PROBE_CONCURRENCY = 3
 
 function addRoot(roots: SearchRoot[], dir: string | undefined, source: AgentSource): void {
   if (!dir) return
@@ -159,14 +180,43 @@ export function defaultSearchRoots(options: DiscoveryOptions = {}): SearchRoot[]
   addRoot(roots, env['MISE_DATA_DIR'] ? join(env['MISE_DATA_DIR'], 'shims') : undefined, 'windows-dir')
   addRoot(roots, env['FNM_DIR'] ? join(env['FNM_DIR'], 'aliases', 'default', 'bin') : undefined, 'windows-dir')
   addRoot(roots, join(userProfile, '.local', 'bin'), 'windows-dir')
+  addRoot(roots, join(userProfile, '.bun', 'bin'), 'windows-dir')
+  addRoot(roots, join(userProfile, '.deno', 'bin'), 'windows-dir')
+  addRoot(roots, join(userProfile, '.cargo', 'bin'), 'windows-dir')
+  addRoot(roots, join(userProfile, '.opencode', 'bin'), 'windows-dir')
   addRoot(roots, join(userProfile, 'scoop', 'shims'), 'windows-dir')
   addRoot(roots, join(userProfile, 'AppData', 'Roaming', 'npm'), 'windows-dir')
   addRoot(roots, programData ? join(programData, 'chocolatey', 'bin') : undefined, 'windows-dir')
 
-  // %LOCALAPPDATA%\Programs\<App>：安装器常见布局，只看一层，避免递归扫盘。
+  // 应用自带运行时（Tern / omp、OpenCode 等）不一定写进 PATH：
+  // 也要看应用私有目录里的 bin。
+  addRoot(roots, localAppData ? join(localAppData, 'Tern', 'omp', 'bin') : undefined, 'windows-dir')
+  addRoot(
+    roots,
+    localAppData ? join(localAppData, 'Programs', 'Tern', 'omp', 'bin') : undefined,
+    'windows-dir'
+  )
+  addRoot(roots, localAppData ? join(localAppData, 'opencode', 'bin') : undefined, 'windows-dir')
+
+  // DeepSeek Harness：CLI 位于应用资源目录，`dsh acp` 提供 ACP 服务。
+  addRoot(
+    roots,
+    localAppData
+      ? join(localAppData, 'Programs', 'DeepSeek Harness', 'resources', 'runtime', 'cli', 'bin')
+      : undefined,
+    'windows-dir'
+  )
+
+  // %LOCALAPPDATA%\Programs\<App>：安装器常见布局。只展开两层：
+  // 应用根、<App>\bin 与 <App>\resources\...[cli|runtime]\bin（harness 自带 CLI），
+  // 避免递归扫盘。
   if (localAppData) {
     for (const dir of readSubdirectories(join(localAppData, 'Programs'))) {
       addRoot(roots, dir, 'windows-dir')
+      addRoot(roots, join(dir, 'bin'), 'windows-dir')
+      addRoot(roots, join(dir, 'resources', 'bin'), 'windows-dir')
+      addRoot(roots, join(dir, 'resources', 'runtime', 'bin'), 'windows-dir')
+      addRoot(roots, join(dir, 'resources', 'runtime', 'cli', 'bin'), 'windows-dir')
     }
   }
   return roots
@@ -175,7 +225,9 @@ export function defaultSearchRoots(options: DiscoveryOptions = {}): SearchRoot[]
 export function executableCandidates(command: string, platform: NodeJS.Platform): string[] {
   if (platform !== 'win32') return [command]
   if (WINDOWS_EXECUTABLE_EXTENSIONS.includes(extname(command).toLowerCase())) return [command]
-  return [command, ...WINDOWS_EXECUTABLE_EXTENSIONS.map((ext) => `${command}${ext}`)]
+  // Windows 的 PATH 里同名条目可能同时存在 npm 的无扩展名 POSIX 垫片（sh 脚本）与
+  // .cmd/.exe 启动器。必须优先真实可执行入口：无扩展名垫片无法被 spawn 启动（ENOENT）。
+  return [...WINDOWS_EXECUTABLE_EXTENSIONS.map((ext) => `${command}${ext}`), command]
 }
 
 export function findExecutable(
@@ -268,22 +320,19 @@ export async function discoverAgents(options: DiscoveryOptions = {}): Promise<Di
     })
   }
 
-  const probes = await Promise.all(
-    found.map(async (item) => {
-      const probe = await probeVersion(item.path, ['--version'], {
-        timeoutMs: options.probeTimeoutMs
-      })
-      return { item, probe }
+  // 版本探测也要启动完整 CLI：限制并发，避免一次拉起全部候选把弱机拖到超时。
+  const probes = await mapWithConcurrency(found, VERSION_PROBE_CONCURRENCY, async (item) => {
+    const probe = await probeVersion(item.path, ['--version'], {
+      timeoutMs: options.probeTimeoutMs ?? DEFAULT_VERSION_PROBE_TIMEOUT_MS
     })
-  )
-  const clientProbes = await Promise.all(
-    clientHits.map(async (item) => {
-      const probe = await probeVersion(item.command, ['--version'], {
-        timeoutMs: options.probeTimeoutMs
-      })
-      return { item, probe }
+    return { item, probe }
+  })
+  const clientProbes = await mapWithConcurrency(clientHits, VERSION_PROBE_CONCURRENCY, async (item) => {
+    const probe = await probeVersion(item.command, ['--version'], {
+      timeoutMs: options.probeTimeoutMs ?? DEFAULT_VERSION_PROBE_TIMEOUT_MS
     })
-  )
+    return { item, probe }
+  })
 
   const agents: DiscoveredAgent[] = []
   const failures: AgentScanFailure[] = []
@@ -330,7 +379,9 @@ export async function inspectManualAgent(
     return { ok: false, error: '文件不存在，或不是受支持的可执行文件（.exe/.cmd/.bat）' }
   }
   const spec = agentArgsFor(path, options.knownAgents ?? KNOWN_AGENTS)
-  const probe = await probeVersion(path, ['--version'], { timeoutMs: options.probeTimeoutMs })
+  const probe = await probeVersion(path, ['--version'], {
+    timeoutMs: options.probeTimeoutMs ?? DEFAULT_VERSION_PROBE_TIMEOUT_MS
+  })
   return {
     ok: true,
     error: '',

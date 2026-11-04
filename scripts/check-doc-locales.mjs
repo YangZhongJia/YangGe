@@ -14,7 +14,8 @@ export const DOCUMENT_PAIRS = [
   ['docs/ui-design.md', 'docs/en/ui-design.md'],
   ['docs/tech-design.md', 'docs/en/tech-design.md'],
   ['docs/nwt-compat-design.md', 'docs/en/nwt-compat-design.md'],
-  ['docs/optimization-plan.md', 'docs/en/optimization-plan.md']
+  ['docs/optimization-plan.md', 'docs/en/optimization-plan.md'],
+  ['docs/duel-arena.md', 'docs/en/duel-arena.md']
 ]
 
 function localMarkdownTargets(markdown) {

@@ -12,9 +12,11 @@ import {
   NUDGE_RATE_WINDOW_MS,
   RECALL_WINDOW_MS,
   TEXT_TCP_LIMIT,
+  normalizeNudgeStyle,
   type ClipboardPayload,
   type Envelope,
-  type MsgPayload
+  type MsgPayload,
+  type NudgeStyle
 } from '../../shared/protocol'
 import type {
   ClipboardSendResult,
@@ -201,18 +203,41 @@ export class ChatService extends EventEmitter {
   }
 
   /** 私聊窗口震动：可靠即时动作，不离线补发；发送成功后写本地系统提示（决议 #109/#110）。 */
-  async sendNudge(peerId: string): Promise<NudgeResult> {
+  async sendNudge(peerId: string, style?: NudgeStyle): Promise<NudgeResult> {
     if (!peerId || peerId.length > 64) return { ok: false, reason: 'invalid' }
+    const normalized = normalizeNudgeStyle(style)
     const convId = this.deps.convRepo.ensureSingle(peerId)
-    const limit = this.consumeNudgeLimit(this.outgoingNudges, peerId, Date.now())
-    if (!limit.ok) return limit
+    // 纸飞机 / 墨弹是纯互动效果，不限次数与间隔；经典窗口震动保留限流。
+    if (!normalized) {
+      const limit = this.consumeNudgeLimit(this.outgoingNudges, peerId, Date.now())
+      if (!limit.ok) return limit
+    }
 
-    const env = makeEnvelope<MsgPayload>(MSG_TYPES.msg, this.deps.selfId, { kind: 'nudge' })
+    const env = makeEnvelope<MsgPayload>(MSG_TYPES.msg, this.deps.selfId, {
+      kind: 'nudge',
+      ...(normalized ? { style: normalized } : {})
+    })
     const delivered = await this.deps.messenger.sendReliable(peerId, env)
     if (!delivered) return { ok: false, reason: 'undelivered' }
 
-    this.insertSystemTip(env.id, convId, this.deps.selfId, 'nudge.sent', env.ts, false)
+    this.insertSystemTip(
+      env.id,
+      convId,
+      this.deps.selfId,
+      nudgeTipKey('sent', normalized),
+      env.ts,
+      false
+    )
     return { ok: true }
+  }
+
+  /** 仅将已结算的胜负写入本机会话；对局帧和中断不写入聊天。 */
+  recordDuelResult(peerId: string, matchId: string, outcome: 'win' | 'lose' | 'draw'): void {
+    const key: SystemMessageKey = outcome === 'win' ? 'duel.win' : outcome === 'lose' ? 'duel.lose' : 'duel.draw'
+    const id = `duel:${matchId.slice(0, 58)}`
+    if (this.deps.msgRepo.get(id)) return
+    const convId = this.deps.convRepo.ensureSingle(peerId)
+    this.insertSystemTip(id, convId, this.deps.selfId, key, Date.now(), false)
   }
 
   /** 发剪贴板（决议 #321）：可靠控制帧，成功后在本地会话留系统提示；文本由 main 层从剪贴板读取。
@@ -442,15 +467,18 @@ export class ChatService extends EventEmitter {
     const payload = env.payload
     if (payload.kind !== 'nudge') return
     if (this.deps.msgRepo.get(env.id)) return
-    const limit = this.consumeNudgeLimit(this.incomingNudges, env.from, Date.now())
-    if (!limit.ok) return
+    const style = normalizeNudgeStyle(payload.style)
+    if (!style) {
+      const limit = this.consumeNudgeLimit(this.incomingNudges, env.from, Date.now())
+      if (!limit.ok) return
+    }
     const ts = Date.now()
     const convId = this.deps.convRepo.ensureSingle(env.from)
     const inserted = this.insertSystemTip(
       env.id,
       convId,
       env.from,
-      'nudge.received',
+      nudgeTipKey('received', style),
       ts,
       false
     )
@@ -459,7 +487,8 @@ export class ChatService extends EventEmitter {
     const event: NudgeEvent = {
       peerId: env.from,
       convId,
-      ts
+      ts,
+      ...(style ? { style } : {})
     }
     this.emit('nudge', event)
   }
@@ -627,6 +656,16 @@ function makePkRef(game: PkGame): PkRefView {
     game,
     result: game === 'dice' ? randomInt(1, 7) : randomRps()
   }
+}
+
+function nudgeTipKey(direction: 'sent' | 'received', style?: NudgeStyle): SystemMessageKey {
+  if (style === 'plane') {
+    return direction === 'sent' ? 'nudge.sent.plane' : 'nudge.received.plane'
+  }
+  if (style === 'ink') {
+    return direction === 'sent' ? 'nudge.sent.ink' : 'nudge.received.ink'
+  }
+  return direction === 'sent' ? 'nudge.sent' : 'nudge.received'
 }
 
 function isMediaRecallKind(kind: string): boolean {

@@ -44,7 +44,7 @@ export interface ConfigFile {
   clipboardFollow: ClipboardFollowConfig
   /** 主题色换装（决议 #327） */
   accent: string
-  /** 会话背景（决议 #327）：plain / dove / dots / aurora */
+  /** 会话背景（决议 #327）：plain / dove / dots / aurora，默认 dots */
   chatBackground: string
   /** 手动添加的节点（"ip" 或 "ip:port"），启动时逐个探测（F-DISC-2 第一板斧） */
   manualPeers: string[]
@@ -65,6 +65,8 @@ export interface ConfigFile {
   closeToTray: boolean
   /** 启动 / 托盘唤起时播放粒子动效（默认开） */
   startupMotion: boolean
+  /** 收到纸飞机 / 墨弹时播放飞行动画（默认开） */
+  nudgeEffects: boolean
   /** 本机界面语言（决议 #307） */
   language: Language
   /** 深色主题手动切换（决议 #24） */
@@ -248,6 +250,7 @@ export function saveAppSettings(
       | 'autoLaunch'
       | 'closeToTray'
       | 'startupMotion'
+      | 'nudgeEffects'
       | 'language'
       | 'theme'
       | 'fontScale'
@@ -298,6 +301,7 @@ export function saveAppSettings(
   if (patch.autoLaunch !== undefined) state.config.autoLaunch = patch.autoLaunch
   if (patch.closeToTray !== undefined) state.config.closeToTray = patch.closeToTray
   if (patch.startupMotion !== undefined) state.config.startupMotion = patch.startupMotion
+  if (patch.nudgeEffects !== undefined) state.config.nudgeEffects = patch.nudgeEffects
   if (isLanguage(patch.language)) state.config.language = patch.language
   if (patch.theme !== undefined) state.config.theme = patch.theme
   if (patch.fontScale !== undefined) state.config.fontScale = patch.fontScale
@@ -462,7 +466,7 @@ export function loadAppState(
       ai: { ...DEFAULT_AI_REPLIER },
       clipboardFollow: { ...DEFAULT_CLIPBOARD_FOLLOW },
       accent: 'indigo',
-      chatBackground: 'plain',
+      chatBackground: 'dots',
       manualPeers: [],
       scanRanges: [],
       scanRangeSources: {},
@@ -473,6 +477,7 @@ export function loadAppState(
       autoLaunch: true,
       closeToTray: true,
       startupMotion: true,
+      nudgeEffects: true,
       language: initialLanguage(false, undefined, systemLanguage),
       theme: 'light',
       fontScale: 100,
@@ -558,6 +563,7 @@ export function loadAppState(
   config.autoLaunch = config.autoLaunch !== false
   config.closeToTray = config.closeToTray !== false
   config.startupMotion = config.startupMotion !== false
+  config.nudgeEffects = config.nudgeEffects !== false
   config.language = initialLanguage(true, config.language, systemLanguage)
   config.theme = config.theme === 'dark' || config.theme === 'auto' ? config.theme : 'light'
   config.fontScale = config.fontScale === 110 || config.fontScale === 125 ? config.fontScale : 100

@@ -1,7 +1,7 @@
 {
   "name": "yangge",
   "productName": "阳鸽",
-  "version": "1.8.0",
+  "version": "1.11.0",
   "description": "阳鸽（YangGe）—— 纯内网、基于 IP 的局域网即时通讯与文件传输工具（衍生自开源项目 Teahouse，GPL-3.0）",
   "license": "GPL-3.0-only",
   "private": true,
@@ -36,6 +36,8 @@
     "check:renderer-bundles": "node scripts/check-renderer-bundles.mjs",
     "test:db": "esbuild src/main/store/db-selftest.ts --bundle --platform=node --target=node16 --external:better-sqlite3 --outfile=out/db-selftest.cjs --log-level=warning && cross-env ELECTRON_RUN_AS_NODE=1 electron out/db-selftest.cjs",
     "test:agent-task-repo": "esbuild src/main/store/agent-task-repo-selftest.ts --bundle --platform=node --target=node16 --external:better-sqlite3 --outfile=out/agent-task-repo-selftest.cjs --log-level=warning && cross-env ELECTRON_RUN_AS_NODE=1 electron out/agent-task-repo-selftest.cjs",
+    "test:work-task-repo": "esbuild src/main/store/work-task-repo-selftest.ts --bundle --platform=node --target=node16 --external:better-sqlite3 --outfile=out/work-task-repo-selftest.cjs --log-level=warning && cross-env ELECTRON_RUN_AS_NODE=1 electron out/work-task-repo-selftest.cjs",
+    "test:work-task-sharing": "esbuild src/main/store/work-task-sharing-selftest.ts --bundle --platform=node --target=node16 --external:better-sqlite3 --outfile=out/work-task-sharing-selftest.cjs --log-level=warning && cross-env ELECTRON_RUN_AS_NODE=1 electron out/work-task-sharing-selftest.cjs",
     "smoke": "npm run build && cross-env PANTRY_SMOKE=1 electron .",
     "dist:win": "npm run build && cross-env NO_UPDATE_NOTIFIER=1 electron-builder --win --x64 --publish never"
   },

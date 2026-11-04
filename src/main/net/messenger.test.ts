@@ -12,6 +12,7 @@ import {
   type MsgPayload,
   type Profile,
   type SharePayload,
+  type TaskSyncPayload,
   type Timings,
   type UpdateReqPayload
 } from '../../shared/protocol'
@@ -23,6 +24,7 @@ import { Messenger, type DedupStore, type QueueStore } from './messenger'
 import { TransferServer } from './transfer'
 import type { GroupRepo } from '../store/group-repo'
 import { AvatarStore, avatarHashOf } from '../services/avatar-store'
+import { DuelService } from '../services/duel'
 import { AvatarService } from '../services/avatars'
 
 // 消息层回环集成：两套完整栈（udp+registry+discovery+messenger）在 127.0.0.1 对发。
@@ -194,6 +196,27 @@ function textEnv(from: string, text: string): Envelope<MsgPayload> {
   return makeEnvelope<MsgPayload>(MSG_TYPES.msg, from, { kind: 'text', text })
 }
 
+function taskEnv(from: string, to: string, description = '登录与支付'): Envelope<TaskSyncPayload> {
+  return makeEnvelope<TaskSyncPayload>(MSG_TYPES.task, from, {
+    op: 'upsert',
+    toNodeId: to,
+    task: {
+      id: 'task-1',
+      ownerNodeId: from,
+      projectId: 'project-1',
+      title: '回归测试',
+      description,
+      startDate: '2026-11-01',
+      dueDate: '2026-11-05',
+      status: 'in_progress',
+      revision: 3,
+      createdAt: 1000,
+      updatedAt: 2000
+    },
+    project: { id: 'project-1', ownerNodeId: from, name: '五期', updatedAt: 2000 }
+  })
+}
+
 function avatarWebp(size = 2048): Uint8Array {
   const bytes = new Uint8Array(size)
   bytes.set(Buffer.from('RIFF'), 0)
@@ -215,6 +238,41 @@ const emptyGroups = {
 } as unknown as GroupRepo
 
 describe('messenger 回环集成', () => {
+  it('两节点通过真实 UDP 邀请、接受并同步出招和血量', async () => {
+    const a = await makeStack('alice')
+    const b = await makeStack('bob')
+    a.profile.caps.push(CAPS.duel)
+    b.profile.caps.push(CAPS.duel)
+    a.registry.touch(b.profile.nodeId, '127.0.0.1', b.port, b.profile)
+    b.registry.touch(a.profile.nodeId, '127.0.0.1', a.port, a.profile)
+    const makeDuel = (self: Stack) => new DuelService({
+      selfId: self.profile.nodeId,
+      messenger: self.messenger,
+      isOnline: (id) => self.registry.get(id)?.online === true,
+      peerCaps: (id) => self.registry.get(id)?.profile.caps ?? null,
+      peerName: (id) => id,
+      emit: () => undefined
+    })
+    const alice = makeDuel(a)
+    const bob = makeDuel(b)
+    try {
+      expect(alice.invite(b.profile.nodeId)).toEqual({ ok: true })
+      await waitFor(() => bob.currentView()?.phase === 'incoming')
+      const id = bob.currentView()!.matchId
+      expect(bob.respond(id, true)).toEqual({ ok: true })
+      await waitFor(() => alice.currentView()?.phase === 'fighting')
+      expect(alice.move(id, 'attack')).toEqual({ ok: true })
+      expect(bob.move(id, 'trick')).toEqual({ ok: true })
+      await waitFor(() => bob.currentView()?.round === 2 && alice.currentView()?.round === 2)
+      expect(alice.currentView()!.selfHp).toBe(bob.currentView()!.peerHp)
+      expect(alice.currentView()!.peerHp).toBe(bob.currentView()!.selfHp)
+      expect(alice.currentView()!.peerHp).toBeLessThan(100)
+    } finally {
+      alice.dispose()
+      bob.dispose()
+    }
+  })
+
   it('屏幕控制跨 UDP/TCP 仅内存去重，错误来源不能抢占消息 ID 或修改联系人地址', async () => {
     const a = await makeStack('alice')
     const b = await makeStack('bob')
@@ -359,6 +417,82 @@ describe('messenger 回环集成', () => {
       expect(got.entries).toHaveLength(200)
       expect(got.entries[199].name).toBe('第199份设计稿最终版.psd')
     }
+  })
+
+  it('任务快照走可靠通道：在线对端 ACK 确认后返回 sent 且不标离线', async () => {
+    const a = await makeStack('alice')
+    const b = await makeStack('bob', [{ host: '127.0.0.1', port: a.port }])
+    a.discovery.start()
+    b.discovery.start()
+    await waitFor(() => a.registry.get(b.profile.nodeId)?.online === true)
+
+    const outcome = await a.messenger.sendUserMessage(
+      b.profile.nodeId,
+      taskEnv(a.profile.nodeId, b.profile.nodeId)
+    )
+
+    expect(outcome).toBe('sent')
+    expect(b.incoming).toHaveLength(1)
+    expect(b.incoming[0].type).toBe(MSG_TYPES.task)
+    const payload = b.incoming[0].payload as TaskSyncPayload
+    expect(payload.op).toBe('upsert')
+    expect(a.queue.items).toHaveLength(0)
+    // ACK 成功不得把在线联系人误标离线（否则共享记录会永远停在“等待上线”）
+    expect(a.registry.get(b.profile.nodeId)?.online).toBe(true)
+  })
+
+  it('任务描述超过 UDP 上限时经 TCP 控制帧直达（§7.6）', async () => {
+    const a = await makeStack('alice')
+    const b = await makeStack('bob', [{ host: '127.0.0.1', port: a.port }])
+    await startTcpReceiver(b)
+    a.discovery.start()
+    b.discovery.start()
+    await waitFor(() => a.registry.get(b.profile.nodeId)?.online === true)
+
+    const description = '任务说明'.repeat(400)
+    const env = taskEnv(a.profile.nodeId, b.profile.nodeId, description)
+    expect(Buffer.byteLength(JSON.stringify(env.payload), 'utf8')).toBeGreaterThan(UDP_MAX_PAYLOAD)
+
+    const outcome = await a.messenger.sendUserMessage(b.profile.nodeId, env)
+
+    expect(outcome).toBe('sent')
+    expect(b.incoming).toHaveLength(1)
+    const payload = b.incoming[0].payload as TaskSyncPayload
+    expect(payload.op).toBe('upsert')
+    if (payload.op === 'upsert') expect(payload.task.description).toBe(description)
+    expect(a.queue.items).toHaveLength(0)
+  })
+
+  it('离线的任务快照补发时带 resend 仍能被接收端解析', async () => {
+    const a = await makeStack('alice')
+    const b = await makeStack('bob', [{ host: '127.0.0.1', port: a.port }])
+    a.discovery.start()
+    b.discovery.start()
+    await waitFor(() => a.registry.get(b.profile.nodeId)?.online === true)
+
+    // B 突然消失（不发 exit）
+    b.discovery.stop()
+    await b.udp.stop()
+    await waitFor(() => a.registry.get(b.profile.nodeId)?.online === false)
+
+    const outcome = await a.messenger.sendUserMessage(
+      b.profile.nodeId,
+      taskEnv(a.profile.nodeId, b.profile.nodeId)
+    )
+    expect(outcome).toBe('queued')
+    expect(a.queue.items).toHaveLength(1)
+
+    const b2 = await makeStack('bob', [{ host: '127.0.0.1', port: a.port }])
+    const statuses: string[] = []
+    a.messenger.on('status', (_id: string, status: string) => statuses.push(status))
+    b2.discovery.start()
+
+    await waitFor(() => b2.incoming.length === 1)
+    const payload = b2.incoming[0].payload as TaskSyncPayload
+    expect(payload.op).toBe('upsert')
+    expect(payload.resend).toBe(true)
+    await waitFor(() => a.queue.items.length === 0)
+    expect(statuses).toContain('sent')
   })
 
   it('短文本 UDP 无 ACK 时自动降级为 TCP 控制帧', async () => {
