@@ -80,8 +80,23 @@ export class UdpChannel extends EventEmitter {
       this.emit('drop', 'outbound-oversize')
       return
     }
+    if (
+      typeof address !== 'string' ||
+      address.length === 0 ||
+      !Number.isInteger(port) ||
+      port < 1 ||
+      port > 65535
+    ) {
+      // 缓存/导入的脏节点可能带端口 0；dgram 会抛 ERR_SOCKET_BAD_PORT 并打断主进程。
+      this.emit('drop', 'outbound-bad-target')
+      return
+    }
     // 发送失败（断网/不可达广播地址）静默丢弃，靠协议自身的重试与心跳自愈
-    this.socket.send(buf, port, address, () => undefined)
+    try {
+      this.socket.send(buf, port, address, () => undefined)
+    } catch {
+      this.emit('drop', 'outbound-failed')
+    }
   }
 
   /** 向所有目标地址广播（同端口） */

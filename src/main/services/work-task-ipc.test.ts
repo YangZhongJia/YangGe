@@ -18,6 +18,9 @@ function taskView(): WorkTaskView {
     startDate: null,
     dueDate: null,
     status: 'not_started',
+    assigneeNodeId: null,
+    assignmentState: null,
+    assignedToMe: false,
     revision: 1,
     active: true,
     isShared: false,
@@ -49,7 +52,10 @@ function makeController() {
     updateTask: vi.fn(async (_taskId: unknown, patch: WorkTaskPatch) => ({ ...taskView(), ...patch })),
     deleteTask: vi.fn(async () => null),
     shareTask: vi.fn(async () => taskView()),
-    unshareTask: vi.fn(async () => taskView())
+    unshareTask: vi.fn(async () => taskView()),
+    assignTask: vi.fn(async () => taskView()),
+    respondAssignment: vi.fn(async () => null),
+    setAssignedStatus: vi.fn(async () => null)
   }
   return { service: service as unknown as WorkTaskIpcPort, controller: new WorkTaskIpcController(service) }
 }

@@ -13,9 +13,10 @@ import {
   type Envelope,
   type GroupMeta,
   type GroupPayload,
-  type MsgPayload
+  type MsgPayload,
+  normalizeNudgeStyle
 } from '../../shared/protocol'
-import type { GroupPatch, GroupRole, GroupView, MessageView } from '../../shared/ipc'
+import type { GroupPatch, GroupRole, GroupView, MessageView, NudgeEvent, NudgeResult } from '../../shared/ipc'
 import { makeEnvelope } from '../net/codec'
 import type { Messenger } from '../net/messenger'
 import { ConvRepo, convRowToView } from '../store/conv-repo'
@@ -322,10 +323,62 @@ export class GroupsService extends EventEmitter {
     return row ? msgRowToView(row) : null
   }
 
+  /** 群聊纸飞机 / 墨弹：只投递给当前在线成员，不排队离线补发。 */
+  async sendNudge(groupId: string, style: unknown): Promise<NudgeResult> {
+    const meta = this.deps.groupRepo.get(groupId)
+    const normalized = normalizeNudgeStyle(style)
+    if (!meta || !meta.members.includes(this.deps.selfId) || !normalized) {
+      return { ok: false, reason: 'invalid' }
+    }
+    const recipients = meta.members.filter(
+      (member) => member !== this.deps.selfId && this.deps.isOnline?.(member)
+    )
+    if (recipients.length === 0) return { ok: false, reason: 'invalid' }
+
+    const convId = this.deps.convRepo.ensureGroup(groupId)
+    const env = makeEnvelope<MsgPayload>(MSG_TYPES.msg, this.deps.selfId, {
+      kind: 'group-nudge',
+      style: normalized,
+      groupId,
+      groupRev: meta.rev
+    })
+    const delivered = await Promise.all(
+      recipients.map((member) =>
+        this.deps.messenger.sendReliable(member, env).catch(() => false)
+      )
+    )
+    if (!delivered.some(Boolean)) return { ok: false, reason: 'undelivered' }
+
+    const tip = systemMessage(
+      normalized === 'plane' ? 'nudge.group.sent.plane' : 'nudge.group.sent.ink'
+    )
+    const inserted = this.deps.msgRepo.insert({
+      id: env.id,
+      convId,
+      senderId: this.deps.selfId,
+      isMine: false,
+      kind: 'system',
+      ...tip,
+      ts: env.ts,
+      status: 'sent'
+    })
+    if (inserted) {
+      this.deps.convRepo.bump(convId, env.ts)
+      const row = this.deps.msgRepo.get(env.id)
+      if (row) this.emit('message', msgRowToView(row))
+      this.emitConvs()
+    }
+    return { ok: true }
+  }
+
   // ---------- 入站 ----------
 
   private onIncomingMsg(env: Envelope): void {
     const payload = env.payload as MsgPayload
+    if (payload.kind === 'group-nudge') {
+      this.onIncomingGroupNudge(env, payload)
+      return
+    }
     if ((payload.kind !== 'group-text' && payload.kind !== 'pk') || !payload.groupId) return
 
     const convId = this.deps.convRepo.ensureGroup(payload.groupId)
@@ -388,8 +441,53 @@ export class GroupsService extends EventEmitter {
     this.syncGroupMetaIfNeeded(payload, env.from)
   }
 
+  private onIncomingGroupNudge(
+    env: Envelope,
+    payload: Extract<MsgPayload, { kind: 'group-nudge' }>
+  ): void {
+    const meta = this.deps.groupRepo.get(payload.groupId)
+    if (!meta || !meta.members.includes(env.from) || !meta.members.includes(this.deps.selfId)) {
+      this.syncGroupMetaIfNeeded(payload, env.from)
+      return
+    }
+    const convId = this.deps.convRepo.ensureGroup(payload.groupId)
+    this.deps.peerClock?.observe(env.from, env.ts, Date.now())
+    const ts = this.deps.peerClock?.correct(env.from, env.ts) ?? env.ts
+    const tip = systemMessage(
+      payload.style === 'plane' ? 'nudge.group.received.plane' : 'nudge.group.received.ink',
+      { actor: this.memberLabel(env.from) }
+    )
+    const inserted = this.deps.msgRepo.insert({
+      id: env.id,
+      convId,
+      senderId: env.from,
+      isMine: false,
+      kind: 'system',
+      ...tip,
+      ts,
+      status: 'sent'
+    })
+    if (!inserted) return
+    this.deps.convRepo.bump(convId, ts)
+    const row = this.deps.msgRepo.get(env.id)
+    if (row) this.emit('message', msgRowToView(row))
+    this.emitConvs()
+    this.syncGroupMetaIfNeeded(payload, env.from)
+    if ((this.deps.convRepo.get(convId)?.muted ?? 0) !== 0) return
+    const event: NudgeEvent = {
+      peerId: env.from,
+      convId,
+      ts,
+      style: payload.style
+    }
+    this.emit('nudge', event)
+  }
+
   private syncGroupMetaIfNeeded(payload: MsgPayload, from: string): void {
-    if ((payload.kind !== 'group-text' && payload.kind !== 'pk') || !payload.groupId) return
+    if (
+      (payload.kind !== 'group-text' && payload.kind !== 'pk' && payload.kind !== 'group-nudge') ||
+      !payload.groupId
+    ) return
     const meta = this.deps.groupRepo.get(payload.groupId)
     if (!meta || (payload.groupRev ?? 0) > meta.rev) {
       void this.deps.messenger.sendReliable(

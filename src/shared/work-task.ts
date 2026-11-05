@@ -7,6 +7,13 @@ export type WorkTaskStatus = (typeof WORK_TASK_STATUSES)[number]
 /** 「延期」只用于展示，不落库。 */
 export type WorkTaskDisplayStatus = WorkTaskStatus | 'overdue'
 
+export const WORK_TASK_ASSIGNMENT_STATES = ['pending', 'accepted', 'declined'] as const
+export type WorkTaskAssignmentState = (typeof WORK_TASK_ASSIGNMENT_STATES)[number]
+
+export function isWorkTaskAssignmentState(value: unknown): value is WorkTaskAssignmentState {
+  return (WORK_TASK_ASSIGNMENT_STATES as readonly unknown[]).includes(value)
+}
+
 /** 任务列表的截止日期分组；已结束任务单独成组，避免过期日期把已完成任务标成延期。 */
 export type WorkTaskListBucket =
   | 'overdue'

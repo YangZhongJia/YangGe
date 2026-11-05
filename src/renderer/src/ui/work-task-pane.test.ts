@@ -40,7 +40,7 @@ describe('任务记录导航与页面', () => {
 
 
   it('只在本机拥有的任务上显示编辑、共享和删除', () => {
-    expect(paneSource).toContain('v-if="activeIsShared"')
+    expect(paneSource).toContain('v-if="activeIsShared && !activeTask.assignedToMe"')
     expect(paneSource).toContain('class="detail-head-actions"')
     expect(paneSource).toContain('class="row-share"')
     expect(paneSource).toContain("tr('编辑')")

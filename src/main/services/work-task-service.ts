@@ -13,6 +13,7 @@ import type {
   WorkTaskSyncTask
 } from '../../shared/protocol'
 import {
+  isWorkTaskAssignmentState,
   isWorkTaskDate,
   isWorkTaskStatus,
   isValidWorkTaskDateRange,
@@ -35,6 +36,8 @@ export interface WorkTaskTaskRecord {
   startDate: string | null
   dueDate: string | null
   status: WorkTaskStatus
+  assigneeNodeId?: string | null
+  assignmentState?: 'pending' | 'accepted' | 'declined' | null
   revision: number
   createdAt: number
   updatedAt: number
@@ -72,6 +75,13 @@ export interface WorkTaskStorePort {
     patch: WorkTaskOwnerPatch,
     updatedAt: number
   ): WorkTaskView | null
+  setTaskAssignment(
+    ownerNodeId: string,
+    id: string,
+    assigneeNodeId: string | null,
+    assignmentState: 'pending' | 'accepted' | 'declined' | null,
+    updatedAt: number
+  ): WorkTaskView | null
   bumpTaskRevision(ownerNodeId: string, id: string, updatedAt: number): WorkTaskView | null
   markTaskInactive(ownerNodeId: string, id: string, updatedAt: number): boolean
   applyRemoteSnapshot(snapshot: WorkTaskSyncSnapshot, receivedAt: number): boolean
@@ -101,6 +111,15 @@ export interface WorkTaskSyncPort {
     snapshot: WorkTaskSyncSnapshot
   ): Promise<{ state: WorkTaskDeliveryState; messageId: string }>
   sendRevoke(peerId: string, taskId: string, revision: number): Promise<WorkTaskDeliveryState>
+  /** 是否能向该对端发送指派（tsk2）。 */
+  canAssign(peerId: string): boolean
+  sendAssignmentAck(ownerNodeId: string, taskId: string, revision: number, accept: boolean): Promise<boolean>
+  sendAssignmentStatus(
+    ownerNodeId: string,
+    taskId: string,
+    revision: number,
+    status: WorkTaskStatus
+  ): Promise<boolean>
 }
 
 export interface WorkTaskServiceOptions {
@@ -155,8 +174,8 @@ function requireTaskId(value: unknown): string {
   return value
 }
 
-function toSyncTask(task: WorkTaskView): WorkTaskSyncTask {
-  return {
+function toSyncTask(task: WorkTaskView, includeAssignment: boolean): WorkTaskSyncTask {
+  const base: WorkTaskSyncTask = {
     id: task.id,
     ownerNodeId: task.ownerNodeId,
     projectId: task.projectId,
@@ -169,6 +188,9 @@ function toSyncTask(task: WorkTaskView): WorkTaskSyncTask {
     createdAt: task.createdAt,
     updatedAt: task.updatedAt
   }
+  return includeAssignment
+    ? { ...base, assigneeNodeId: task.assigneeNodeId, assignmentState: task.assignmentState }
+    : base
 }
 
 function toSyncProject(project: WorkTaskProjectView): WorkTaskSyncProject {
@@ -277,6 +299,8 @@ export class WorkTaskService {
       startDate,
       dueDate,
       status: 'not_started',
+      assigneeNodeId: null,
+      assignmentState: null,
       revision: 1,
       createdAt: stamp,
       updatedAt: stamp
@@ -358,9 +382,13 @@ export class WorkTaskService {
     // 递增 revision：撤销后重新共享时，接收端本地 revision 已推进，必须用更高版本覆盖。
     const bumped = this.store.bumpTaskRevision(this.selfId, id, this.now())
     if (!bumped) throw new Error('任务不存在或只读')
-    const snapshot = this.buildSnapshot(bumped, project)
     const stamp = this.now()
     for (const peerId of peers) {
+      const snapshot = this.buildSnapshot(
+        bumped,
+        project,
+        Boolean(bumped.assigneeNodeId === peerId && this.sync.canAssign(peerId))
+      )
       this.store.upsertShare({
         taskId: bumped.id,
         peerId,
@@ -394,6 +422,128 @@ export class WorkTaskService {
     return latest
   }
 
+  async assignTask(taskId: unknown, peerId: unknown): Promise<WorkTaskView> {
+    const id = requireTaskId(taskId)
+    const task = this.store.getTask(this.selfId, id, this.selfId)
+    if (!task || !task.active) throw new Error('任务不存在或只读')
+    const assignee =
+      peerId === null
+        ? null
+        : typeof peerId === 'string' && peerId.length > 0 && peerId.length <= 64
+          ? peerId
+          : null
+    if (peerId !== null && assignee === null) throw new Error('指派同事不合法')
+    if (assignee === this.selfId) throw new Error('不能把任务指派给自己')
+    if (assignee && !this.sync.canAssign(assignee)) {
+      throw new Error('该同事版本不支持任务指派')
+    }
+    const updated = this.store.setTaskAssignment(
+      this.selfId,
+      id,
+      assignee,
+      assignee ? 'pending' : null,
+      this.now()
+    )
+    if (!updated) throw new Error('任务不存在或只读')
+    if (assignee) {
+      const existing = this.store.listShareRecords(id).find((record) => record.peerId === assignee)
+      if (!existing) {
+        this.store.upsertShare({
+          taskId: id,
+          peerId: assignee,
+          revision: updated.revision,
+          lastMessageId: null,
+          state: 'queued',
+          createdAt: this.now(),
+          updatedAt: this.now()
+        })
+      }
+    }
+    await this.publishShares(updated)
+    const latest = this.store.getTask(this.selfId, id, this.selfId)!
+    this.emit(latest)
+    return latest
+  }
+
+  async respondAssignment(taskId: unknown, accept: boolean): Promise<null> {
+    const task = this.findAssignedTask(taskId)
+    if (!task || task.assignmentState !== 'pending' || typeof accept !== 'boolean') {
+      throw new Error('没有待处理的指派')
+    }
+    const sent = await this.sync.sendAssignmentAck(
+      task.ownerNodeId,
+      task.id,
+      task.revision,
+      accept
+    )
+    if (!sent) throw new Error('指派结果发送失败')
+    return null
+  }
+
+  async setAssignedStatus(taskId: unknown, status: unknown): Promise<null> {
+    const task = this.findAssignedTask(taskId)
+    if (!task || task.assignmentState !== 'accepted' || !isWorkTaskStatus(status)) {
+      throw new Error('任务状态不合法')
+    }
+    const sent = await this.sync.sendAssignmentStatus(
+      task.ownerNodeId,
+      task.id,
+      task.revision,
+      status
+    )
+    if (!sent) throw new Error('任务状态发送失败')
+    return null
+  }
+
+  applyAssignmentAck(from: string, taskId: string, revision: number, accept: boolean): boolean {
+    const task = this.store.getTask(this.selfId, taskId, this.selfId)
+    if (
+      !task ||
+      !task.active ||
+      task.assigneeNodeId !== from ||
+      task.assignmentState !== 'pending' ||
+      task.revision !== revision
+    ) {
+      return false
+    }
+    const updated = this.store.setTaskAssignment(
+      this.selfId,
+      taskId,
+      from,
+      accept ? 'accepted' : 'declined',
+      this.now()
+    )
+    if (!updated) return false
+    void this.publishShares(updated)
+    this.emit(this.store.getTask(this.selfId, taskId, this.selfId)!)
+    return true
+  }
+
+  applyAssignmentStatus(from: string, taskId: string, revision: number, status: WorkTaskStatus): boolean {
+    const task = this.store.getTask(this.selfId, taskId, this.selfId)
+    if (
+      !task ||
+      !task.active ||
+      task.assigneeNodeId !== from ||
+      task.assignmentState !== 'accepted' ||
+      task.revision !== revision ||
+      !isWorkTaskStatus(status)
+    ) {
+      return false
+    }
+    const updated = this.store.updateOwnerTask(this.selfId, taskId, { status }, this.now())
+    if (!updated) return false
+    void this.publishShares(updated)
+    this.emit(this.store.getTask(this.selfId, taskId, this.selfId)!)
+    return true
+  }
+
+  private findAssignedTask(taskId: unknown): WorkTaskView | null {
+    const id = requireTaskId(taskId)
+    const tasks = this.store.listTasks({ scope: 'shared' }, this.selfId)
+    return tasks.find((task) => task.id === id && task.assignedToMe) ?? null
+  }
+
   async unshareTask(taskId: unknown, peerId: unknown): Promise<WorkTaskView> {
     const id = requireTaskId(taskId)
     if (typeof peerId !== 'string' || peerId.length === 0 || peerId.length > 64) {
@@ -401,6 +551,10 @@ export class WorkTaskService {
     }
     const task = this.store.getTask(this.selfId, id, this.selfId)
     if (!task || !task.active) throw new Error('任务不存在或只读')
+    if (task.assigneeNodeId === peerId) {
+      const cleared = this.store.setTaskAssignment(this.selfId, id, null, null, this.now())
+      if (cleared) await this.publishShares(cleared)
+    }
     try {
       await this.sync.sendRevoke(peerId, id, task.revision)
     } catch {
@@ -456,8 +610,12 @@ export class WorkTaskService {
     if (records.length === 0) return
     const project = this.store.getProject(this.selfId, task.projectId)
     if (!project) return
-    const snapshot = this.buildSnapshot(task, project)
     for (const record of records) {
+      const snapshot = this.buildSnapshot(
+        task,
+        project,
+        Boolean(task.assigneeNodeId === record.peerId && this.sync.canAssign(record.peerId))
+      )
       let state: WorkTaskDeliveryState = 'failed'
       let messageId: string | null = null
       try {
@@ -479,8 +637,12 @@ export class WorkTaskService {
     }
   }
 
-  private buildSnapshot(task: WorkTaskView, project: WorkTaskProjectView): WorkTaskSyncSnapshot {
-    return { task: toSyncTask(task), project: toSyncProject(project) }
+  private buildSnapshot(
+    task: WorkTaskView,
+    project: WorkTaskProjectView,
+    includeAssignment = false
+  ): WorkTaskSyncSnapshot {
+    return { task: toSyncTask(task, includeAssignment), project: toSyncProject(project) }
   }
 
   private normalizeFilter(filter: WorkTaskFilter): WorkTaskFilter {
@@ -533,6 +695,21 @@ export class WorkTaskService {
     const dueDate = optionalDate(task.dueDate, '截止日期')
     if (!isValidWorkTaskDateRange(startDate, dueDate)) return false
     if (!isWorkTaskStatus(task.status)) return false
+    if (task.assigneeNodeId !== undefined) {
+      if (
+        task.assigneeNodeId !== null &&
+        (typeof task.assigneeNodeId !== 'string' ||
+          task.assigneeNodeId.length === 0 ||
+          task.assigneeNodeId.length > 64)
+      ) return false
+      if (
+        task.assignmentState !== null &&
+        !isWorkTaskAssignmentState(task.assignmentState)
+      ) return false
+      if (task.assigneeNodeId === null && task.assignmentState !== null) return false
+      if (task.assigneeNodeId !== null && task.assignmentState === undefined) return false
+    }
+    if (task.assignmentState !== undefined && task.assigneeNodeId === undefined) return false
     if (!Number.isSafeInteger(task.revision) || task.revision < 1) return false
     if (!Number.isSafeInteger(task.createdAt) || task.createdAt <= 0) return false
     if (!Number.isSafeInteger(task.updatedAt) || task.updatedAt <= 0) return false

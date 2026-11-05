@@ -121,20 +121,25 @@ function confirmRemove(): void {
           :aria-expanded="conv.id === chatStore.activeConvId"
           :title="conv.id === chatStore.activeConvId ? tr('再次点击隐藏聊天内容') : undefined"
         >
-          <GroupAvatar
-            v-if="conv.type === 'group'"
-            class="conv-avatar grp"
-            :icon-size="24"
-            :avatar-hash="groupsStore.byId[conv.peerId]?.avatarHash"
-          />
-          <AvatarMark
-            v-else
-            class="conv-avatar"
-            :avatar="peersStore.byId(conv.peerId)?.avatar ?? -1"
-            :avatar-hash="peersStore.byId(conv.peerId)?.avatarHash"
-            :name="nickOf(conv.peerId)"
-            :presence="(peersStore.byId(conv.peerId)?.online ?? false) ? 'online' : 'offline'"
-          />
+          <span class="conv-avatar-wrap">
+            <GroupAvatar
+              v-if="conv.type === 'group'"
+              class="conv-avatar grp"
+              :icon-size="24"
+              :avatar-hash="groupsStore.byId[conv.peerId]?.avatarHash"
+            />
+            <AvatarMark
+              v-else
+              class="conv-avatar"
+              :avatar="peersStore.byId(conv.peerId)?.avatar ?? -1"
+              :avatar-hash="peersStore.byId(conv.peerId)?.avatarHash"
+              :name="nickOf(conv.peerId)"
+              :presence="(peersStore.byId(conv.peerId)?.online ?? false) ? 'online' : 'offline'"
+            />
+            <span v-if="conv.unread > 0" class="badge" :class="{ muted: conv.muted }">{{
+              conv.unread > 99 ? '99+' : conv.unread
+            }}</span>
+          </span>
           <span class="conv-main">
             <span class="row1">
               <span class="conv-name">
@@ -152,9 +157,6 @@ function confirmRemove(): void {
                   <span v-else>{{ part.text }}</span>
                 </template>
               </span>
-              <span v-if="conv.unread > 0" class="badge" :class="{ muted: conv.muted }">{{
-                conv.unread > 99 ? '99+' : conv.unread
-              }}</span>
             </span>
           </span>
         </button>
@@ -267,6 +269,12 @@ function confirmRemove(): void {
 .conv:active {
   transform: scale(0.985);
 }
+.conv-avatar-wrap {
+  position: relative;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+}
 .conv-avatar {
   width: 38px;
   height: 38px;
@@ -336,6 +344,10 @@ function confirmRemove(): void {
   color: var(--badge);
 }
 .badge {
+  position: absolute;
+  top: -4px;
+  right: -5px;
+  z-index: 1;
   min-width: 18px;
   height: 18px;
   border-radius: var(--radius-pill);
@@ -347,7 +359,7 @@ function confirmRemove(): void {
   display: grid;
   place-items: center;
   padding: 0 5px;
-  flex-shrink: 0;
+  box-shadow: 0 0 0 2px var(--bg-list);
 }
 .badge.muted {
   background: var(--offline);

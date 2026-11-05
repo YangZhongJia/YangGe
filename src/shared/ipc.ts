@@ -4,7 +4,7 @@ import type { ScanRangeImportOutcome } from './cidr'
 // 通道名、请求/响应类型、preload 暴露的 API 形状都只在这里定义。
 
 import type { NudgeStyle, Platform, ShareDenyReason, ShareEntry, ShareMode, TransferFailureReason } from './protocol'
-import type { WorkTaskDeliveryState, WorkTaskStatus } from './work-task'
+import type { WorkTaskAssignmentState, WorkTaskDeliveryState, WorkTaskStatus } from './work-task'
 import type { PkGame, PkRefView } from './pk'
 import type { DuelAction, DuelCommandResult, DuelStateEvent, DuelView } from './duel'
 import type { ScreenAvailability, ScreenState, ScreenSource, ScreenMode, ScreenImage, ScreenSample, ScreenRequestResult } from './remote-view'
@@ -41,7 +41,12 @@ export const IpcChannels = {
   msgSend: 'msg:send',
   msgResend: 'msg:resend',
   msgRecall: 'msg:recall',
+  msgFavoriteToggle: 'msg:favorite-toggle',
+  msgFavoriteIds: 'msg:favorite-ids',
+  msgFavoriteList: 'msg:favorite-list',
   msgNudge: 'msg:nudge',
+  desktopNudgeShow: 'desktop-nudge:show',
+  groupNudge: 'group:nudge',
   msgPk: 'msg:pk',
   /** 双人角斗场：会话只在内存存活，不写聊天库。 */
   duelInvite: 'duel:invite',
@@ -89,6 +94,10 @@ export const IpcChannels = {
   msgContext: 'msg:context',
   msgGet: 'msg:get',
   settingsSaveApp: 'settings:save-app',
+  lockVerify: 'lock:verify',
+  lockSetPin: 'lock:set-pin',
+  lockSetEnabled: 'lock:set-enabled',
+  lockNow: 'lock:now',
   /** 我的文件柜（决议 #271/#277）：共享根与默认档随 settings:get / settings:updated 下发 */
   shareMySetRoot: 'share:my-set-root',
   shareMySetMode: 'share:my-set-mode',
@@ -106,6 +115,8 @@ export const IpcChannels = {
   netImportRanges: 'net:import-ranges',
   netScanAllRanges: 'net:scan-all-ranges',
   peersSetRemark: 'peers:set-remark',
+  peersCleanupCandidates: 'peers:cleanup-candidates',
+  peersCleanup: 'peers:cleanup',
   uiOpenSettings: 'ui:open-settings',
   /** 文件柜独立窗口（决议 #283）：懒创建 / 聚焦，可带 peerId 直接定位到某位同事 */
   uiOpenCabinet: 'ui:open-cabinet',
@@ -199,7 +210,10 @@ export const IpcChannels = {
   workTaskDelete: 'work-task:delete',
   workTaskShare: 'work-task:share',
   workTaskUnshare: 'work-task:unshare',
-  workTaskBadgeGet: 'work-task:badge-get'
+  workTaskBadgeGet: 'work-task:badge-get',
+  workTaskAssign: 'work-task:assign',
+  workTaskAssignmentRespond: 'work-task:assignment-respond',
+  workTaskAssignmentStatus: 'work-task:assignment-status'
 } as const
 
 /** main → renderer 的事件推送 */
@@ -213,6 +227,8 @@ export const IpcEvents = {
   msgUpdated: 'msg:updated',
   msgStatus: 'msg:status',
   nudgeReceived: 'msg:nudge-received',
+  /** 桌面互动特效播放（主进程 → 独立透明窗）。 */
+  desktopNudge: 'desktop-nudge:play',
   /** 角斗场视图变化（含邀请、回合、结算、离线中断）。 */
   duelState: 'duel:state',
   convsUpdated: 'convs:updated',
@@ -229,6 +245,8 @@ export const IpcEvents = {
   openConv: 'ui:open-conv',
   /** 设置页保存后广播给所有窗口，统一主题/字体等外观 */
   settingsUpdated: 'settings:updated',
+  /** 主进程要求主窗立即切换到锁屏（隐藏/最小化/系统锁屏/手动）。 */
+  lockRequested: 'lock:requested',
   /** 自定义头像文件到达缓存，渲染层按哈希重试图片。 */
   avatarReady: 'avatar:ready',
   /** Windows / Linux 设置模态窗开关状态，主窗据此显示静态暗色遮罩（决议 #222） */
@@ -295,6 +313,15 @@ export interface AppInfo {
 }
 
 /** 通讯录条目（renderer 视图模型，由主进程的 PeerRecord 投影而来） */
+export interface PeerCleanupCandidate {
+  nodeId: string
+  nick: string
+  remark: string
+  ip: string
+  lastSeen: number
+  ver: string
+}
+
 export interface PeerView {
   nodeId: string
   nick: string
@@ -660,6 +687,12 @@ export interface WorkTaskView {
   startDate: string | null
   dueDate: string | null
   status: WorkTaskStatus
+  /** 负责人节点；null 表示未指派。 */
+  assigneeNodeId: string | null
+  /** 指派状态；未指派为 null。 */
+  assignmentState: WorkTaskAssignmentState | null
+  /** 主进程判定：当前任务是否指派给本机。 */
+  assignedToMe: boolean
   revision: number
   active: boolean
   /**
@@ -963,6 +996,20 @@ export interface NudgeResult {
   retryAfterMs?: number
 }
 
+export interface LockVerifyResult {
+  ok: boolean
+  /** 连续失败后的冷却剩余时间 */
+  retryAfterMs?: number
+}
+
+export interface LockRequestedEvent {
+  reason: 'hidden' | 'minimize' | 'system' | 'manual'
+}
+
+export interface DesktopNudgeEvent {
+  style: NudgeStyle
+}
+
 export interface NudgeEvent {
   peerId: string
   convId: string
@@ -1125,6 +1172,12 @@ export interface SettingsView {
   startupMotion: boolean
   /** 收到纸飞机 / 墨弹时播放飞行动画（默认开） */
   nudgeEffects: boolean
+  /** 互动特效位置：聊天窗口内 / 接收方桌面全屏 */
+  nudgeEffectSurface: 'chat' | 'desktop'
+  /** 启动 / 从托盘或最小化恢复时要求输入 6 位数字密码 */
+  lockEnabled: boolean
+  /** 是否已设置锁屏密码；哈希本身不进入渲染层 */
+  lockHasPin: boolean
   language: Language
   theme: 'light' | 'dark' | 'auto'
   fontScale: 100 | 110 | 125
@@ -1284,6 +1337,7 @@ export interface AppSettingsPatch {
   closeToTray?: boolean
   startupMotion?: boolean
   nudgeEffects?: boolean
+  nudgeEffectSurface?: 'chat' | 'desktop'
   language?: Language
   theme?: SettingsView['theme']
   fontScale?: SettingsView['fontScale']
@@ -1366,6 +1420,9 @@ export interface PantryApi {
   /** 用户点击聊天链接后交给系统浏览器；仅允许 http/https */
   openUrl(url: string): Promise<boolean>
   getPeers(): Promise<PeerView[]>
+  /** 可安全清理的离线空联系人：无会话、无任务共享、无备注。 */
+  getPeerCleanupCandidates(): Promise<PeerCleanupCandidate[]>
+  cleanupPeers(nodeIds: string[]): Promise<number>
   getNetState(): Promise<NetState>
   reportImageDecodeFailure(transferId: string): Promise<void>
   /** 局域网自更新：查询当前可用更新源，无则 null（决议 #166） */
@@ -1409,7 +1466,17 @@ export interface PantryApi {
   sendText(peerNodeId: string, text: string): Promise<MessageView | null>
   resendMessage(msgId: string): Promise<boolean>
   recallMessage(msgId: string): Promise<boolean>
+  /** 本机消息收藏：返回切换后的状态。 */
+  toggleMessageFavorite(msgId: string): Promise<boolean>
+  listMessageFavoriteIds(): Promise<string[]>
+  listFavoriteMessages(): Promise<MessageView[]>
   sendNudge(peerNodeId: string, style?: NudgeStyle): Promise<NudgeResult>
+  /** 在本机桌面显示纸飞机 / 墨弹特效（需开启桌面互动）。 */
+  playDesktopNudge(style: NudgeStyle): Promise<boolean>
+  /** 桌面特效窗口接收播放指令。 */
+  onDesktopNudge(listener: (event: DesktopNudgeEvent) => void): () => void
+  /** 群聊纸飞机 / 墨弹：广播给当前在线成员。 */
+  sendGroupNudge(groupId: string, style: NudgeStyle): Promise<NudgeResult>
   sendPk(convId: string, game: PkGame): Promise<MessageView | null>
   /** 从私聊 PK 菜单发起双人角斗邀请（仅在线且支持 duel1 的对端）。 */
   duelInvite(peerNodeId: string): Promise<DuelCommandResult>
@@ -1503,6 +1570,15 @@ export interface PantryApi {
   getMessageById(msgId: string): Promise<MessageView | null>
   /** 应用级设置（通知/手动节点/扫描网段） */
   saveAppSettings(patch: AppSettingsPatch): Promise<SettingsView>
+  /** 校验 6 位锁屏密码；连续失败会返回冷却时间。 */
+  verifyLockPin(pin: string): Promise<LockVerifyResult>
+  /** 设置 / 修改 6 位锁屏密码（主进程只保存 scrypt 哈希）。 */
+  setLockPin(pin: string): Promise<SettingsView>
+  /** 开启 / 关闭锁屏；未设置密码时开启会被拒绝。 */
+  setLockEnabled(enabled: boolean): Promise<SettingsView>
+  /** 立即锁定主窗；未启用锁屏时返回 false。 */
+  lockNow(): Promise<boolean>
+  onLockRequested(listener: (event: LockRequestedEvent) => void): () => void
   /** 我的文件柜：选共享根（打开目录选择器并校验）；clear=true 表示清除共享根 */
   setShareRoot(clear?: boolean): Promise<ShareRootPickResult>
   /** 我的文件柜：切换默认权限档 */
@@ -1696,6 +1772,12 @@ export interface PantryApi {
   deleteWorkTask(taskId: string): Promise<WorkTaskResult<null>>
   shareWorkTask(taskId: string, peerIds: string[]): Promise<WorkTaskResult<WorkTaskView>>
   unshareWorkTask(taskId: string, peerId: string): Promise<WorkTaskResult<WorkTaskView>>
+  /** owner：指派给同事；peerId=null 取消指派。 */
+  assignWorkTask(taskId: string, peerId: string | null): Promise<WorkTaskResult<WorkTaskView>>
+  /** assignee：接受/拒绝指派。 */
+  respondWorkTaskAssignment(taskId: string, accept: boolean): Promise<WorkTaskResult<null>>
+  /** assignee：更新被指派任务的状态。 */
+  setAssignedWorkTaskStatus(taskId: string, status: WorkTaskStatus): Promise<WorkTaskResult<null>>
   createWorkTaskProject(name: string): Promise<WorkTaskResult<WorkTaskProjectView>>
   renameWorkTaskProject(projectId: string, name: string): Promise<WorkTaskResult<WorkTaskProjectView>>
   deleteWorkTaskProject(projectId: string): Promise<WorkTaskResult<null>>

@@ -315,6 +315,28 @@ describe('codec', () => {
     expect(decode(encode(resend))).toEqual({ ok: false, reason: 'bad-payload:msg' })
   })
 
+  it('group-nudge 只接受纸飞机/墨弹与所在群版本', () => {
+    const ok = makeEnvelope<MsgPayload>(MSG_TYPES.msg, 'node-aaaa', {
+      kind: 'group-nudge',
+      style: 'plane',
+      groupId: 'group-1',
+      groupRev: 2
+    })
+    expect(decode(encode(ok))).toMatchObject({ ok: true, known: true })
+    for (const payload of [
+      { kind: 'group-nudge', style: 'bomb', groupId: 'group-1', groupRev: 2 },
+      { kind: 'group-nudge', style: 'plane', groupId: '', groupRev: 2 },
+      { kind: 'group-nudge', style: 'plane', groupId: 'group-1' },
+      { kind: 'group-nudge', style: 'plane', groupId: 'group-1', groupRev: -1 },
+      { kind: 'group-nudge', style: 'plane', groupId: 'group-1', groupRev: 2, resend: true },
+      { kind: 'group-nudge', style: 'plane', groupId: 'group-1', groupRev: 2, extra: true }
+    ]) {
+      expect(
+        decode(encode(makeEnvelope(MSG_TYPES.msg, 'node-aaaa', payload)))
+      ).toEqual({ ok: false, reason: 'bad-payload:msg' })
+    }
+  })
+
   it('pk 只接受匹配玩法的结果，且不允许补发标记', () => {
     const dice = makeEnvelope<MsgPayload>(MSG_TYPES.msg, 'node-aaaa', {
       kind: 'pk',
@@ -917,6 +939,33 @@ describe('tsk1 任务同步报文', () => {
       expect(
         decodeTcpEnvelopeObject(makeEnvelope(MSG_TYPES.task, 'node-alice', payload))
       ).toMatchObject({ ok: true, known: true })
+    }
+  })
+
+  it('tsk2 指派快照与回执通过白名单，未知字段仍拒绝', () => {
+    const assigned = {
+      ...upsert,
+      task: { ...task, assigneeNodeId: 'node-bob', assignmentState: 'pending' }
+    }
+    for (const payload of [
+      assigned,
+      { op: 'assign-ack', toNodeId: 'node-alice', taskId: 'task-1', revision: 3, accept: true },
+      { op: 'assign-status', toNodeId: 'node-alice', taskId: 'task-1', revision: 3, status: 'completed' }
+    ]) {
+      expect(
+        decodeTcpEnvelopeObject(makeEnvelope(MSG_TYPES.task, 'node-alice', payload))
+      ).toMatchObject({ ok: true, known: true })
+    }
+    for (const payload of [
+      { ...assigned, task: { ...assigned.task, assignmentState: 'bogus' } },
+      { ...assigned, task: { ...assigned.task, assigneeNodeId: '', assignmentState: 'pending' } },
+      { ...assigned, task: { ...assigned.task, assigneeNodeId: null, assignmentState: 'pending' } },
+      { op: 'assign-ack', toNodeId: 'node-alice', taskId: 'task-1', revision: 3 },
+      { op: 'assign-status', toNodeId: 'node-alice', taskId: 'task-1', revision: 3, status: 'overdue' }
+    ]) {
+      expect(
+        decodeTcpEnvelopeObject(makeEnvelope(MSG_TYPES.task, 'node-alice', payload))
+      ).toEqual({ ok: false, reason: 'bad-payload:task' })
     }
   })
 

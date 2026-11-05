@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { NButton, NInput } from 'naive-ui'
 import type { PeerView, WorkTaskProjectView, WorkTaskView } from '../../../shared/ipc'
 import {
@@ -8,14 +8,18 @@ import {
   WORK_TASK_LIMITS,
   type WorkTaskDisplayStatus,
   type WorkTaskListBucket,
+  type WorkTaskAssignmentState,
   type WorkTaskStatus
 } from '../../../shared/work-task'
 import { useWorkTasksStore } from '../stores/work-tasks'
 import { usePeersStore } from '../stores/peers'
+import { useChatStore } from '../stores/chat'
+import { CAPS } from '../../../shared/protocol'
 import { tr } from '../utils/i18n'
 
 const store = useWorkTasksStore()
 const peersStore = usePeersStore()
+const chatStore = useChatStore()
 
 const editingId = ref<string | null>(null)
 const showForm = ref(false)
@@ -43,6 +47,10 @@ const shareOpen = ref(false)
 const shareSelection = ref<string[]>([])
 const shareSaving = ref(false)
 const shareSaved = ref(false)
+const assignOpen = ref(false)
+const assignTargetId = ref('')
+const assignBusy = ref(false)
+const assignNotice = ref('')
 
 const activeTask = computed(() => store.activeTask)
 const activeProject = computed(() =>
@@ -51,6 +59,23 @@ const activeProject = computed(() =>
     : null
 )
 const activeIsShared = computed(() => (activeTask.value ? store.isSharedTask(activeTask.value) : false))
+const assignmentCandidates = computed(() =>
+  peersStore.peers.filter((peer) => peer.caps.includes(CAPS.taskAssign))
+)
+const activeAssigneeName = computed(() => {
+  const assignee = activeTask.value?.assigneeNodeId
+  if (!assignee) return ''
+  if (assignee === chatStore.selfId) return chatStore.selfNick || tr('我')
+  return peerName(assignee)
+})
+const assignmentLabels: Record<WorkTaskAssignmentState, string> = {
+  pending: '待接受',
+  accepted: '已接受',
+  declined: '已拒绝'
+}
+const assignmentLabel = computed(() =>
+  activeTask.value?.assignmentState ? tr(assignmentLabels[activeTask.value.assignmentState]) : ''
+)
 
 const bucketLabels: Record<WorkTaskListBucket, string> = {
   overdue: '已延期',
@@ -248,6 +273,50 @@ async function removeProject(project: WorkTaskProjectView): Promise<void> {
   if (!window.confirm(tr('确定删除项目「{0}」？', { 0: project.name }))) return
   await store.deleteProject(project.id)
 }
+
+function openAssign(): void {
+  const task = activeTask.value
+  if (!task || store.isSharedTask(task)) return
+  assignTargetId.value = task.assigneeNodeId ?? ''
+  assignNotice.value = ''
+  assignOpen.value = true
+}
+
+async function saveAssign(): Promise<void> {
+  const task = activeTask.value
+  if (!task || assignBusy.value) return
+  assignBusy.value = true
+  try {
+    if (await store.assignTask(task.id, assignTargetId.value || null)) {
+      assignOpen.value = false
+    }
+  } finally {
+    assignBusy.value = false
+  }
+}
+
+async function respondAssignment(accept: boolean): Promise<void> {
+  const task = activeTask.value
+  if (!task) return
+  if (await store.respondAssignment(task.id, accept)) {
+    assignNotice.value = accept ? tr('已提交接受，等待对方同步。') : tr('已拒绝指派。')
+  }
+}
+
+async function setAssignedStatus(status: WorkTaskStatus): Promise<void> {
+  const task = activeTask.value
+  if (!task || task.status === status) return
+  if (await store.setAssignedStatus(task.id, status)) {
+    assignNotice.value = tr('状态已提交，等待任务所有者同步。')
+  }
+}
+
+watch(
+  () => `${activeTask.value?.id ?? ''}|${activeTask.value?.assignmentState ?? ''}|${activeTask.value?.status ?? ''}`,
+  () => {
+    assignNotice.value = ''
+  }
+)
 
 function openShare(): void {
   const task = activeTask.value
@@ -550,19 +619,65 @@ onMounted(() => {
               <template v-if="!activeIsShared">
                 <NButton size="tiny" @click="startEdit(activeTask)">{{ tr('编辑') }}</NButton>
                 <NButton size="tiny" @click="openShare">{{ tr('共享') }}</NButton>
+                <NButton size="tiny" @click="openAssign">{{ activeTask.assigneeNodeId ? tr('改派') : tr('指派') }}</NButton>
                 <NButton size="tiny" type="error" ghost @click="removeTask">{{ tr('删除') }}</NButton>
               </template>
             </div>
           </header>
           <p class="detail-project">{{ activeProject?.name ?? tr('未命名项目') }}</p>
+          <div v-if="activeTask.assigneeNodeId" class="assign-state">
+            <span>{{ tr('负责人：{0}', { 0: activeAssigneeName }) }}</span>
+            <span class="assign-chip" :data-state="activeTask.assignmentState">{{ assignmentLabel }}</span>
+          </div>
+          <p v-if="assignNotice" class="notice" role="status">{{ assignNotice }}</p>
+          <div v-if="activeTask.assignedToMe && activeTask.assignmentState === 'pending'" class="notice assign-prompt">
+            <strong>{{ tr('这项任务指派给你') }}</strong>
+            <span>{{ tr('接受后可以更新任务状态；拒绝后任务仍保留只读共享。') }}</span>
+            <div class="detail-actions">
+              <NButton size="small" @click="respondAssignment(false)">{{ tr('拒绝指派') }}</NButton>
+              <NButton size="small" type="primary" @click="respondAssignment(true)">{{ tr('接受指派') }}</NButton>
+            </div>
+          </div>
+          <div v-else-if="activeTask.assignedToMe && activeTask.assignmentState === 'accepted'" class="notice assign-prompt">
+            <strong>{{ tr('你是这项任务的负责人') }}</strong>
+            <span>{{ tr('可以更新执行状态，标题与说明由任务所有者维护。') }}</span>
+            <div class="detail-actions">
+              <NButton size="tiny" :disabled="activeTask.status === 'not_started'" @click="setAssignedStatus('not_started')">{{ tr('未开始') }}</NButton>
+              <NButton size="tiny" :disabled="activeTask.status === 'in_progress'" @click="setAssignedStatus('in_progress')">{{ tr('进行中') }}</NButton>
+              <NButton size="tiny" :disabled="activeTask.status === 'completed'" @click="setAssignedStatus('completed')">{{ tr('已完成') }}</NButton>
+            </div>
+          </div>
           <dl class="detail-dates">
             <div><dt>{{ tr('开始') }}</dt><dd>{{ activeTask.startDate || tr('未设置') }}</dd></div>
             <div><dt>{{ tr('截止') }}</dt><dd>{{ activeTask.dueDate || tr('未设置') }}</dd></div>
           </dl>
           <p class="detail-desc">{{ activeTask.description || tr('无说明') }}</p>
 
-          <div v-if="activeIsShared" class="notice">
+          <div v-if="activeIsShared && !activeTask.assignedToMe" class="notice">
             {{ tr('这是同事共享给你的只读任务，由 {0} 维护。', { 0: peerName(activeTask.ownerNodeId) }) }}
+          </div>
+
+          <div v-if="assignOpen && !activeIsShared" class="share-panel">
+            <h4>{{ tr('指派给同事') }}</h4>
+            <p class="notice notice-warn">
+              {{ tr('接受指派的同事可以更新任务状态；任务标题、说明和共享范围仍由你维护。') }}
+            </p>
+            <p v-if="assignmentCandidates.length === 0" class="detail-empty">
+              {{ tr('没有支持任务指派的同事；对方需要升级到 1.11.0 或更高版本。') }}
+            </p>
+            <label class="peer-row">
+              <input v-model="assignTargetId" type="radio" value="" />
+              <span>{{ tr('不指派') }}</span>
+            </label>
+            <label v-for="peer in assignmentCandidates" :key="peer.nodeId" class="peer-row">
+              <input v-model="assignTargetId" type="radio" :value="peer.nodeId" />
+              <span>{{ peer.remark || peer.nick }}</span>
+              <small v-if="peer.online">{{ tr('在线') }}</small>
+            </label>
+            <div class="detail-actions">
+              <NButton @click="assignOpen = false">{{ tr('取消') }}</NButton>
+              <NButton type="primary" :loading="assignBusy" @click="saveAssign">{{ tr('保存指派') }}</NButton>
+            </div>
           </div>
 
           <div v-if="shareOpen && !activeIsShared" class="share-panel">
@@ -913,6 +1028,7 @@ onMounted(() => {
 }
 .detail-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
@@ -925,8 +1041,9 @@ onMounted(() => {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 6px;
+  width: 100%;
 }
 .detail-project {
   margin: 4px 0 12px;
@@ -1001,6 +1118,34 @@ onMounted(() => {
   color: var(--text-2);
   font-size: var(--font-xs);
 }
+.assign-state {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  color: var(--text-2);
+  font-size: var(--font-sm);
+}
+.assign-chip {
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--primary-weak);
+  color: var(--primary);
+  font-size: 11px;
+}
+.assign-chip[data-state='declined'] {
+  background: var(--danger-weak, #fef2f2);
+  color: var(--danger, #b91c1c);
+}
+.assign-chip[data-state='accepted'] {
+  background: var(--success-weak, #ecfdf5);
+  color: var(--success, #047857);
+}
+.assign-prompt {
+  display: grid;
+  gap: 5px;
+}
+.assign-prompt strong { font-size: var(--font-sm); }
 .notice-warn {
   border-color: var(--primary-border);
   background: var(--primary-weak);

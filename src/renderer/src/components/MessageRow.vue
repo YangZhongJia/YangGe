@@ -38,6 +38,7 @@ const emit = defineEmits<{
   'participate-pk': [game: PkGame]
   resend: [msgId: string]
   'reply-to': [msgId: string]
+  'open-chat': [peerId: string]
 }>()
 
 const showSeparator = computed(() => shouldShowSeparator(props.msg.ts, props.prevTs))
@@ -52,6 +53,11 @@ const showGroupSender = computed(
 )
 const parts = computed(() => textParts(props.msg.text))
 const statusHint = computed(() => messageStatusHint(props.msg.kind, props.msg.status))
+const canOpenSenderChat = computed(() => props.isGroupConv && !props.msg.isMine)
+
+function openSenderChat(): void {
+  if (canOpenSenderChat.value) emit('open-chat', props.msg.senderId)
+}
 
 function openMessageMenu(event: MouseEvent): void {
   emit('contextmenu', event, props.msg)
@@ -135,9 +141,16 @@ const replyMeta = computed((): ReplyMeta => {
   >
     <AvatarMark
       class="msg-avatar"
+      :class="{ 'msg-avatar-chat': canOpenSenderChat }"
       :avatar="props.msg.isMine ? chatStore.selfAvatar : props.senderAvatar"
       :avatar-hash="props.msg.isMine ? chatStore.selfAvatarHash : props.senderAvatarHash"
       :name="props.msg.isMine ? chatStore.selfNick : props.senderName"
+      :role="canOpenSenderChat ? 'button' : undefined"
+      :tabindex="canOpenSenderChat ? 0 : undefined"
+      :aria-label="canOpenSenderChat ? tr('打开与 {0} 的私聊', { 0: props.senderName }) : undefined"
+      @click.stop="openSenderChat"
+      @keydown.enter.prevent.stop="openSenderChat"
+      @keydown.space.prevent.stop="openSenderChat"
     />
     <span class="message-stack" :class="{ 'file-stack': props.msg.kind === 'file' }">
       <span v-if="showGroupSender" class="sender">{{ props.senderName }}</span>
@@ -293,6 +306,18 @@ const replyMeta = computed((): ReplyMeta => {
   font-size: 14px;
   flex: 0 0 36px;
   align-self: flex-start;
+}
+.msg-avatar-chat {
+  cursor: pointer;
+  transition: transform 120ms ease, filter 120ms ease;
+}
+.msg-avatar-chat:hover {
+  transform: scale(1.06);
+  filter: brightness(1.08);
+}
+.msg-avatar-chat:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 .message-stack {
   max-width: 68%;

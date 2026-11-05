@@ -178,6 +178,8 @@ export const CAPS = {
   remoteShare: 'rvs1',
   /** 个人/共享任务记录：能收发 `task` 报文的 upsert/revoke（只声明能力，不代表已共享）。 */
   taskSharing: 'tsk1',
+  /** 任务指派与状态回传（tsk2）；旧版 tsk1 只读共享。 */
+  taskAssign: 'tsk2',
   /** 双人角斗场：能收发 `duel` 报文（内存会话，不落聊天库）。 */
   duel: 'duel1'
 } as const
@@ -295,6 +297,13 @@ export type MsgPayload =
       style?: NudgeStyle
     }
   | {
+      kind: 'group-nudge'
+      /** 纸飞机 / 墨弹，群聊广播给在线成员 */
+      style: NudgeStyle
+      groupId: string
+      groupRev: number
+    }
+  | {
       kind: 'pk'
       game: PkGame
       result: PkResult
@@ -338,6 +347,9 @@ export interface WorkTaskSyncTask {
   revision: number
   createdAt: number
   updatedAt: number
+  /** 仅 tsk2 对端可见；旧版共享快照会省略这两个字段。 */
+  assigneeNodeId?: string | null
+  assignmentState?: 'pending' | 'accepted' | 'declined' | null
 }
 
 export interface WorkTaskSyncProject {
@@ -368,6 +380,22 @@ export type TaskSyncPayload =
       ownerNodeId: string
       taskId: string
       revision: number
+      resend?: boolean
+    }
+  | {
+      op: 'assign-ack'
+      toNodeId: string
+      taskId: string
+      revision: number
+      accept: boolean
+      resend?: boolean
+    }
+  | {
+      op: 'assign-status'
+      toNodeId: string
+      taskId: string
+      revision: number
+      status: WorkTaskStatus
       resend?: boolean
     }
 

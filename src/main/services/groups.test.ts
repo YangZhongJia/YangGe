@@ -25,6 +25,11 @@ class FakeMessenger extends EventEmitter {
 
 class FakeConvRepo {
   readonly mentioned: string[] = []
+  muted = 0
+
+  get(_convId: string) {
+    return { muted: this.muted }
+  }
 
   bump(): void {}
   incUnread(): void {}
@@ -657,6 +662,78 @@ describe('GroupsService 群管理权限', () => {
 })
 
 describe('GroupsService PK', () => {
+  it('群纸飞机与墨弹广播给在线成员并落系统提示', async () => {
+    const repo = new FakeGroupRepo()
+    const messenger = new FakeMessenger()
+    const msgRepo = new FakePkMsgRepo()
+    const groups = new GroupsService({
+      selfId: 'node-self',
+      messenger: messenger as unknown as Messenger,
+      convRepo: new FakeConvRepo() as unknown as ConvRepo,
+      msgRepo: msgRepo as unknown as MsgRepo,
+      groupRepo: repo as unknown as GroupRepo,
+      getSelfIp: () => '10.0.0.1',
+      isOnline: (id) => id === 'node-a'
+    })
+    const group = groups.createGroup('项目组', ['node-a', 'node-b'])
+    messenger.sent.length = 0
+    msgRepo.rows.clear()
+
+    await expect(groups.sendNudge(group!.groupId, 'plane')).resolves.toEqual({ ok: true })
+    expect(messenger.sent.map((item) => item.peerId)).toEqual(['node-a'])
+    expect(messenger.sent[0].env.payload).toMatchObject({
+      kind: 'group-nudge',
+      style: 'plane',
+      groupId: group!.groupId,
+      groupRev: 1
+    })
+    expect(msgRepo.rows.get(messenger.sent[0].env.id)?.content).toBe('你向群里扔了一架纸飞机')
+
+    messenger.sent.length = 0
+    expect(await groups.sendNudge(group!.groupId, 'ink')).toEqual({ ok: true })
+    expect(messenger.sent[0].env.payload).toMatchObject({ kind: 'group-nudge', style: 'ink' })
+  })
+
+  it('收到群互动时落提示并通知特效，静音群只留提示', () => {
+    const repo = new FakeGroupRepo()
+    const messenger = new FakeMessenger()
+    const msgRepo = new FakePkMsgRepo()
+    const convRepo = new FakeConvRepo()
+    const groups = new GroupsService({
+      selfId: 'node-self',
+      messenger: messenger as unknown as Messenger,
+      convRepo: convRepo as unknown as ConvRepo,
+      msgRepo: msgRepo as unknown as MsgRepo,
+      groupRepo: repo as unknown as GroupRepo,
+      getSelfIp: () => '10.0.0.1',
+      resolveDisplayName: (id) => (id === 'node-a' ? 'A' : 'B')
+    })
+    const group = groups.createGroup('项目组', ['node-a', 'node-b'])
+    const events: Array<{ convId: string; style?: string }> = []
+    groups.on('nudge', (event) => events.push(event))
+    const env = makeEnvelope<MsgPayload>(MSG_TYPES.msg, 'node-a', {
+      kind: 'group-nudge',
+      style: 'ink',
+      groupId: group!.groupId,
+      groupRev: 1
+    })
+
+    messenger.emit('incoming', env)
+    expect(events).toEqual([{ peerId: 'node-a', convId: `group:${group!.groupId}`, ts: expect.any(Number), style: 'ink' }])
+    expect(msgRepo.rows.get(env.id)?.content).toBe('A 在群里扔了一颗墨弹')
+
+    convRepo.muted = 1
+    const muted = makeEnvelope<MsgPayload>(MSG_TYPES.msg, 'node-a', {
+      kind: 'group-nudge',
+      style: 'plane',
+      groupId: group!.groupId,
+      groupRev: 1
+    })
+    messenger.emit('incoming', muted)
+    expect(events).toHaveLength(1)
+    expect(msgRepo.rows.get(muted.id)?.content).toBe('A 在群里扔了一架纸飞机')
+  })
+
   it('群 PK 只发给当前在线成员', () => {
     const repo = new FakeGroupRepo()
     const messenger = new FakeMessenger()

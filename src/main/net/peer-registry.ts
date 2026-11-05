@@ -116,6 +116,15 @@ export class PeerRegistry extends EventEmitter {
     }
   }
 
+  /** 清理本地保存的空联系人时同步移除内存节点。 */
+  remove(nodeId: string): boolean {
+    const removed = this.peers.delete(nodeId)
+    this.profileTimes.delete(nodeId)
+    this.profileConfirmationOnly.delete(nodeId)
+    if (removed) this.emit('updated')
+    return removed
+  }
+
   /** 离开状态（决议 #323）：presence 心跳携带，仅内存态 */
   setAway(nodeId: string, away: boolean): void {
     const record = this.peers.get(nodeId)

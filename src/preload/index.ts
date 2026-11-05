@@ -35,6 +35,7 @@ import {
   type CaptureFailureNotice,
   type DataExportOptions,
   type DataImportResult,
+  type DesktopNudgeEvent,
   type ExportFormat,
   type ForwardResult,
   type ForwardTarget,
@@ -43,6 +44,8 @@ import {
   type ImageOcrResult,
   type ImageOcrSource,
   type ImageSourceBytes,
+  type LockRequestedEvent,
+  type LockVerifyResult,
   type ImageViewerNavigation,
   type MessageView,
   type MsgStatusEvent,
@@ -51,6 +54,7 @@ import {
   type NudgeEvent,
   type NudgeResult,
   type PantryApi,
+  type PeerCleanupCandidate,
   type PeerView,
   type ProfileSubmit,
   type ProfileAvatarChoice,
@@ -82,6 +86,7 @@ import {
   type WorkTaskPatch,
   type WorkTaskProjectView,
   type WorkTaskResult,
+  type WorkTaskStatus,
   type WorkTaskView
 } from '../shared/ipc'
 import type { NudgeStyle, ShareMode } from '../shared/protocol'
@@ -147,6 +152,10 @@ const api: PantryApi = {
   getNetState: (): Promise<NetState> => ipcRenderer.invoke(IpcChannels.netState),
   reportImageDecodeFailure: (transferId) => ipcRenderer.invoke(IpcChannels.transferImageFailed, transferId),
   getPeers: (): Promise<PeerView[]> => ipcRenderer.invoke(IpcChannels.peersList),
+  getPeerCleanupCandidates: (): Promise<PeerCleanupCandidate[]> =>
+    ipcRenderer.invoke(IpcChannels.peersCleanupCandidates),
+  cleanupPeers: (nodeIds: string[]): Promise<number> =>
+    ipcRenderer.invoke(IpcChannels.peersCleanup, [...nodeIds]),
   checkUpdate: (): Promise<UpdateAvailability | null> => ipcRenderer.invoke(IpcChannels.updateCheck),
   requestUpdate: (): Promise<boolean> => ipcRenderer.invoke(IpcChannels.updateRequest),
   installUpdate: (): Promise<boolean> => ipcRenderer.invoke(IpcChannels.updateInstall),
@@ -186,8 +195,20 @@ const api: PantryApi = {
     ipcRenderer.invoke(IpcChannels.msgResend, msgId),
   recallMessage: (msgId: string): Promise<boolean> =>
     ipcRenderer.invoke(IpcChannels.msgRecall, msgId),
+  toggleMessageFavorite: (msgId: string): Promise<boolean> =>
+    ipcRenderer.invoke(IpcChannels.msgFavoriteToggle, msgId),
+  listMessageFavoriteIds: (): Promise<string[]> =>
+    ipcRenderer.invoke(IpcChannels.msgFavoriteIds),
+  listFavoriteMessages: (): Promise<MessageView[]> =>
+    ipcRenderer.invoke(IpcChannels.msgFavoriteList),
   sendNudge: (peerNodeId: string, style?: NudgeStyle): Promise<NudgeResult> =>
     ipcRenderer.invoke(IpcChannels.msgNudge, peerNodeId, style),
+  sendGroupNudge: (groupId: string, style: NudgeStyle): Promise<NudgeResult> =>
+    ipcRenderer.invoke(IpcChannels.groupNudge, groupId, style),
+  playDesktopNudge: (style: NudgeStyle): Promise<boolean> =>
+    ipcRenderer.invoke(IpcChannels.desktopNudgeShow, style),
+  onDesktopNudge: (listener: (event: DesktopNudgeEvent) => void): (() => void) =>
+    subscribe<DesktopNudgeEvent>(IpcEvents.desktopNudge, listener),
   sendPk: (convId, game) => ipcRenderer.invoke(IpcChannels.msgPk, convId, game),
   duelInvite: (peerNodeId: string): Promise<DuelCommandResult> =>
     ipcRenderer.invoke(IpcChannels.duelInvite, peerNodeId),
@@ -289,6 +310,15 @@ const api: PantryApi = {
     ipcRenderer.invoke(IpcChannels.msgGet, msgId),
   saveAppSettings: (patch: AppSettingsPatch): Promise<SettingsView> =>
     ipcRenderer.invoke(IpcChannels.settingsSaveApp, patch),
+  verifyLockPin: (pin: string): Promise<LockVerifyResult> =>
+    ipcRenderer.invoke(IpcChannels.lockVerify, pin),
+  setLockPin: (pin: string): Promise<SettingsView> =>
+    ipcRenderer.invoke(IpcChannels.lockSetPin, pin),
+  setLockEnabled: (enabled: boolean): Promise<SettingsView> =>
+    ipcRenderer.invoke(IpcChannels.lockSetEnabled, enabled),
+  lockNow: (): Promise<boolean> => ipcRenderer.invoke(IpcChannels.lockNow),
+  onLockRequested: (listener: (event: LockRequestedEvent) => void): (() => void) =>
+    subscribe<LockRequestedEvent>(IpcEvents.lockRequested, listener),
   setShareRoot: (clear?: boolean): Promise<ShareRootPickResult> =>
     ipcRenderer.invoke(IpcChannels.shareMySetRoot, clear === true),
   setShareMode: (mode: ShareMode): Promise<SettingsView> =>
@@ -509,6 +539,15 @@ const api: PantryApi = {
     ipcRenderer.invoke(IpcChannels.workTaskShare, taskId, [...peerIds]),
   unshareWorkTask: (taskId: string, peerId: string): Promise<WorkTaskResult<WorkTaskView>> =>
     ipcRenderer.invoke(IpcChannels.workTaskUnshare, taskId, peerId),
+  assignWorkTask: (taskId: string, peerId: string | null): Promise<WorkTaskResult<WorkTaskView>> =>
+    ipcRenderer.invoke(IpcChannels.workTaskAssign, taskId, peerId),
+  respondWorkTaskAssignment: (taskId: string, accept: boolean): Promise<WorkTaskResult<null>> =>
+    ipcRenderer.invoke(IpcChannels.workTaskAssignmentRespond, taskId, accept),
+  setAssignedWorkTaskStatus: (
+    taskId: string,
+    status: WorkTaskStatus
+  ): Promise<WorkTaskResult<null>> =>
+    ipcRenderer.invoke(IpcChannels.workTaskAssignmentStatus, taskId, status),
   createWorkTaskProject: (name: string): Promise<WorkTaskResult<WorkTaskProjectView>> =>
     ipcRenderer.invoke(IpcChannels.workTaskProjectCreate, name),
   renameWorkTaskProject: (

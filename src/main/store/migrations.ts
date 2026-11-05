@@ -388,6 +388,20 @@ export const MIGRATIONS: ReadonlyArray<string> = [
     value      TEXT NOT NULL CHECK(length(value) BETWEEN 1 AND 64),
     updated_ts INTEGER NOT NULL
   );
+  `,
+
+  // v24：本地消息收藏 + 任务指派。
+  `
+  CREATE TABLE message_favorites (
+    msg_id     TEXT PRIMARY KEY CHECK(length(msg_id) BETWEEN 1 AND 64),
+    conv_id    TEXT NOT NULL CHECK(length(conv_id) BETWEEN 1 AND 128),
+    created_ts INTEGER NOT NULL
+  );
+  CREATE INDEX idx_message_favorites_created ON message_favorites(created_ts DESC);
+
+  ALTER TABLE work_tasks ADD COLUMN assignee_node_id TEXT;
+  ALTER TABLE work_tasks ADD COLUMN assignment_state TEXT
+    CHECK(assignment_state IS NULL OR assignment_state IN ('pending','accepted','declined'));
   `
 ]
 

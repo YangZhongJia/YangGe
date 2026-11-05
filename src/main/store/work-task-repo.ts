@@ -6,7 +6,7 @@ import type {
   WorkTaskView
 } from '../../shared/ipc'
 import type { WorkTaskSyncSnapshot } from '../../shared/protocol'
-import type { WorkTaskDeliveryState, WorkTaskStatus } from '../../shared/work-task'
+import type { WorkTaskAssignmentState, WorkTaskDeliveryState, WorkTaskStatus } from '../../shared/work-task'
 
 export interface WorkTaskProjectRecord {
   id: string
@@ -25,6 +25,8 @@ export interface WorkTaskRecord {
   startDate: string | null
   dueDate: string | null
   status: WorkTaskStatus
+  assigneeNodeId?: string | null
+  assignmentState?: WorkTaskAssignmentState | null
   revision: number
   createdAt: number
   updatedAt: number
@@ -75,6 +77,8 @@ interface TaskRow {
   start_date: string | null
   due_date: string | null
   status: string
+  assignee_node_id: string | null
+  assignment_state: string | null
   revision: number
   active: number
   due_reminded_on: string | null
@@ -134,6 +138,9 @@ function toTask(row: TaskRow, shares: WorkTaskShareView[], viewerNodeId: string)
     startDate: row.start_date,
     dueDate: row.due_date,
     status: row.status as WorkTaskStatus,
+    assigneeNodeId: row.assignee_node_id ?? null,
+    assignmentState: (row.assignment_state as WorkTaskAssignmentState | null) ?? null,
+    assignedToMe: row.assignee_node_id === viewerNodeId,
     revision: row.revision,
     active: row.active === 1,
     isShared: row.owner_node_id !== viewerNodeId,
@@ -160,6 +167,7 @@ export class WorkTaskRepo {
   private readonly setReminderStateStmt: DatabaseT.Statement
   private readonly updateTaskStmt: DatabaseT.Statement
   private readonly bumpRevisionStmt: DatabaseT.Statement
+  private readonly setAssignmentStmt: DatabaseT.Statement
   private readonly deactivateTaskStmt: DatabaseT.Statement
   private readonly upsertRemoteTaskStmt: DatabaseT.Statement
   private readonly revokeRemoteTaskStmt: DatabaseT.Statement
@@ -212,10 +220,10 @@ export class WorkTaskRepo {
     this.insertTaskStmt = db.prepare(`
       INSERT INTO work_tasks (
         id, owner_node_id, project_id, title, description, start_date, due_date,
-        status, revision, active, created_ts, updated_ts
+        status, assignee_node_id, assignment_state, revision, active, created_ts, updated_ts
       ) VALUES (
         @id, @ownerNodeId, @projectId, @title, @description, @startDate, @dueDate,
-        @status, @revision, 1, @createdAt, @updatedAt
+        @status, @assigneeNodeId, @assignmentState, @revision, 1, @createdAt, @updatedAt
       )
     `)
     this.selectTaskStmt = db.prepare(
@@ -271,6 +279,14 @@ export class WorkTaskRepo {
       UPDATE work_tasks SET revision = revision + 1, updated_ts = @updatedAt
       WHERE owner_node_id = @ownerNodeId AND id = @id
     `)
+    this.setAssignmentStmt = db.prepare(`
+      UPDATE work_tasks SET
+        assignee_node_id = @assigneeNodeId,
+        assignment_state = @assignmentState,
+        revision = revision + 1,
+        updated_ts = @updatedAt
+      WHERE owner_node_id = @ownerNodeId AND id = @id
+    `)
     this.deactivateTaskStmt = db.prepare(`
       UPDATE work_tasks SET active = 0, revision = revision + 1, updated_ts = @updatedAt
       WHERE owner_node_id = @ownerNodeId AND id = @id
@@ -278,10 +294,10 @@ export class WorkTaskRepo {
     this.upsertRemoteTaskStmt = db.prepare(`
       INSERT INTO work_tasks (
         id, owner_node_id, project_id, title, description, start_date, due_date,
-        status, revision, active, created_ts, updated_ts
+        status, assignee_node_id, assignment_state, revision, active, created_ts, updated_ts
       ) VALUES (
         @id, @ownerNodeId, @projectId, @title, @description, @startDate, @dueDate,
-        @status, @revision, 1, @createdAt, @updatedAt
+        @status, @assigneeNodeId, @assignmentState, @revision, 1, @createdAt, @updatedAt
       )
       ON CONFLICT(owner_node_id, id) DO UPDATE SET
         project_id = excluded.project_id,
@@ -290,6 +306,8 @@ export class WorkTaskRepo {
         start_date = excluded.start_date,
         due_date = excluded.due_date,
         status = excluded.status,
+        assignee_node_id = excluded.assignee_node_id,
+        assignment_state = excluded.assignment_state,
         revision = excluded.revision,
         active = 1,
         due_reminded_on = CASE
@@ -440,7 +458,11 @@ export class WorkTaskRepo {
   }
 
   createTask(record: WorkTaskRecord): WorkTaskView {
-    this.insertTaskStmt.run(record)
+    this.insertTaskStmt.run({
+      ...record,
+      assigneeNodeId: record.assigneeNodeId ?? null,
+      assignmentState: record.assignmentState ?? null
+    })
     return this.getTask(record.ownerNodeId, record.id)!
   }
 
@@ -465,6 +487,24 @@ export class WorkTaskRepo {
       dueDate: patch.dueDate ?? null,
       hasStatus: patch.status !== undefined ? 1 : 0,
       status: patch.status ?? 'not_started',
+      updatedAt
+    })
+    if (result.changes === 0) return null
+    return this.getTask(ownerNodeId, id, ownerNodeId)
+  }
+
+  setTaskAssignment(
+    ownerNodeId: string,
+    id: string,
+    assigneeNodeId: string | null,
+    assignmentState: WorkTaskAssignmentState | null,
+    updatedAt: number
+  ): WorkTaskView | null {
+    const result = this.setAssignmentStmt.run({
+      ownerNodeId,
+      id,
+      assigneeNodeId,
+      assignmentState,
       updatedAt
     })
     if (result.changes === 0) return null
@@ -500,6 +540,8 @@ export class WorkTaskRepo {
         startDate: task.startDate,
         dueDate: task.dueDate,
         status: task.status,
+        assigneeNodeId: task.assigneeNodeId ?? null,
+        assignmentState: task.assignmentState ?? null,
         revision: task.revision,
         createdAt: task.createdAt,
         updatedAt: receivedAt

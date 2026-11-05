@@ -519,7 +519,7 @@ describe('未读置读需窗口可见且聚焦（决议 #220）', () => {
     expect(markRead).not.toHaveBeenCalled()
   })
 
-  it('重新聚焦窗口时补置读当前会话攒下的未读', async () => {
+  it('重新聚焦窗口时提示当前会话攒下的未读，确认后再置读', async () => {
     const { markRead } = stubEnv({ visibilityState: 'visible', focused: false })
     const store = useChatStore()
     await store.init()
@@ -528,7 +528,11 @@ describe('未读置读需窗口可见且聚焦（决议 #220）', () => {
 
     focusHandler?.()
 
+    expect(store.unreadPrompt).toEqual({ convId: 'single:node-bob', count: 2 })
+    expect(markRead).not.toHaveBeenCalled()
+    store.acknowledgeUnreadPrompt()
     expect(markRead).toHaveBeenCalledWith('single:node-bob')
+    expect(store.unreadPrompt).toBeNull()
   })
 
   it('重新聚焦时当前会话无未读则不重复置读', async () => {

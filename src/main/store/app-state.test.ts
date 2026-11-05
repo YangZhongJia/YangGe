@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { addSharedScanRanges, importScanRanges, loadAppState, saveAppSettings, saveProfile, saveProfileCaps, type ProfilePatch } from './app-state'
+import { hashLockPin } from '../services/app-lock'
 
 const directories: string[] = []
 
@@ -48,6 +49,24 @@ describe('批量添加扫描网段', () => {
     expect(state.config.ignoredScanRanges['10.1.0.0/24']).toBeGreaterThan(0)
     expect(importScanRanges(state, '10.1.0.1/24')).toEqual({ ok: true, added: 1 })
     expect(state.config.ignoredScanRanges['10.1.0.0/24']).toBeUndefined()
+  })
+})
+
+describe('锁屏配置', () => {
+  it('没有有效密码哈希时拒绝保持启用，重启后按哈希恢复', () => {
+    const state = makeState()
+    expect(state.config.lockEnabled).toBe(false)
+    saveAppSettings(state, { lockPinHash: 'not-a-hash', lockEnabled: true })
+    expect(state.config.lockEnabled).toBe(true)
+    const invalid = loadAppState(directories[0], '0.0.0-test')
+    expect(invalid.config.lockPinHash).toBe('')
+    expect(invalid.config.lockEnabled).toBe(false)
+
+    const hash = hashLockPin('123456')
+    saveAppSettings(invalid, { lockPinHash: hash, lockEnabled: true })
+    const reloaded = loadAppState(directories[0], '0.0.0-test')
+    expect(reloaded.config.lockEnabled).toBe(true)
+    expect(reloaded.config.lockPinHash).toBe(hash)
   })
 })
 

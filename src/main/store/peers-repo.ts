@@ -6,7 +6,7 @@ import type { PeerRecord } from '../net/peer-registry'
 // 写入：registry 变化时整表 upsert（≤1000 行事务内毫秒级）；
 // 读取：启动时全量载入，以离线态种回 registry。
 
-interface PeerRow {
+export interface PeerRow {
   node_id: string
   nick: string
   remark: string | null
@@ -36,6 +36,9 @@ export class PeersRepo {
   private readonly selectAllStmt: DatabaseT.Statement
   private readonly remarkStmt: DatabaseT.Statement
   private readonly remarksAllStmt: DatabaseT.Statement
+  private readonly cleanupCandidatesStmt: DatabaseT.Statement
+  private readonly deleteManyStmt: DatabaseT.Statement
+  private readonly deleteManyTx: (ids: string[]) => number
   private readonly upsertManyTx: (records: PeerRecord[]) => void
 
   constructor(db: DatabaseT.Database) {
@@ -66,6 +69,27 @@ export class PeersRepo {
     this.remarksAllStmt = db.prepare(
       "SELECT node_id, remark FROM peers WHERE remark IS NOT NULL AND remark != ''"
     )
+    this.cleanupCandidatesStmt = db.prepare(`
+      SELECT p.* FROM peers p
+      WHERE (p.remark IS NULL OR p.remark = '')
+        AND NOT EXISTS (
+          SELECT 1 FROM conversations c
+          WHERE c.type = 'single' AND c.peer_or_group_id = p.node_id
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM messages m WHERE m.conv_id = 'single:' || p.node_id
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM work_task_shares s WHERE s.peer_id = p.node_id
+        )
+      ORDER BY p.last_seen ASC
+    `)
+    this.deleteManyStmt = db.prepare('DELETE FROM peers WHERE node_id = ?')
+    this.deleteManyTx = db.transaction((ids: string[]) => {
+      let deleted = 0
+      for (const id of ids) deleted += this.deleteManyStmt.run(id).changes
+      return deleted
+    }) as unknown as (ids: string[]) => number
 
     this.upsertManyTx = db.transaction((records: PeerRecord[]) => {
       for (const record of records) this.upsertOne(record)
@@ -97,6 +121,14 @@ export class PeersRepo {
 
   upsertMany(records: PeerRecord[]): void {
     if (records.length > 0) this.upsertManyTx(records)
+  }
+
+  listCleanupCandidates(): PeerRow[] {
+    return this.cleanupCandidatesStmt.all() as PeerRow[]
+  }
+
+  deleteMany(nodeIds: string[]): number {
+    return this.deleteManyTx([...new Set(nodeIds)])
   }
 
   setRemark(nodeId: string, remark: string): void {

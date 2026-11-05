@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { tr, language } from '../utils/i18n'
 import { computed, ref } from 'vue'
-import type { PeerView } from '../../../shared/ipc'
+import type { PeerCleanupCandidate, PeerView } from '../../../shared/ipc'
 import { usePeersStore } from '../stores/peers'
+import { NButton } from 'naive-ui'
 import AvatarMark from './AvatarMark.vue'
 
 // 通讯录三级折叠树（F-DISC-4 / ui-design §4）：公司 ▸ 部门 ▸ 团队 ▸ 成员。
@@ -11,6 +12,10 @@ import AvatarMark from './AvatarMark.vue'
 const peersStore = usePeersStore()
 const emit = defineEmits<{ select: [peer: PeerView]; chat: [nodeId: string] }>()
 const collapsed = ref(new Set<string>())
+const cleanupOpen = ref(false)
+const cleanupCandidates = ref<PeerCleanupCandidate[]>([])
+const cleanupBusy = ref(false)
+const cleanupNotice = ref('')
 
 interface Row {
   kind: 'group' | 'peer'
@@ -113,6 +118,28 @@ function onRowDoubleClick(row: Row): void {
   }
 }
 
+async function openCleanup(): Promise<void> {
+  cleanupNotice.value = ''
+  cleanupCandidates.value = await window.pantry.getPeerCleanupCandidates()
+  cleanupOpen.value = true
+}
+
+async function confirmCleanup(): Promise<void> {
+  if (cleanupBusy.value || cleanupCandidates.value.length === 0) return
+  cleanupBusy.value = true
+  try {
+    const deleted = await window.pantry.cleanupPeers(cleanupCandidates.value.map((item) => item.nodeId))
+    cleanupOpen.value = false
+    cleanupNotice.value = tr('已清理 {0} 个离线联系人', { 0: deleted })
+  } finally {
+    cleanupBusy.value = false
+  }
+}
+
+function cleanupTime(ts: number): string {
+  return new Date(ts).toLocaleDateString()
+}
+
 function displayName(peer: PeerView): string {
   return peer.remark || peer.nick
 }
@@ -121,8 +148,11 @@ function displayName(peer: PeerView): string {
 
 <template>
   <div class="pane">
-    <div class="list-head">{{ tr('网内节点 {0} · 在线 {1}', { 0: peersStore.peers.length, 1: peersStore.onlineCount }) }}
+    <div class="list-head">
+      <span>{{ tr('网内节点 {0} · 在线 {1}', { 0: peersStore.peers.length, 1: peersStore.onlineCount }) }}</span>
+      <button type="button" class="cleanup-link" @click="openCleanup">{{ tr('清理离线') }}</button>
     </div>
+    <p v-if="cleanupNotice" class="cleanup-notice" role="status">{{ cleanupNotice }}</p>
     <div v-if="peersStore.peers.length === 0" class="placeholder">{{ tr('正在发现同网段节点…') }}</div>
     <ul v-else class="tree">
       <li v-for="row in rows" :key="row.key">
@@ -163,6 +193,40 @@ function displayName(peer: PeerView): string {
       </li>
     </ul>
   </div>
+  <Teleport to="body">
+    <div v-if="cleanupOpen" class="cleanup-mask" @click.self="cleanupOpen = false">
+      <section class="cleanup-card" role="dialog" aria-modal="true" aria-labelledby="cleanup-title">
+        <header>
+          <div>
+            <p class="cleanup-eyebrow">{{ tr('通讯录整理') }}</p>
+            <h3 id="cleanup-title">{{ tr('清理离线空联系人') }}</h3>
+          </div>
+          <button type="button" :aria-label="tr('关闭')" @click="cleanupOpen = false">×</button>
+        </header>
+        <p class="cleanup-desc">
+          {{ tr('只清理离线、没有聊天记录、没有任务共享且未设置备注的节点；真实联系人和历史消息不会受到影响。') }}
+        </p>
+        <p v-if="cleanupCandidates.length === 0" class="cleanup-empty">{{ tr('没有可清理的离线联系人。') }}</p>
+        <ul v-else class="cleanup-list">
+          <li v-for="item in cleanupCandidates" :key="item.nodeId">
+            <span class="cleanup-name">{{ item.remark || item.nick || item.nodeId.slice(0, 8) }}</span>
+            <span class="cleanup-meta">{{ item.ip }} · {{ tr('最近在线 {0}', { 0: cleanupTime(item.lastSeen) }) }}</span>
+          </li>
+        </ul>
+        <footer>
+          <NButton secondary :disabled="cleanupBusy" @click="cleanupOpen = false">{{ tr('取消') }}</NButton>
+          <NButton
+            type="primary"
+            :disabled="cleanupCandidates.length === 0"
+            :loading="cleanupBusy"
+            @click="confirmCleanup"
+          >
+            {{ tr('清理 {0} 个', { 0: cleanupCandidates.length }) }}
+          </NButton>
+        </footer>
+      </section>
+    </div>
+  </Teleport>
 </template>
 
 <style scoped>
@@ -178,10 +242,104 @@ function displayName(peer: PeerView): string {
   padding: 0 14px;
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   font-size: 12px;
   font-weight: 600;
   color: var(--text-2);
   letter-spacing: 0.01em;
+}
+.cleanup-link {
+  border: 0;
+  background: none;
+  padding: 2px 0;
+  color: var(--primary);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.cleanup-link:hover { text-decoration: underline; }
+.cleanup-notice {
+  margin: 0 14px 4px;
+  color: var(--success, #047857);
+  font-size: 11px;
+}
+.cleanup-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  background: var(--scrim);
+}
+.cleanup-card {
+  width: min(430px, calc(100vw - 48px));
+  max-height: min(520px, calc(100vh - 72px));
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  padding: 18px 20px;
+  background: var(--material-strong);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--highlight-edge), var(--shadow-float);
+}
+.cleanup-card header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.cleanup-card h3 { margin: 2px 0 0; font-size: var(--font-md); }
+.cleanup-card header > button {
+  border: 0;
+  background: none;
+  color: var(--text-3);
+  font-size: 18px;
+  cursor: pointer;
+}
+.cleanup-eyebrow {
+  margin: 0;
+  color: var(--text-3);
+  font-size: var(--font-xs);
+  letter-spacing: 0.12em;
+}
+.cleanup-desc {
+  margin: 10px 0 6px;
+  color: var(--text-3);
+  font-size: var(--font-xs);
+  line-height: 1.6;
+}
+.cleanup-empty {
+  padding: 18px 0;
+  color: var(--text-3);
+  font-size: var(--font-sm);
+  text-align: center;
+}
+.cleanup-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  list-style: none;
+  margin: 4px 0;
+  padding: 0;
+}
+.cleanup-list li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 4px;
+  border-bottom: 1px solid var(--line);
+  font-size: var(--font-sm);
+}
+.cleanup-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cleanup-meta { flex: none; color: var(--text-3); font-size: 11px; }
+.cleanup-card footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 12px;
 }
 .placeholder {
   color: var(--text-2);

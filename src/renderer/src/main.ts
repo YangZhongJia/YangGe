@@ -12,6 +12,7 @@ async function bootstrap(): Promise<void> {
   const entry = resolveRendererEntry(location.hash)
   if (entry === 'capture') document.documentElement.dataset.window = 'capture'
   if (entry === 'settings') document.documentElement.dataset.window = 'settings'
+  if (entry === 'desktop-effect') document.documentElement.dataset.window = 'desktop-effect'
   const [root] = await Promise.all([loadRendererRoot(entry), initLanguage()])
   const app = createApp(root.default).use(createPinia())
   app.config.errorHandler = error => {

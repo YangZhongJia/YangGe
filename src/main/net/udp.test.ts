@@ -40,6 +40,24 @@ function rinfo(address: string): RemoteInfo {
   return { address, family: 'IPv4', port: 17878, size: 0 }
 }
 
+it('非法目标端口静默丢弃，不会抛 ERR_SOCKET_BAD_PORT', async () => {
+  const udp = new UdpChannel({ port: 0, bindAddress: '127.0.0.1', broadcastTargets: [] })
+  await udp.start()
+  try {
+    const drops = vi.fn()
+    udp.on('drop', drops)
+    const env = makeEnvelope(MSG_TYPES.presence, 'loopback', { seq: 1, profileRev: 1 })
+    expect(() => udp.send(env, '127.0.0.1', 0)).not.toThrow()
+    expect(() => udp.send(env, '127.0.0.1', 65536)).not.toThrow()
+    expect(drops.mock.calls.map(([reason]) => reason)).toEqual([
+      'outbound-bad-target',
+      'outbound-bad-target'
+    ])
+  } finally {
+    await udp.stop()
+  }
+})
+
 describe('UdpChannel 限速桶', () => {
   afterEach(() => {
     vi.useRealTimers()

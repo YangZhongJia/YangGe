@@ -46,7 +46,7 @@ import { PEERS_PER_PACKET } from '../../shared/protocol'
 import { isPkGame, isPkRef } from '../../shared/pk'
 import { validateDuelPayload } from '../../shared/duel'
 import { normalizeCidr } from './cidr'
-import { isWorkTaskDate, isWorkTaskStatus } from '../../shared/work-task'
+import { isWorkTaskAssignmentState, isWorkTaskDate, isWorkTaskStatus } from '../../shared/work-task'
 
 // 信封编解码 + 入站校验（protocol §1/§4）：
 // 一切来自网络的报文按不可信输入处理 —— 字段白名单、类型、长度全检；
@@ -144,6 +144,7 @@ function validatePayload(type: string, payload: unknown, textLimit = TEXT_UDP_LI
         m.kind !== 'group-text' &&
         m.kind !== 'recall' &&
         m.kind !== 'nudge' &&
+        m.kind !== 'group-nudge' &&
         m.kind !== 'pk'
       ) {
         return false
@@ -151,6 +152,16 @@ function validatePayload(type: string, payload: unknown, textLimit = TEXT_UDP_LI
       const resend = (m as { resend?: unknown }).resend
       if (resend !== undefined && typeof resend !== 'boolean') return false
       if (m.kind === 'nudge') return resend === undefined
+      if (m.kind === 'group-nudge') {
+        if (resend !== undefined) return false
+        const style = (m as { style?: unknown }).style
+        if (style !== 'plane' && style !== 'ink') return false
+        if (!isStr(m.groupId, LIMITS.id)) return false
+        if (!isInt(m.groupRev) || m.groupRev < 0) return false
+        return Object.keys(payload).every((key) =>
+          key === 'kind' || key === 'style' || key === 'groupId' || key === 'groupRev'
+        )
+      }
       if (m.kind === 'pk') {
         if (resend !== undefined) return false
         if (!isPkGame(m.game)) return false
@@ -515,6 +526,16 @@ function validatePayload(type: string, payload: unknown, textLimit = TEXT_UDP_LI
           return false
         }
         if (!isWorkTaskStatus(task.status)) return false
+        if (task.assigneeNodeId !== undefined) {
+          if (task.assigneeNodeId !== null && !isStr(task.assigneeNodeId, LIMITS.from)) return false
+          if (
+            task.assignmentState !== null &&
+            !isWorkTaskAssignmentState(task.assignmentState)
+          ) return false
+          if (task.assigneeNodeId === null && task.assignmentState !== null) return false
+          if (task.assigneeNodeId !== null && task.assignmentState === undefined) return false
+        }
+        if (task.assignmentState !== undefined && task.assigneeNodeId === undefined) return false
         if (!isInt(task.revision) || task.revision < 1) return false
         if (!isInt(task.createdAt) || task.createdAt <= 0) return false
         if (!isInt(task.updatedAt) || task.updatedAt <= 0) return false
@@ -528,6 +549,24 @@ function validatePayload(type: string, payload: unknown, textLimit = TEXT_UDP_LI
           isStr(p.taskId, LIMITS.id) &&
           isInt(p.revision) &&
           (p.revision as number) >= 1
+        )
+      }
+      if (p.op === 'assign-ack') {
+        if (!Object.keys(payload).every((key) => TASK_ASSIGN_ACK_KEYS[key])) return false
+        return (
+          isStr(p.taskId, LIMITS.id) &&
+          isInt(p.revision) &&
+          (p.revision as number) >= 1 &&
+          typeof p.accept === 'boolean'
+        )
+      }
+      if (p.op === 'assign-status') {
+        if (!Object.keys(payload).every((key) => TASK_ASSIGN_STATUS_KEYS[key])) return false
+        return (
+          isStr(p.taskId, LIMITS.id) &&
+          isInt(p.revision) &&
+          (p.revision as number) >= 1 &&
+          isWorkTaskStatus(p.status)
         )
       }
       return false
@@ -567,7 +606,25 @@ const TASK_UPSERT_TASK_KEYS: Record<string, true> = {
   status: true,
   revision: true,
   createdAt: true,
-  updatedAt: true
+  updatedAt: true,
+  assigneeNodeId: true,
+  assignmentState: true
+}
+const TASK_ASSIGN_ACK_KEYS: Record<string, true> = {
+  op: true,
+  toNodeId: true,
+  taskId: true,
+  revision: true,
+  accept: true,
+  resend: true
+}
+const TASK_ASSIGN_STATUS_KEYS: Record<string, true> = {
+  op: true,
+  toNodeId: true,
+  taskId: true,
+  revision: true,
+  status: true,
+  resend: true
 }
 const TASK_UPSERT_PROJECT_KEYS: Record<string, true> = {
   id: true,

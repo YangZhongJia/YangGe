@@ -109,12 +109,20 @@ class MemoryStore implements WorkTaskStorePort {
               updatedAt: share.updatedAt
             }))
         : []
-    return { ...task, isShared: task.ownerNodeId !== viewerNodeId, shares }
+    return {
+      ...task,
+      isShared: task.ownerNodeId !== viewerNodeId,
+      assignedToMe: Boolean(task.assigneeNodeId && task.assigneeNodeId === viewerNodeId),
+      shares
+    }
   }
 
   createTask(record: WorkTaskTaskRecord): WorkTaskView {
     this.tasks.set(this.key(record.ownerNodeId, record.id), {
       ...record,
+      assigneeNodeId: record.assigneeNodeId ?? null,
+      assignmentState: record.assignmentState ?? null,
+      assignedToMe: false,
       active: true,
       isShared: false,
       shares: []
@@ -148,6 +156,22 @@ class MemoryStore implements WorkTaskStorePort {
     return this.getTask(ownerNodeId, id, ownerNodeId)
   }
 
+  setTaskAssignment(
+    ownerNodeId: string,
+    id: string,
+    assigneeNodeId: string | null,
+    assignmentState: 'pending' | 'accepted' | 'declined' | null,
+    updatedAt: number
+  ): WorkTaskView | null {
+    const task = this.tasks.get(this.key(ownerNodeId, id))
+    if (!task) return null
+    task.assigneeNodeId = assigneeNodeId
+    task.assignmentState = assignmentState
+    task.revision += 1
+    task.updatedAt = updatedAt
+    return this.getTask(ownerNodeId, id, ownerNodeId)
+  }
+
   bumpTaskRevision(ownerNodeId: string, id: string, updatedAt: number): WorkTaskView | null {
     const task = this.tasks.get(this.key(ownerNodeId, id))
     if (!task) return null
@@ -176,6 +200,9 @@ class MemoryStore implements WorkTaskStorePort {
     })
     this.tasks.set(this.key(task.ownerNodeId, task.id), {
       ...task,
+      assigneeNodeId: task.assigneeNodeId ?? null,
+      assignmentState: task.assignmentState ?? null,
+      assignedToMe: false,
       active: true,
       isShared: true,
       shares: [],
@@ -243,6 +270,8 @@ class MemoryStore implements WorkTaskStorePort {
 
 class FakeSync implements WorkTaskSyncPort {
   readonly capable = new Set<string>()
+  readonly assignable = new Set<string>()
+  readonly assignmentCalls: Array<{ kind: 'ack' | 'status'; taskId: string; revision: number }> = []
   readonly calls: Array<{
     kind: 'upsert' | 'revoke'
     peerId: string
@@ -273,6 +302,30 @@ class FakeSync implements WorkTaskSyncPort {
   ): Promise<WorkTaskDeliveryState> {
     this.calls.push({ kind: 'revoke', peerId, taskId, revision })
     return this.nextState
+  }
+
+  canAssign(peerId: string): boolean {
+    return this.assignable.has(peerId)
+  }
+
+  async sendAssignmentAck(
+    _ownerNodeId: string,
+    taskId: string,
+    revision: number,
+    _accept: boolean
+  ): Promise<boolean> {
+    this.assignmentCalls.push({ kind: 'ack', taskId, revision })
+    return this.nextState !== 'failed'
+  }
+
+  async sendAssignmentStatus(
+    _ownerNodeId: string,
+    taskId: string,
+    revision: number,
+    _status: string
+  ): Promise<boolean> {
+    this.assignmentCalls.push({ kind: 'status', taskId, revision })
+    return this.nextState !== 'failed'
   }
 }
 
@@ -520,5 +573,70 @@ describe('WorkTaskService 接收共享', () => {
     const messageId = 'msg-1'
     expect(service.handleShareStatus(messageId, 'sent')).toBe(true)
     expect(store.listShares(task.id)[0].state).toBe('sent')
+  })
+})
+
+
+describe('WorkTaskService 任务指派', () => {
+  it('指派后生成待接受快照；接受和状态回传由 owner 收敛', async () => {
+    const { service, sync, store } = harness()
+    sync.capable.add('node-bob')
+    sync.assignable.add('node-bob')
+    const { task } = createTask(service)
+
+    const assigned = await service.assignTask(task.id, 'node-bob')
+    expect(assigned).toMatchObject({
+      assigneeNodeId: 'node-bob',
+      assignmentState: 'pending',
+      assignedToMe: false
+    })
+    const snapshot = sync.calls.find(
+      (call) => call.kind === 'upsert' && call.peerId === 'node-bob'
+    )?.snapshot
+    expect(snapshot?.task).toMatchObject({
+      assigneeNodeId: 'node-bob',
+      assignmentState: 'pending'
+    })
+
+    expect(service.applyAssignmentAck('node-bob', task.id, assigned.revision, true)).toBe(true)
+    const accepted = store.getTask('node-self', task.id, 'node-self')!
+    expect(accepted).toMatchObject({ assignmentState: 'accepted', assigneeNodeId: 'node-bob' })
+
+    expect(
+      service.applyAssignmentStatus('node-bob', task.id, accepted.revision, 'in_progress')
+    ).toBe(true)
+    expect(store.getTask('node-self', task.id, 'node-self')?.status).toBe('in_progress')
+  })
+
+  it('拒绝指派、取消指派和不支持指派的同事', async () => {
+    const { service, sync, store } = harness()
+    sync.capable.add('node-bob')
+    sync.assignable.add('node-bob')
+    const { task } = createTask(service)
+
+    await expect(service.assignTask(task.id, 'node-old')).rejects.toThrow('不支持任务指派')
+
+    const assigned = await service.assignTask(task.id, 'node-bob')
+    expect(service.applyAssignmentAck('node-bob', task.id, assigned.revision, false)).toBe(true)
+    expect(store.getTask('node-self', task.id, 'node-self')?.assignmentState).toBe('declined')
+
+    const cleared = await service.assignTask(task.id, null)
+    expect(cleared).toMatchObject({ assigneeNodeId: null, assignmentState: null })
+  })
+
+  it('错误 revision 或非负责人不能更新指派状态', async () => {
+    const { service, sync, store } = harness()
+    sync.capable.add('node-bob')
+    sync.assignable.add('node-bob')
+    const { task } = createTask(service)
+    const assigned = await service.assignTask(task.id, 'node-bob')
+
+    expect(service.applyAssignmentAck('node-mallory', task.id, assigned.revision, true)).toBe(false)
+    expect(service.applyAssignmentAck('node-bob', task.id, assigned.revision + 99, true)).toBe(false)
+
+    expect(service.applyAssignmentAck('node-bob', task.id, assigned.revision, true)).toBe(true)
+    const accepted = store.getTask('node-self', task.id, 'node-self')!
+    expect(service.applyAssignmentStatus('node-mallory', task.id, accepted.revision, 'completed')).toBe(false)
+    expect(service.applyAssignmentStatus('node-bob', task.id, accepted.revision + 1, 'completed')).toBe(false)
   })
 })

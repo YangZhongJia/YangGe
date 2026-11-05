@@ -75,11 +75,14 @@ import {
   type ImageOcrResult,
   type ImageOcrSource,
   type ImageSourceBytes,
+  type LockRequestedEvent,
+  type LockVerifyResult,
   type MessageView,
   type MainWindowShownEvent,
   type NetState,
   type NudgeEvent,
   type NudgeResult,
+  type PeerCleanupCandidate,
   type PeerView,
   type ProfileSubmit,
   type ScanProgressView,
@@ -161,6 +164,7 @@ import {
   mergeChromiumFeature
 } from './windows/capture-support'
 import { openImageViewerWindow } from './windows/image-viewer-window'
+import { showDesktopNudge } from './windows/desktop-effect-window'
 import { fitImageViewerContent } from './windows/image-viewer-sizing'
 import { showWindowForeground } from './windows/foreground'
 import {
@@ -177,6 +181,7 @@ import { GroupsService } from './services/groups'
 import { ForwardService } from './services/forward'
 import { PorterService } from './services/porter'
 import { SearchService } from './services/search'
+import { hashLockPin, isLockPin, isLockPinHash, verifyLockPin } from './services/app-lock'
 import { openDatabase, openMemoryDatabase, type AppDatabase } from './store/db'
 import { PeersRepo } from './store/peers-repo'
 import { ShareGrantsRepo } from './store/share-grants-repo'
@@ -188,6 +193,7 @@ import {
 } from './services/share'
 import { ConvRepo } from './store/conv-repo'
 import { MsgRepo, msgRowToView } from './store/msg-repo'
+import { FavoriteRepo } from './store/favorite-repo'
 import { QueueRepo } from './store/queue-repo'
 import { DedupRepo } from './store/dedup-repo'
 import { UdpChannel } from './net/udp'
@@ -348,6 +354,7 @@ if (!gotLock) {
   let porter: PorterService | null = null
   let search: SearchService | null = null
   let msgRepoRef: MsgRepo | null = null
+  let favoriteRepo: FavoriteRepo | null = null
   let stickerRepo: StickerRepo | null = null
   let shareGrantsRepo: ShareGrantsRepo | null = null
   let share: ShareService | null = null
@@ -362,6 +369,8 @@ if (!gotLock) {
   let pruneTimer: ReturnType<typeof setInterval> | null = null
   let avatarPruneTimer: ReturnType<typeof setTimeout> | null = null
   let appState: AppState | null = null
+  // 锁屏期间系统通知只显示“收到一条新消息”，避免锁屏遮住了窗口却从右下角泄露正文。
+  let lockScreenActive = false
   let rangeSync: RangeSync | null = null
   const remoteView = new RemoteViewWindows(() => mainWindow, () => {
     if (!appState || !remoteView.service) return
@@ -647,6 +656,22 @@ if (!gotLock) {
   function showMainWindow(options: { forceForeground?: boolean } = {}): void {
     if (!mainWindow) return
     showWindowForeground(mainWindow, options)
+  }
+
+  // 锁屏请求是“主进程 → 渲染层”的单向门闩：窗口隐藏/最小化/系统锁屏/手动锁定都会走这里。
+  // 截图隐藏主窗只短暂让出画面，不应把用户锁在门外，因此单独抑制一次 hide。
+  let suppressLockOnHide = false
+  function requestAppLock(reason: LockRequestedEvent['reason']): boolean {
+    if (isQuitting) return false
+    const config = appState?.config
+    if (!config?.lockEnabled || !isLockPinHash(config.lockPinHash)) return false
+    lockScreenActive = true
+    // 设置窗在锁屏时一并收起，避免绕过主窗锁屏查看资料。
+    getSettingsWindow()?.close()
+    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.webContents.isDestroyed()) {
+      mainWindow.webContents.send(IpcEvents.lockRequested, { reason } satisfies LockRequestedEvent)
+    }
+    return true
   }
 
   function clearNudgeShake(restore: boolean): void {
@@ -1114,7 +1139,11 @@ if (!gotLock) {
         discovery?.setAway(shouldAway)
       }
     }
-    powerMonitor.on('lock-screen', () => { awayActive = true; discovery?.setAway(true) })
+    powerMonitor.on('lock-screen', () => {
+      awayActive = true
+      discovery?.setAway(true)
+      requestAppLock('system')
+    })
     powerMonitor.on('unlock-screen', evaluate)
     evaluate()
     awayTimer = setInterval(evaluate, 30_000)
@@ -1486,7 +1515,11 @@ if (!gotLock) {
           applyRemoteRevoke: (ownerNodeId, taskId, revision) =>
             workTaskService?.applyRemoteRevoke(ownerNodeId, taskId, revision) ?? false,
           handleShareStatus: (messageId, status) =>
-            workTaskService?.handleShareStatus(messageId, status) ?? false
+            workTaskService?.handleShareStatus(messageId, status) ?? false,
+          applyAssignmentAck: (from, taskId, revision, accept) =>
+            workTaskService?.applyAssignmentAck(from, taskId, revision, accept) ?? false,
+          applyAssignmentStatus: (from, taskId, revision, status) =>
+            workTaskService?.applyAssignmentStatus(from, taskId, revision, status) ?? false
         }
       })
       workTaskService = new WorkTaskService({
@@ -1530,6 +1563,7 @@ if (!gotLock) {
       })
       const chatMessages = new MsgRepo(db)
       msgRepoRef = chatMessages
+      favoriteRepo = new FavoriteRepo(db)
       chatMessages.interruptScreenRecords()
       chat = new ChatService({
         selfId: state.nodeId,
@@ -1575,6 +1609,15 @@ if (!gotLock) {
         mainWindow?.webContents.send(IpcEvents.msgStatus, ev)
       }
       const onNudge = (ev: NudgeEvent): void => {
+        // 桌面模式下纸飞机 / 墨弹在覆盖桌面的透明窗里播放，不占用聊天窗。
+        if (
+          ev.style &&
+          appState?.config.nudgeEffects !== false &&
+          appState?.config.nudgeEffectSurface === 'desktop'
+        ) {
+          showDesktopNudge(ev.style)
+          return
+        }
         mainWindow?.webContents.send(IpcEvents.nudgeReceived, ev)
         // 纸飞机 / 墨弹是纯视觉互动：不抢焦点，也不震动窗口。
         if (!ev.style) shakeMainWindowForNudge()
@@ -1658,6 +1701,7 @@ if (!gotLock) {
       })
       groups.on('message', onMessage)
       groups.on('convs', onConvs)
+      groups.on('nudge', onNudge)
       groups.on('group', (view) => {
         mainWindow?.webContents.send(IpcEvents.groupUpdated, view)
         void avatars?.ensureGroup(view.groupId)
@@ -1818,7 +1862,13 @@ if (!gotLock) {
     }
     try {
       if (hide && wasVisible && captureMainWindow) {
-        const hidden = await hideWindowForCapture(captureMainWindow)
+        let hidden = false
+        suppressLockOnHide = true
+        try {
+          hidden = await hideWindowForCapture(captureMainWindow)
+        } finally {
+          suppressLockOnHide = false
+        }
         if (!hidden) {
           reportCaptureFailure('window-hide-failed', wasVisible)
           return
@@ -1896,7 +1946,7 @@ if (!gotLock) {
     if (!Notification.isSupported()) return
 
     const senderNick = registry?.get(msg.senderId)?.profile.nick ?? tr('新成员')
-    const hidePreview = appState?.config.showMessagePreview === false
+    const hidePreview = appState?.config.showMessagePreview === false || lockScreenActive
     const groupName = msg.convId.startsWith('group:')
       ? groups?.get(msg.convId.slice(6))?.name
       : undefined
@@ -2008,6 +2058,10 @@ if (!gotLock) {
       event.preventDefault()
       mainWindow?.hide()
     })
+    mainWindow.on('hide', () => {
+      if (!suppressLockOnHide) requestAppLock('hidden')
+    })
+    mainWindow.on('minimize', () => requestAppLock('minimize'))
     mainWindow.on('focus', () => mainWindow?.flashFrame(false))
     mainWindow.on('closed', () => {
       clearNudgeShake(false)
@@ -2499,6 +2553,18 @@ if (!gotLock) {
     workTaskController?.unshareTask(taskId, peerId) ?? { ok: false, error: '任务存储不可用' }
   )
 
+  ipcMain.handle(IpcChannels.workTaskAssign, (_event, taskId: unknown, peerId: unknown) =>
+    workTaskController?.assignTask(taskId, peerId) ?? { ok: false, error: '任务存储不可用' }
+  )
+
+  ipcMain.handle(IpcChannels.workTaskAssignmentRespond, (_event, taskId: unknown, accept: unknown) =>
+    workTaskController?.respondAssignment(taskId, accept) ?? { ok: false, error: '任务存储不可用' }
+  )
+
+  ipcMain.handle(IpcChannels.workTaskAssignmentStatus, (_event, taskId: unknown, status: unknown) =>
+    workTaskController?.setAssignedStatus(taskId, status) ?? { ok: false, error: '任务存储不可用' }
+  )
+
   ipcMain.handle(IpcChannels.workTaskBadgeGet, () =>
     workTaskReminders?.getBadge() ?? { dueToday: 0, overdue: 0 }
   )
@@ -2556,11 +2622,49 @@ if (!gotLock) {
     return chat?.recall(msgId) ?? false
   })
 
+  ipcMain.handle(IpcChannels.msgFavoriteToggle, (_event, msgId: unknown): boolean => {
+    if (!favoriteRepo || !msgRepoRef) return false
+    if (typeof msgId !== 'string' || msgId.length === 0 || msgId.length > 64) return false
+    const row = msgRepoRef.get(msgId)
+    if (!row) return false
+    const next = !favoriteRepo.has(msgId)
+    favoriteRepo.set(msgId, row.conv_id, next, Date.now())
+    return next
+  })
+
+  ipcMain.handle(IpcChannels.msgFavoriteIds, (): string[] => favoriteRepo?.ids() ?? [])
+
+  ipcMain.handle(IpcChannels.msgFavoriteList, (): MessageView[] => {
+    if (!favoriteRepo || !msgRepoRef) return []
+    const rows = favoriteRepo.list(200)
+    const views: MessageView[] = []
+    for (const favorite of rows) {
+      const row = msgRepoRef.get(favorite.msg_id)
+      if (row) views.push(msgRowToView(row))
+    }
+    return views
+  })
+
   ipcMain.handle(IpcChannels.msgNudge, async (_event, peerId: unknown, style: unknown): Promise<NudgeResult> => {
     if (typeof peerId !== 'string' || peerId.length === 0 || peerId.length > 64) {
       return { ok: false, reason: 'invalid' }
     }
     return chat?.sendNudge(peerId, normalizeNudgeStyle(style)) ?? { ok: false, reason: 'invalid' }
+  })
+
+  ipcMain.handle(IpcChannels.desktopNudgeShow, (_event, style: unknown): boolean => {
+    if (appState?.config.nudgeEffects === false || appState?.config.nudgeEffectSurface !== 'desktop') {
+      return false
+    }
+    const normalized = normalizeNudgeStyle(style)
+    return normalized ? showDesktopNudge(normalized) : false
+  })
+
+  ipcMain.handle(IpcChannels.groupNudge, async (_event, groupId: unknown, style: unknown): Promise<NudgeResult> => {
+    if (typeof groupId !== 'string' || groupId.length === 0 || groupId.length > 64) {
+      return { ok: false, reason: 'invalid' }
+    }
+    return groups?.sendNudge(groupId, style) ?? { ok: false, reason: 'invalid' }
   })
 
   ipcMain.handle(IpcChannels.msgPk, (_event, convId: unknown, game: unknown) => {
@@ -2665,6 +2769,9 @@ if (!gotLock) {
       closeToTray: c?.closeToTray !== false,
       startupMotion: c?.startupMotion !== false,
       nudgeEffects: c?.nudgeEffects !== false,
+      nudgeEffectSurface: c?.nudgeEffectSurface === 'desktop' ? 'desktop' : 'chat',
+      lockEnabled: c?.lockEnabled === true && isLockPinHash(c?.lockPinHash),
+      lockHasPin: isLockPinHash(c?.lockPinHash),
       language: c?.language ?? 'zh-CN',
       theme: c?.theme === 'dark' ? 'dark' : 'light',
       fontScale,
@@ -3363,6 +3470,9 @@ if (!gotLock) {
       if (typeof p.closeToTray === 'boolean') clean.closeToTray = p.closeToTray
       if (typeof p.startupMotion === 'boolean') clean.startupMotion = p.startupMotion
       if (typeof p.nudgeEffects === 'boolean') clean.nudgeEffects = p.nudgeEffects
+      if (p.nudgeEffectSurface === 'chat' || p.nudgeEffectSurface === 'desktop') {
+        clean.nudgeEffectSurface = p.nudgeEffectSurface
+      }
       if (isLanguage(p.language)) clean.language = p.language
       if (p.theme === 'light' || p.theme === 'dark' || p.theme === 'auto') clean.theme = p.theme
       const ACCENT_IDS = ['indigo', 'teal', 'rose', 'amber', 'forest'] as const
@@ -3412,6 +3522,49 @@ if (!gotLock) {
     return settingsView()
   })
 
+  let lockFailures = 0
+  let lockCooldownUntil = 0
+  ipcMain.handle(IpcChannels.lockVerify, (_event, pin: unknown): LockVerifyResult => {
+    if (!appState?.config.lockEnabled || !isLockPinHash(appState.config.lockPinHash)) {
+      return { ok: false }
+    }
+    const now = Date.now()
+    if (now < lockCooldownUntil) return { ok: false, retryAfterMs: lockCooldownUntil - now }
+    if (verifyLockPin(pin, appState.config.lockPinHash)) {
+      lockFailures = 0
+      lockCooldownUntil = 0
+      lockScreenActive = false
+      return { ok: true }
+    }
+    lockFailures += 1
+    if (lockFailures >= 5) {
+      lockFailures = 0
+      lockCooldownUntil = now + 30_000
+      return { ok: false, retryAfterMs: 30_000 }
+    }
+    return { ok: false }
+  })
+
+  ipcMain.handle(IpcChannels.lockSetPin, (_event, pin: unknown): SettingsView => {
+    if (!appState || !isLockPin(pin)) return settingsView()
+    saveAppSettings(appState, { lockPinHash: hashLockPin(pin) })
+    return broadcastSettings()
+  })
+
+  ipcMain.handle(IpcChannels.lockSetEnabled, (_event, enabled: unknown): SettingsView => {
+    if (!appState || typeof enabled !== 'boolean') return settingsView()
+    if (enabled && !isLockPinHash(appState.config.lockPinHash)) return settingsView()
+    saveAppSettings(appState, { lockEnabled: enabled })
+    lockScreenActive = false
+    if (!enabled) {
+      lockFailures = 0
+      lockCooldownUntil = 0
+    }
+    return broadcastSettings()
+  })
+
+  ipcMain.handle(IpcChannels.lockNow, (): boolean => requestAppLock('manual'))
+
   ipcMain.handle(IpcChannels.netImportRanges, (_event, input: unknown): ScanRangeImportResult => {
     if (!appState) return { ok: false, reason: 'unavailable', view: settingsView() }
     const result = importScanRanges(appState, input)
@@ -3460,6 +3613,49 @@ if (!gotLock) {
     if (trimmed) remarks.set(nodeId, trimmed)
     else remarks.delete(nodeId)
     broadcastEvent(IpcEvents.peersUpdated, peerViews())
+  })
+
+  function emptyCleanupCandidates(): PeerCleanupCandidate[] {
+    if (!peersRepo || !registry) return []
+    const groupMembers = new Set<string>()
+    for (const group of groupRepo?.list() ?? []) {
+      for (const member of group.members) groupMembers.add(member)
+    }
+    return peersRepo
+      .listCleanupCandidates()
+      .filter((row) => !registry?.get(row.node_id)?.online && !groupMembers.has(row.node_id))
+      .map((row) => ({
+        nodeId: row.node_id,
+        nick: row.nick,
+        remark: row.remark ?? '',
+        ip: row.ip,
+        lastSeen: row.last_seen,
+        ver: row.ver
+      }))
+  }
+
+  ipcMain.handle(IpcChannels.peersCleanupCandidates, (): PeerCleanupCandidate[] =>
+    emptyCleanupCandidates()
+  )
+
+  ipcMain.handle(IpcChannels.peersCleanup, (_event, nodeIds: unknown): number => {
+    if (!peersRepo || !registry || !Array.isArray(nodeIds)) return 0
+    if (nodeIds.length === 0 || nodeIds.length > 200) return 0
+    const requested = new Set(
+      nodeIds.filter((id): id is string => typeof id === 'string' && id.length > 0 && id.length <= 64)
+    )
+    // 主进程复核候选资格，绝不按渲染层声明直接删真实联系人。
+    const safe = emptyCleanupCandidates()
+      .filter((candidate) => requested.has(candidate.nodeId))
+      .map((candidate) => candidate.nodeId)
+    if (safe.length === 0) return 0
+    const deleted = peersRepo.deleteMany(safe)
+    for (const id of safe) {
+      registry.remove(id)
+      remarks.delete(id)
+    }
+    broadcastEvent(IpcEvents.peersUpdated, peerViews())
+    return deleted
   })
 
   ipcMain.handle(IpcChannels.uiOpenSettings, () => {
@@ -3904,9 +4100,11 @@ if (!gotLock) {
       CAPS.avatarImages,
       CAPS.fileCabinet,
       CAPS.taskSharing,
+      CAPS.taskAssign,
       CAPS.duel,
       ...updateCaps
     ], app.getPreferredSystemLanguages()[0] || app.getLocale())
+    lockScreenActive = appState.config.lockEnabled
     await setLanguage(appState.config.language)
     udpPort = envUdpPort ?? appState.config.udpPort
     tcpPort = envTcpPort ?? appState.config.tcpPort

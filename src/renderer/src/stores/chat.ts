@@ -17,6 +17,7 @@ import type { PendingAttachment } from '../utils/pending-attachments'
 
 // 主进程聊天数据的投影 + 乐观更新（tech-design §7 状态流）
 let nudgeClearTimer: ReturnType<typeof setTimeout> | null = null
+let unreadPromptTimer: ReturnType<typeof setTimeout> | null = null
 let nudgeOpenRun = 0
 let navigationRun = 0
 /** 输入中节流时间戳（模块级，避免进入响应式）（决议 #321） */
@@ -108,6 +109,7 @@ export const useChatStore = defineStore('chat', {
     selfAvatar: -1,
     selfAvatarHash: '',
     lastNudge: null as NudgeEvent | null,
+    unreadPrompt: null as { convId: string; count: number } | null,
     /** 移除聊天的待删除项（决议 #125）：非空时该会话在列表中隐藏，10 秒倒计时内可撤回 */
     pendingRemoval: null as PendingRemoval | null,
     /** 输入中提示（决议 #321）：peerId → 展示截止时间戳 */
@@ -170,8 +172,14 @@ export const useChatStore = defineStore('chat', {
         if (this.messages[msg.convId]) this.appendConversationMessage(msg.convId, msg)
         // 只有窗口可见且聚焦才把当前会话新消息即时置读；最小化 / 托盘 / 失焦时
         // 保留未读，托盘闪烁与角标才能被感知（决议 #220）
-        if (msg.convId === this.activeConvId && isWindowAttended()) {
-          void window.pantry.markRead(msg.convId)
+        if (msg.convId === this.activeConvId) {
+          const hasPrompt = this.unreadPrompt?.convId === msg.convId
+          if (isWindowAttended() && !hasPrompt) {
+            void window.pantry.markRead(msg.convId)
+          } else {
+            const count = hasPrompt ? this.unreadPrompt!.count + 1 : 1
+            this.showUnreadPrompt(msg.convId, count)
+          }
         }
       })
       window.pantry.onMsgUpdated((msg) => {
@@ -182,8 +190,12 @@ export const useChatStore = defineStore('chat', {
       // 回到窗口时补置读当前会话攒下的未读，托盘闪烁与角标同步停止（决议 #220）
       window.addEventListener('focus', () => {
         const convId = this.activeConvId
-        if (convId && this.convs.some((c) => c.id === convId && c.unread > 0)) {
-          void window.pantry.markRead(convId)
+        const conv = this.convs.find((c) => c.id === convId)
+        if (convId && conv && conv.unread > 0) {
+          // 保留未读角标，等用户看完提示并点「知道了」后再置读。
+          this.showUnreadPrompt(convId, conv.unread)
+        } else if (convId && this.unreadPrompt?.convId === convId) {
+          this.scheduleUnreadPromptClear(convId)
         }
       })
       window.pantry.onMsgStatus((event) => {
@@ -251,8 +263,10 @@ export const useChatStore = defineStore('chat', {
     ): Promise<void> {
       this.hiddenConvId = null
       const scroll = options.scroll ?? 'latest'
+      const before = this.convs.find((c) => c.id === `single:${peerNodeId}`)?.unread ?? 0
       const conv = await window.pantry.openConversation(peerNodeId)
       if (!conv || run !== navigationRun) return
+      if (before > 0) this.showUnreadPrompt(conv.id, before)
       this.upsertConversation(conv)
       this.activeConvId = conv.id
       this.viewingHistory = false
@@ -276,7 +290,9 @@ export const useChatStore = defineStore('chat', {
         await this.openPeer(convId.slice(7), { scroll }, run)
         return
       }
+      const before = this.convs.find((c) => c.id === convId)?.unread ?? 0
       this.activeConvId = convId
+      if (before > 0) this.showUnreadPrompt(convId, before)
       this.viewingHistory = false
       // latest 入口（通知 / 托盘直达等）重载最新页，不复用可能过期 / 历史的缓存（决议 #133）
       if (scroll === 'latest' || !this.messages[convId]) {
@@ -290,6 +306,40 @@ export const useChatStore = defineStore('chat', {
     },
 
     /** 搜索结果跳转：载入目标前后窗口并短暂高亮（ui-design §6） */
+    showUnreadPrompt(convId: string, count: number): void {
+      if (count <= 0) return
+      this.unreadPrompt = { convId, count }
+      this.scheduleUnreadPromptClear(convId)
+    },
+
+    scheduleUnreadPromptClear(convId: string): void {
+      if (unreadPromptTimer) clearTimeout(unreadPromptTimer)
+      unreadPromptTimer = null
+      // 窗口隐藏时先留着，等用户回来看；可见后 15 秒自动收起。
+      if (document.hidden) return
+      unreadPromptTimer = setTimeout(() => {
+        if (this.unreadPrompt?.convId === convId) {
+          this.unreadPrompt = null
+          void window.pantry.markRead(convId)
+        }
+        unreadPromptTimer = null
+      }, 15000)
+    },
+
+    acknowledgeUnreadPrompt(): void {
+      const convId = this.unreadPrompt?.convId
+      this.unreadPrompt = null
+      if (unreadPromptTimer) clearTimeout(unreadPromptTimer)
+      unreadPromptTimer = null
+      if (convId) void window.pantry.markRead(convId)
+    },
+
+    clearUnreadPrompt(): void {
+      this.unreadPrompt = null
+      if (unreadPromptTimer) clearTimeout(unreadPromptTimer)
+      unreadPromptTimer = null
+    },
+
     async jumpToMessage(convId: string, seq: number, msgId: string): Promise<void> {
       const run = ++navigationRun
       this.hiddenConvId = null
@@ -552,6 +602,12 @@ export const useChatStore = defineStore('chat', {
       const conv = this.activeConv
       if (!conv || conv.type !== 'single') return { ok: false, reason: 'invalid' }
       return window.pantry.sendNudge(conv.peerId, style)
+    },
+
+    async sendGroupNudge(style: NudgeStyle): Promise<NudgeResult> {
+      const conv = this.activeConv
+      if (!conv || conv.type !== 'group') return { ok: false, reason: 'invalid' }
+      return window.pantry.sendGroupNudge(conv.peerId, style)
     },
 
     async sendPk(game: PkGame): Promise<boolean> {

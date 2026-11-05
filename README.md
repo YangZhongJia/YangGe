@@ -10,14 +10,14 @@
 
 <p>
   <a href="https://github.com/YangZhongJia/YangGe/releases">
-    <img src="https://img.shields.io/badge/version-1.11.0-3D8B6B?style=flat-square" alt="Version 1.11.0" />
+    <img src="https://img.shields.io/badge/version-1.11.2-3D8B6B?style=flat-square" alt="Version 1.11.2" />
   </a>
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/License-GPL--3.0--only-3D8B6B?style=flat-square" alt="GPL-3.0-only" />
   </a>
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-0366d6?style=flat-square" alt="平台" />
   <img src="https://img.shields.io/badge/Electron-22-47848F?style=flat-square&logo=electron&logoColor=white" alt="Electron 22" />
-  <img src="https://img.shields.io/badge/tests-1247%20passing-2EA043?style=flat-square" alt="1247 tests passing" />
+  <img src="https://img.shields.io/badge/tests-1264%20passing-2EA043?style=flat-square" alt="1264 tests passing" />
 </p>
 
 <p>
@@ -65,6 +65,18 @@
 干脆自己写一个：免费开源、纯内网直连、从 Windows 7 到国产统信 UOS 再到 macOS 全平台覆盖、打开就会用。这就是阳鸽。
 
 ## 最近更新
+
+**v1.11.2**
+
+- **未读消息提示**：会话头像显示红点数字，打开窗口后提示「收到 N 条新消息」。
+- **桌面互动特效**：纸飞机 / 墨弹可切换为在聊天窗口内或桌面全屏播放。
+- **通知隐私**：锁屏期间系统通知只显示「收到一条新消息」。
+- **修复**：深色模式设置窗左侧黑框；群聊互动动画等待回执的问题。
+
+**v1.11.1**
+
+- **群聊头像直达私聊**：单击群聊消息里的成员头像，直接打开与他的私聊。
+- **优化已知 BUG**。
 
 **v1.11.0**
 
@@ -115,6 +127,7 @@
 - **多语言**：简体中文 / English 即时切换，全窗口同步。
 - **局域网自更新**：安装包自留成源，P2P 拉包后一键静默安装并重启，全程零服务器、零外网。
 - **纯内网安全边界**：启动注入 `--no-proxy-server`；零外网请求、零统计上报、零第三方 CDN；渲染进程严格沙箱与上下文隔离；网络报文白名单校验。
+- **锁屏与版本亮点**：可选 6 位数字锁屏密码，启动、最小化或从托盘恢复时显示粒子蒙面；升级后首次进入展示当前版本新增项与一句已知 BUG 优化。
 
 ## 双人角斗场
 

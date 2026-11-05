@@ -78,7 +78,7 @@ const sections = computed<Array<{ id: Section; icon: string; label: string; summ
     id: 'general',
     icon: 'settings-general',
     label: tr('通用'),
-    summary: tr('启动方式、窗口行为与外观主题。')
+    summary: tr('启动方式、窗口行为、锁屏与外观主题。')
   },
   {
     id: 'notify',
@@ -123,6 +123,12 @@ async function selectSection(next: Section): Promise<void> {
 }
 const settings = ref<SettingsView | null>(null)
 const info = ref<AppInfo | null>(null)
+const lockPin = ref('')
+const lockPinConfirm = ref('')
+const lockPinBusy = ref(false)
+const lockPinError = ref('')
+const lockPinNotice = ref('')
+const lockEnablePending = ref(false)
 // 关于页「更多信息」折叠（决议 #90）：默认收起开发者向运行时信息
 const showAboutDetails = ref(false)
 
@@ -444,6 +450,63 @@ async function saveAi(): Promise<void> {
   }
 }
 
+async function toggleLock(value: boolean): Promise<void> {
+  if (lockPinBusy.value) return
+  lockPinError.value = ''
+  lockPinNotice.value = ''
+  if (value && !settings.value?.lockHasPin) {
+    lockEnablePending.value = true
+    lockPinError.value = tr('请先设置 6 位数字密码')
+    return
+  }
+  lockPinBusy.value = true
+  try {
+    const next = await window.pantry.setLockEnabled(value)
+    syncForm(next)
+    lockEnablePending.value = false
+    lockPinNotice.value = value ? tr('锁屏已开启') : tr('锁屏已关闭')
+  } catch {
+    lockPinError.value = tr('锁屏设置保存失败，请重试')
+  } finally {
+    lockPinBusy.value = false
+  }
+}
+
+async function saveLockPin(): Promise<void> {
+  if (lockPinBusy.value) return
+  lockPinError.value = ''
+  lockPinNotice.value = ''
+  const pin = lockPin.value.trim()
+  if (!/^\d{6}$/.test(pin)) {
+    lockPinError.value = tr('密码必须是 6 位数字')
+    return
+  }
+  if (pin !== lockPinConfirm.value.trim()) {
+    lockPinError.value = tr('两次输入的密码不一致')
+    return
+  }
+  lockPinBusy.value = true
+  try {
+    let next = await window.pantry.setLockPin(pin)
+    if (lockEnablePending.value) {
+      next = await window.pantry.setLockEnabled(true)
+      lockEnablePending.value = false
+    }
+    syncForm(next)
+    lockPin.value = ''
+    lockPinConfirm.value = ''
+    lockPinNotice.value = next.lockEnabled ? tr('密码已保存，锁屏已开启') : tr('密码已保存')
+  } catch {
+    lockPinError.value = tr('密码保存失败，请重试')
+  } finally {
+    lockPinBusy.value = false
+  }
+}
+
+function lockNow(): void {
+  void window.pantry.lockNow()
+}
+
 async function saveApp(patch: AppSettingsPatch, tip = tr('已保存')): Promise<void> {
   const next = await window.pantry.saveAppSettings(patch)
   syncForm(next)
@@ -578,6 +641,10 @@ async function toggleNudgeEffects(value: boolean): Promise<void> {
   await saveApp({ nudgeEffects: value })
 }
 
+async function changeNudgeEffectSurface(value: 'chat' | 'desktop'): Promise<void> {
+  await saveApp({ nudgeEffectSurface: value })
+}
+
 async function toggleMessagePreview(value: boolean): Promise<void> {
   await saveApp({ showMessagePreview: value })
 }
@@ -666,6 +733,7 @@ async function resetAppSettings(): Promise<void> {
       closeToTray: true,
       startupMotion: true,
       nudgeEffects: true,
+      nudgeEffectSurface: 'chat',
       theme: 'light',
       fontScale: 100,
       showMessagePreview: true,
@@ -1153,6 +1221,60 @@ async function confirmRemove(cidr: string): Promise<void> {
 
           <div class="panel">
             <div class="panel-head">
+              <h2>{{ tr('锁屏密码') }}</h2>
+              <p>{{ tr('开启后，启动阳鸽、最小化或从托盘恢复时需要输入 6 位数字密码。') }}</p>
+            </div>
+            <div class="setting-line">
+              <div>
+                <strong>{{ tr('启用锁屏') }}</strong>
+                <small>{{ tr('密码只保存在本机；关闭后不再要求输入。') }}</small>
+              </div>
+              <NSwitch
+                :value="settings.lockEnabled"
+                :disabled="lockPinBusy"
+                @update:value="toggleLock"
+              />
+            </div>
+            <div class="lock-panel">
+              <div class="lock-panel-head">
+                <strong>{{ settings.lockHasPin ? tr('已设置 6 位数字密码') : tr('尚未设置密码') }}</strong>
+                <small>{{ tr('连续输错 5 次会冷却 30 秒。') }}</small>
+              </div>
+              <div class="lock-fields">
+                <NInput
+                  :value="lockPin"
+                  type="password"
+                  maxlength="6"
+                  :allow-input="(value) => /^\d{0,6}$/.test(value)"
+                  :placeholder="settings.lockHasPin ? tr('新密码（6 位数字）') : tr('密码（6 位数字）')"
+                  :aria-label="tr('锁屏密码')"
+                  @update:value="lockPin = $event"
+                  @keydown.enter.prevent="saveLockPin"
+                />
+                <NInput
+                  :value="lockPinConfirm"
+                  type="password"
+                  maxlength="6"
+                  :allow-input="(value) => /^\d{0,6}$/.test(value)"
+                  :placeholder="tr('再次输入密码')"
+                  :aria-label="tr('再次输入锁屏密码')"
+                  @update:value="lockPinConfirm = $event"
+                  @keydown.enter.prevent="saveLockPin"
+                />
+                <NButton type="primary" :loading="lockPinBusy" @click="saveLockPin">
+                  {{ settings.lockHasPin ? tr('修改密码') : tr('设置密码') }}
+                </NButton>
+              </div>
+              <p v-if="lockPinError" class="lock-error" role="alert">{{ lockPinError }}</p>
+              <p v-else-if="lockPinNotice" class="lock-notice" role="status">{{ lockPinNotice }}</p>
+            </div>
+            <div v-if="settings.lockEnabled" class="panel-actions">
+              <NButton secondary @click="lockNow">{{ tr('立即锁定') }}</NButton>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head">
               <h2>{{ tr('外观') }}</h2>
               <p>{{ tr('主题和字体缩放会同步到主窗口，调整后立即生效。') }}</p>
             </div>
@@ -1207,7 +1329,7 @@ async function confirmRemove(cidr: string): Promise<void> {
                 </button>
               </div>
             </div>
-            <label class="setting-line">
+            <label class="setting-line accent-setting">
               <div>
                 <strong>{{ tr('主题色') }}</strong>
                 <small>{{ tr('气泡、按钮与状态色整套联动。') }}</small>
@@ -1229,7 +1351,7 @@ async function confirmRemove(cidr: string): Promise<void> {
                 </button>
               </div>
             </label>
-            <label class="setting-line">
+            <label class="setting-line accent-setting">
               <div>
                 <strong>{{ tr('会话背景') }}</strong>
                 <small>{{ tr('只影响聊天区域，随时可换回素色。') }}</small>
@@ -1294,6 +1416,21 @@ async function confirmRemove(cidr: string): Promise<void> {
                 <small>{{ tr('收到纸飞机或墨弹时播放飞行动画，关闭后只保留文字提示。') }}</small>
               </div>
               <NSwitch :value="settings.nudgeEffects" @update:value="toggleNudgeEffects" />
+            </div>
+            <div class="setting-line">
+              <div>
+                <strong>{{ tr('互动特效位置') }}</strong>
+                <small>{{ tr('聊天窗口内显示，或在发送方与接收方的桌面全屏播放。') }}</small>
+              </div>
+              <NSelect
+                class="control-select"
+                :value="settings.nudgeEffectSurface"
+                :options="[
+                  { label: tr('聊天窗口内'), value: 'chat' },
+                  { label: tr('桌面全屏'), value: 'desktop' }
+                ]"
+                @update:value="changeNudgeEffectSurface"
+              />
             </div>
             <div class="setting-line">
               <div>
@@ -1916,8 +2053,13 @@ async function confirmRemove(cidr: string): Promise<void> {
   box-shadow: inset 0 0 0 1px rgba(45, 63, 88, 0.26);
 }
 
-:global(html[data-theme='dark']) .settings::after {
+:global(html[data-theme='dark'] .settings::after) {
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+}
+
+/* 深色模式下侧栏与面板同色，避免设置窗左侧出现一块突兀的黑框。 */
+:global(html[data-theme='dark'] .sidebar) {
+  background: var(--bg-chat);
 }
 
 .sidebar {
@@ -3134,7 +3276,7 @@ async function confirmRemove(cidr: string): Promise<void> {
   background: rgba(22, 34, 52, 0.28);
 }
 
-:global(html[data-theme='dark']) .port-warning-mask {
+:global(html[data-theme='dark'] .port-warning-mask) {
   background: rgba(0, 0, 0, 0.48);
 }
 
@@ -3408,6 +3550,18 @@ async function confirmRemove(cidr: string): Promise<void> {
   flex-wrap: wrap;
   gap: 6px;
 }
+/* 设置窗固定 704px：五个色卡会把描述挤成竖排，改为描述独占一行、色卡下一行。 */
+.setting-line.accent-setting {
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+.setting-line.accent-setting > div:first-child {
+  flex: 1 1 100%;
+}
+.setting-line.accent-setting .accent-row {
+  flex: 1 1 100%;
+  justify-content: flex-start;
+}
 .accent-chip {
   display: inline-flex;
   align-items: center;
@@ -3479,4 +3633,52 @@ async function confirmRemove(cidr: string): Promise<void> {
 
 <style scoped>
 .language-select { width: 140px; flex-shrink: 0; }
+</style>
+
+<style scoped>
+.lock-panel {
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card, 12px);
+  background: var(--bg-list);
+}
+.lock-panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 12px;
+  margin-bottom: 10px;
+}
+.lock-panel-head strong {
+  font-size: var(--font-sm);
+  color: var(--text-1);
+}
+.lock-panel-head small {
+  color: var(--text-3);
+  font-size: var(--font-xs);
+}
+.lock-fields {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(120px, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+@media (max-width: 620px) {
+  .lock-fields {
+    grid-template-columns: 1fr;
+  }
+}
+.lock-error,
+.lock-notice {
+  margin: 8px 0 0;
+  font-size: var(--font-xs);
+}
+.lock-error {
+  color: var(--danger, #b91c1c);
+}
+.lock-notice {
+  color: var(--success, #047857);
+}
 </style>

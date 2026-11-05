@@ -33,6 +33,8 @@ class FakeTaskService {
   readonly upserts: WorkTaskSyncSnapshot[] = []
   readonly revokes: Array<{ ownerNodeId: string; taskId: string; revision: number }> = []
   readonly statuses: Array<{ messageId: string; state: WorkTaskDeliveryState }> = []
+  readonly assignmentAcks: Array<{ taskId: string; revision: number; accept: boolean }> = []
+  readonly assignmentStatuses: Array<{ taskId: string; revision: number; status: string }> = []
 
   applyRemoteUpsert(snapshot: WorkTaskSyncSnapshot): boolean {
     this.upserts.push(snapshot)
@@ -46,6 +48,21 @@ class FakeTaskService {
 
   handleShareStatus(messageId: string, state: WorkTaskDeliveryState): boolean {
     this.statuses.push({ messageId, state })
+    return true
+  }
+
+  applyAssignmentAck(_from: string, taskId: string, revision: number, accept: boolean): boolean {
+    this.assignmentAcks.push({ taskId, revision, accept })
+    return true
+  }
+
+  applyAssignmentStatus(
+    _from: string,
+    taskId: string,
+    revision: number,
+    status: string
+  ): boolean {
+    this.assignmentStatuses.push({ taskId, revision, status })
     return true
   }
 }
@@ -202,6 +219,47 @@ describe('WorkTaskSyncService 接收', () => {
         envelope({ ...payload, ownerNodeId: 'node-mallory' })
       )
     ).toBe(false)
+  })
+
+  it('tsk2 指派回执交给业务层；未声明 tsk2 的对端被忽略', () => {
+    const { sync, service } = harness({
+      selfId: 'node-alice',
+      caps: [CAPS.taskSharing, CAPS.taskAssign]
+    })
+    const ack: TaskSyncPayload = {
+      op: 'assign-ack',
+      toNodeId: 'node-alice',
+      taskId: 'task-1',
+      revision: 3,
+      accept: true
+    }
+    expect(sync.handleEnvelope(envelope(ack, 'node-bob'))).toBe(true)
+    expect(service.assignmentAcks).toEqual([{ taskId: 'task-1', revision: 3, accept: true }])
+
+    const status: TaskSyncPayload = {
+      op: 'assign-status',
+      toNodeId: 'node-alice',
+      taskId: 'task-1',
+      revision: 3,
+      status: 'completed'
+    }
+    expect(sync.handleEnvelope(envelope(status, 'node-bob'))).toBe(true)
+    expect(service.assignmentStatuses).toEqual([
+      { taskId: 'task-1', revision: 3, status: 'completed' }
+    ])
+
+    const old = harness({ selfId: 'node-alice', caps: [CAPS.taskSharing] })
+    expect(old.sync.handleEnvelope(envelope(ack, 'node-bob'))).toBe(false)
+  })
+
+  it('向 tsk2 对端发送接受与状态回传', async () => {
+    const { sync, messenger } = harness({ caps: [CAPS.taskSharing, CAPS.taskAssign] })
+    await expect(sync.sendAssignmentAck('node-bob', 'task-1', 3, true)).resolves.toBe(true)
+    await expect(sync.sendAssignmentStatus('node-bob', 'task-1', 3, 'completed')).resolves.toBe(true)
+    expect(messenger.sent.map((item) => item.env.payload)).toMatchObject([
+      { op: 'assign-ack', toNodeId: 'node-bob', taskId: 'task-1', revision: 3, accept: true },
+      { op: 'assign-status', toNodeId: 'node-bob', taskId: 'task-1', revision: 3, status: 'completed' }
+    ])
   })
 
   it('messenger 补发成功事件回填共享状态', () => {

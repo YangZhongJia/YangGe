@@ -85,7 +85,7 @@ async function reveal(): Promise<void> {
 .diagnostics p.diagnostic-detail, .diagnostics small { font-size: var(--font-xs); color: var(--text-2); line-height: 1.6; }
 .diagnostics small { display: block; }
 .diagnostic-option { display: flex; align-items: center; gap: 7px; margin-top: 14px; font-size: var(--font-sm); cursor: pointer; }
-:global(html[data-theme='dark']) .diagnostic-option input { color-scheme: dark; }
+:global(html[data-theme='dark'] .diagnostic-option input) { color-scheme: dark; }
 .diagnostic-option input { margin: 0; accent-color: var(--primary); }
 #diagnostic-network-help { margin: 4px 0 0 20px; }
 .diagnostic-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }

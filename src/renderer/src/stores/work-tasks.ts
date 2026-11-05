@@ -7,7 +7,7 @@ import type {
   WorkTaskResult,
   WorkTaskView
 } from '../../../shared/ipc'
-import { localTodayIso } from '../../../shared/work-task'
+import { localTodayIso, type WorkTaskStatus } from '../../../shared/work-task'
 
 let stopTaskUpdates: (() => void) | null = null
 
@@ -158,6 +158,18 @@ export const useWorkTasksStore = defineStore('workTasks', {
 
     async unshareTask(taskId: string, peerId: string): Promise<boolean> {
       return runMutation(this, () => window.pantry.unshareWorkTask(taskId, peerId))
+    },
+
+    async assignTask(taskId: string, peerId: string | null): Promise<boolean> {
+      return runMutation(this, () => window.pantry.assignWorkTask(taskId, peerId))
+    },
+
+    async respondAssignment(taskId: string, accept: boolean): Promise<boolean> {
+      return runMutation(this, () => window.pantry.respondWorkTaskAssignment(taskId, accept))
+    },
+
+    async setAssignedStatus(taskId: string, status: WorkTaskStatus): Promise<boolean> {
+      return runMutation(this, () => window.pantry.setAssignedWorkTaskStatus(taskId, status))
     },
 
     async createProject(name: string): Promise<boolean> {

@@ -39,6 +39,7 @@ _yangge/
 bchk*/\ndbg*/
 release2/
 release/
+release-*/
 *.log
 
 release-fix/

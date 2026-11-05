@@ -29,6 +29,8 @@ import RailNavIcon from './components/RailNavIcon.vue'
 import WindowControls from './components/WindowControls.vue'
 import WindowDragStrip from './components/WindowDragStrip.vue'
 import StartupParticle from './components/StartupParticle.vue'
+import LockScreen from './components/LockScreen.vue'
+import VersionHighlights from './components/VersionHighlights.vue'
 import DuelInviteToast from './components/DuelInviteToast.vue'
 import startupIconUrl from '../../../build/icons/pantry-logo-icon.png?url'
 import { useGroupsStore } from './stores/groups'
@@ -45,6 +47,7 @@ import { randomQuote } from './utils/quotes'
 import doveMarkUrl from './assets/brand/yangge-mark.svg?url'
 import { teahouseDarkThemeOverrides, teahouseLightThemeOverrides } from './ui/naive-theme'
 import { accentPalette, normalizeAccent } from './utils/accents'
+import { releaseHighlightsFor, VERSION_SEEN_KEY } from './data/release-highlights'
 
 type Tab = 'chat' | 'contacts' | 'cabinet' | 'agent' | 'tasks'
 
@@ -166,6 +169,33 @@ async function installReadyUpdate(): Promise<void> {
   }
 }
 const info = ref<AppInfo | null>(null)
+const versionHighlights = computed(() =>
+  info.value ? releaseHighlightsFor(info.value.version) : null
+)
+const showVersionHighlights = ref(false)
+function maybeShowVersionHighlights(): void {
+  if (showVersionHighlights.value || appLocked.value || showWizard.value) return
+  if (!settings.value?.setupDone) return
+  const highlights = versionHighlights.value
+  if (!highlights) return
+  try {
+    if (localStorage.getItem(VERSION_SEEN_KEY) === highlights.version) return
+  } catch {
+    return
+  }
+  showVersionHighlights.value = true
+}
+function dismissVersionHighlights(): void {
+  const highlights = versionHighlights.value
+  if (highlights) {
+    try {
+      localStorage.setItem(VERSION_SEEN_KEY, highlights.version)
+    } catch {
+      // 存储不可用时本次仍关闭，避免弹窗卡住主界面。
+    }
+  }
+  showVersionHighlights.value = false
+}
 // 主界面空态随机名言（决议 #82）：组件创建（每次打开软件）时随机一条，纯本地内置
 const quote = ref(randomQuote())
 const settings = ref<SettingsView | null>(null)
@@ -184,6 +214,8 @@ const naiveThemeOverrides = computed(() =>
     : teahouseLightThemeOverrides(accentPalette(accent.value, false))
 )
 const showWizard = ref(false)
+const appLocked = ref(false)
+let stopLockRequested: (() => void) | null = null
 const settingsWindowOpen = ref(false)
 const peersStore = usePeersStore()
 const chatStore = useChatStore()
@@ -235,6 +267,12 @@ watch(
   (enabled) => {
     if (enabled === false) motionPending.value = false
   }
+)
+// 版本亮点只在主界面、非向导、非锁屏时展示；升级后第一次进入触发一次。
+watch(
+  () => [appLocked.value, showWizard.value, settings.value?.setupDone, info.value?.version] as const,
+  () => maybeShowVersionHighlights(),
+  { flush: 'post' }
 )
 let stopScanProgress: (() => void) | null = null
 let stopCaptureFailed: (() => void) | null = null
@@ -440,6 +478,7 @@ function onCompositionStart(): void { composing = true }
 function onCompositionEnd(): void { composing = false }
 
 function onMainKeydown(event: KeyboardEvent): void {
+  if (appLocked.value) return
   if (!isPlainEscape(event, composing) || showWizard.value || settingsWindowOpen.value) return
   if (showScanConfirm.value) {
     event.preventDefault()
@@ -488,6 +527,9 @@ onMounted(async () => {
   })
   stopCabinetOpen = window.pantry.onCabinetFocusPeer((peerId) => showCabinet(peerId))
   stopWindowShown = window.pantry.onMainWindowShown((event) => requestMotion(event.reason))
+  stopLockRequested = window.pantry.onLockRequested(() => {
+    if (settings.value?.lockEnabled) appLocked.value = true
+  })
   void peersStore.init()
   void chatStore.init()
   void duelStore.init()
@@ -497,6 +539,7 @@ onMounted(async () => {
   info.value = await window.pantry.getAppInfo()
   applyPerformanceProfile(info.value)
   settings.value = await window.pantry.getSettings()
+  if (settings.value?.lockEnabled) appLocked.value = true
   applyAppearance(settings.value)
   watch(systemDark, () => {
     applyAppearance(settings.value!)
@@ -505,6 +548,7 @@ onMounted(async () => {
   showWizard.value = settings.value !== null && !settings.value.setupDone
   stopSettings = window.pantry.onSettingsUpdated((next) => {
     settings.value = next
+    if (!next.lockEnabled) appLocked.value = false
     applyAppearance(next)
     applyWindowTitle(next)
   })
@@ -527,6 +571,8 @@ onUnmounted(() => {
   stopSettingsWindowState?.()
   stopCabinetOpen?.()
   stopWindowShown?.()
+  stopLockRequested?.()
+  stopLockRequested = null
   stopScanProgress?.()
   stopCaptureFailed?.()
   stopTransferBlocked?.()
@@ -566,7 +612,7 @@ onUnmounted(() => {
   <Transition name="settings-scrim">
     <div v-if="settingsWindowOpen" class="settings-scrim" aria-hidden="true"></div>
   </Transition>
-  <div class="shell">
+  <div class="shell" :class="{ 'shell--booting': !settings }" :inert="appLocked" :aria-hidden="appLocked ? 'true' : undefined">
     <nav class="rail">
       <div class="avatar-wrap" :aria-label="tr('我的信息')">
         <AvatarMark
@@ -892,6 +938,18 @@ onUnmounted(() => {
         @click="blockedTransferPort = null; dismissCaptureFailure()">×</button>
     </div>
   </Transition>
+  <LockScreen
+    v-if="appLocked && settings"
+    :nick="settings.nick"
+    :icon-url="startupIconUrl"
+    @unlocked="appLocked = false"
+  />
+  <VersionHighlights
+    v-if="showVersionHighlights && versionHighlights && !appLocked"
+    :highlights="versionHighlights"
+    :icon-url="startupIconUrl"
+    @close="dismissVersionHighlights"
+  />
   </NConfigProvider>
 </template>
 
@@ -906,7 +964,7 @@ onUnmounted(() => {
   transition: opacity 140ms ease-out;
 }
 
-:global(html[data-theme='dark']) .settings-scrim {
+:global(html[data-theme='dark'] .settings-scrim) {
   background: rgba(0, 0, 0, 0.38);
 }
 
@@ -921,6 +979,10 @@ onUnmounted(() => {
   min-height: 0;
   isolation: isolate;
   background: var(--bg-chat);
+}
+/* 设置未就绪前先遮住消息区，避免锁屏配置还没读到时闪出会话内容。 */
+.shell--booting {
+  visibility: hidden;
 }
 
 /* 栏① 导航 */

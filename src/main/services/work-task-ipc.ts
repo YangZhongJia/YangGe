@@ -24,6 +24,9 @@ export interface WorkTaskIpcPort {
   deleteTask(taskId: unknown): Promise<null>
   shareTask(taskId: unknown, peerIds: unknown): Promise<WorkTaskView>
   unshareTask(taskId: unknown, peerId: unknown): Promise<WorkTaskView>
+  assignTask(taskId: unknown, peerId: unknown): Promise<WorkTaskView>
+  respondAssignment(taskId: unknown, accept: boolean): Promise<null>
+  setAssignedStatus(taskId: unknown, status: unknown): Promise<null>
 }
 
 function fail<T>(error: unknown): WorkTaskResult<T> {
@@ -191,6 +194,38 @@ export class WorkTaskIpcController {
         throw new Error('共享同事数量不合法')
       }
       return ok(await this.service.shareTask(readId(taskId), peerIds))
+    } catch (error) {
+      return fail(error)
+    }
+  }
+
+  async assignTask(taskId: unknown, peerId: unknown): Promise<WorkTaskResult<WorkTaskView>> {
+    try {
+      if (
+        peerId !== null &&
+        (typeof peerId !== 'string' || peerId.length === 0 || peerId.length > MAX_ID)
+      ) {
+        throw new Error('指派同事不合法')
+      }
+      return ok(await this.service.assignTask(readId(taskId), peerId))
+    } catch (error) {
+      return fail(error)
+    }
+  }
+
+  async respondAssignment(taskId: unknown, accept: unknown): Promise<WorkTaskResult<null>> {
+    try {
+      if (typeof accept !== 'boolean') throw new Error('指派结果不合法')
+      return ok(await this.service.respondAssignment(readId(taskId), accept))
+    } catch (error) {
+      return fail(error)
+    }
+  }
+
+  async setAssignedStatus(taskId: unknown, status: unknown): Promise<WorkTaskResult<null>> {
+    try {
+      if (!isWorkTaskStatus(status)) throw new Error('任务状态不合法')
+      return ok(await this.service.setAssignedStatus(readId(taskId), status))
     } catch (error) {
       return fail(error)
     }

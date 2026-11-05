@@ -20,6 +20,7 @@ import { TransferRepo } from './transfer-repo'
 import { GroupRepo } from './group-repo'
 import { StickerRepo } from './sticker-repo'
 import { ShareGrantsRepo } from './share-grants-repo'
+import { FavoriteRepo } from './favorite-repo'
 import { toFtsQuery, toFtsTokens } from './fts'
 import { SearchService } from '../services/search'
 import { PorterService } from '../services/porter'
@@ -240,10 +241,31 @@ try {
 
   // 2. 联系人 upsert / 载入往返
   const repo = new PeersRepo(db)
-  repo.upsertMany([makePeer('alice'), makePeer('bob')])
+  repo.upsertMany([makePeer('alice'), makePeer('bob'), makePeer('empty-a'), makePeer('empty-b')])
   let loaded = repo.loadAll()
-  assert.equal(loaded.length, 2)
+  assert.equal(loaded.length, 4)
   assert.equal(loaded.every((p) => p.online === false), true, '载入应一律离线态')
+
+  // 离线空联系人清理：只清无会话、无任务共享、无备注的节点。
+  new ConvRepo(db).ensureSingle('node-alice')
+  const cleanup = repo.listCleanupCandidates().map((row) => row.node_id)
+  assert.deepEqual(cleanup.sort(), ['node-bob', 'node-empty-a', 'node-empty-b'], '有会话的 alice 不应成为候选')
+  assert.equal(repo.deleteMany(['node-empty-a', 'node-empty-b']), 2)
+  loaded = repo.loadAll()
+  assert.equal(loaded.some((p) => p.profile.nodeId === 'node-empty-a'), false)
+  assert.equal(loaded.some((p) => p.profile.nodeId === 'node-alice'), true)
+
+  // 消息收藏只存消息 ID：切换幂等、列表按时间倒序。
+  const favorites = new FavoriteRepo(db)
+  db.prepare(
+    "INSERT INTO messages (id, conv_id, sender_id, is_mine, kind, content, ts, seq, status) VALUES ('fav-1', 'single:node-alice', 'node-alice', 0, 'text', '收藏内容', 1, 1, 'sent')"
+  ).run()
+  favorites.set('fav-1', 'single:node-alice', true, 1000)
+  assert.equal(favorites.has('fav-1'), true)
+  assert.deepEqual(favorites.ids(), ['fav-1'])
+  assert.equal(favorites.list()[0].conv_id, 'single:node-alice')
+  favorites.set('fav-1', 'single:node-alice', false, 1001)
+  assert.equal(favorites.has('fav-1'), false)
 
   // 3. 资料更新覆盖、first_seen/remark 不被覆盖
   const firstSeenBefore = (

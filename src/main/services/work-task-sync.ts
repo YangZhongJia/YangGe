@@ -19,6 +19,13 @@ export interface WorkTaskSyncTaskService {
   applyRemoteUpsert(snapshot: WorkTaskSyncSnapshot): boolean
   applyRemoteRevoke(ownerNodeId: string, taskId: string, revision: number): boolean
   handleShareStatus(messageId: string, state: WorkTaskDeliveryState): boolean
+  applyAssignmentAck(from: string, taskId: string, revision: number, accept: boolean): boolean
+  applyAssignmentStatus(
+    from: string,
+    taskId: string,
+    revision: number,
+    status: 'not_started' | 'in_progress' | 'completed'
+  ): boolean
 }
 
 export interface WorkTaskSyncOptions {
@@ -48,6 +55,11 @@ export class WorkTaskSyncService implements WorkTaskSyncPort {
   canShare(peerId: string): boolean {
     const caps = this.peerCaps(peerId)
     return Array.isArray(caps) && caps.includes(CAPS.taskSharing)
+  }
+
+  canAssign(peerId: string): boolean {
+    const caps = this.peerCaps(peerId)
+    return Array.isArray(caps) && caps.includes(CAPS.taskAssign)
   }
 
   async sendUpsert(
@@ -90,9 +102,53 @@ export class WorkTaskSyncService implements WorkTaskSyncPort {
     }
   }
 
+  async sendAssignmentAck(
+    ownerNodeId: string,
+    taskId: string,
+    revision: number,
+    accept: boolean
+  ): Promise<boolean> {
+    if (!this.canAssign(ownerNodeId)) return false
+    const env = makeEnvelope<TaskSyncPayload>(MSG_TYPES.task, this.selfId, {
+      op: 'assign-ack',
+      toNodeId: ownerNodeId,
+      taskId,
+      revision,
+      accept
+    })
+    try {
+      const outcome = await this.messenger.sendUserMessage(ownerNodeId, env)
+      return outcome === 'sent' || outcome === 'queued'
+    } catch {
+      return false
+    }
+  }
+
+  async sendAssignmentStatus(
+    ownerNodeId: string,
+    taskId: string,
+    revision: number,
+    status: 'not_started' | 'in_progress' | 'completed'
+  ): Promise<boolean> {
+    if (!this.canAssign(ownerNodeId)) return false
+    const env = makeEnvelope<TaskSyncPayload>(MSG_TYPES.task, this.selfId, {
+      op: 'assign-status',
+      toNodeId: ownerNodeId,
+      taskId,
+      revision,
+      status
+    })
+    try {
+      const outcome = await this.messenger.sendUserMessage(ownerNodeId, env)
+      return outcome === 'sent' || outcome === 'queued'
+    } catch {
+      return false
+    }
+  }
+
   /**
-   * 入站任务报文：目标必须是本机，发送者必须就是 owner 且声明 tsk1。
-   * 旧客户端不会发送 task 报文；未知发送者或伪造 owner 一律丢弃。
+   * 入站任务报文：目标必须是本机，发送者必须就是 owner 且声明 tsk1；
+   * 指派回执由 assignee 发送，要求 tsk2 且由业务层核对负责人身份。
    */
   handleEnvelope(env: Envelope<TaskSyncPayload>): boolean {
     if (!env || env.type !== MSG_TYPES.task || env.from === this.selfId) return false
@@ -118,6 +174,14 @@ export class WorkTaskSyncService implements WorkTaskSyncPort {
     if (payload.op === 'revoke') {
       if (payload.ownerNodeId !== env.from) return false
       return this.service.applyRemoteRevoke(env.from, payload.taskId, payload.revision)
+    }
+    if (payload.op === 'assign-ack') {
+      if (!this.canAssign(env.from)) return false
+      return this.service.applyAssignmentAck(env.from, payload.taskId, payload.revision, payload.accept)
+    }
+    if (payload.op === 'assign-status') {
+      if (!this.canAssign(env.from)) return false
+      return this.service.applyAssignmentStatus(env.from, payload.taskId, payload.revision, payload.status)
     }
     return false
   }

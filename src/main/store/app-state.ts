@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto'
 import { hostname, userInfo } from 'node:os'
 import { join } from 'node:path'
 import { atomicWriteJson } from '../util/atomic-write'
+import { isLockPinHash } from '../services/app-lock'
 import {
   DEFAULT_TCP_PORT,
   DEFAULT_UDP_PORT,
@@ -67,6 +68,12 @@ export interface ConfigFile {
   startupMotion: boolean
   /** 收到纸飞机 / 墨弹时播放飞行动画（默认开） */
   nudgeEffects: boolean
+  /** 互动特效位置：聊天窗口内 / 接收方桌面全屏 */
+  nudgeEffectSurface: 'chat' | 'desktop'
+  /** 启动 / 从托盘或最小化恢复时要求输入 6 位数字密码 */
+  lockEnabled: boolean
+  /** scrypt 哈希（含随机盐）；空串 = 尚未设置密码，绝不保存明文 */
+  lockPinHash: string
   /** 本机界面语言（决议 #307） */
   language: Language
   /** 深色主题手动切换（决议 #24） */
@@ -251,6 +258,9 @@ export function saveAppSettings(
       | 'closeToTray'
       | 'startupMotion'
       | 'nudgeEffects'
+      | 'nudgeEffectSurface'
+      | 'lockEnabled'
+      | 'lockPinHash'
       | 'language'
       | 'theme'
       | 'fontScale'
@@ -302,6 +312,9 @@ export function saveAppSettings(
   if (patch.closeToTray !== undefined) state.config.closeToTray = patch.closeToTray
   if (patch.startupMotion !== undefined) state.config.startupMotion = patch.startupMotion
   if (patch.nudgeEffects !== undefined) state.config.nudgeEffects = patch.nudgeEffects
+  if (patch.nudgeEffectSurface !== undefined) state.config.nudgeEffectSurface = patch.nudgeEffectSurface
+  if (patch.lockPinHash !== undefined) state.config.lockPinHash = patch.lockPinHash
+  if (patch.lockEnabled !== undefined) state.config.lockEnabled = patch.lockEnabled
   if (isLanguage(patch.language)) state.config.language = patch.language
   if (patch.theme !== undefined) state.config.theme = patch.theme
   if (patch.fontScale !== undefined) state.config.fontScale = patch.fontScale
@@ -478,6 +491,9 @@ export function loadAppState(
       closeToTray: true,
       startupMotion: true,
       nudgeEffects: true,
+      nudgeEffectSurface: 'chat',
+      lockEnabled: false,
+      lockPinHash: '',
       language: initialLanguage(false, undefined, systemLanguage),
       theme: 'light',
       fontScale: 100,
@@ -564,6 +580,10 @@ export function loadAppState(
   config.closeToTray = config.closeToTray !== false
   config.startupMotion = config.startupMotion !== false
   config.nudgeEffects = config.nudgeEffects !== false
+  config.nudgeEffectSurface = config.nudgeEffectSurface === 'desktop' ? 'desktop' : 'chat'
+  config.lockPinHash = isLockPinHash(config.lockPinHash) ? config.lockPinHash : ''
+  // 没有有效哈希时不允许开启锁屏，避免把自己锁在门外。
+  config.lockEnabled = config.lockEnabled === true && config.lockPinHash !== ''
   config.language = initialLanguage(true, config.language, systemLanguage)
   config.theme = config.theme === 'dark' || config.theme === 'auto' ? config.theme : 'light'
   config.fontScale = config.fontScale === 110 || config.fontScale === 125 ? config.fontScale : 100

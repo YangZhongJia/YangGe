@@ -90,7 +90,11 @@ function node(
       applyRemoteUpsert: (snapshot) => service.applyRemoteUpsert(snapshot),
       applyRemoteRevoke: (ownerNodeId, taskId, revision) =>
         service.applyRemoteRevoke(ownerNodeId, taskId, revision),
-      handleShareStatus: (messageId, state) => service.handleShareStatus(messageId, state)
+      handleShareStatus: (messageId, state) => service.handleShareStatus(messageId, state),
+      applyAssignmentAck: (from, taskId, revision, accept) =>
+        service.applyAssignmentAck(from, taskId, revision, accept),
+      applyAssignmentStatus: (from, taskId, revision, status) =>
+        service.applyAssignmentStatus(from, taskId, revision, status)
     }
   })
   service = new WorkTaskService({ store: repo, selfId: nodeId, sync, emit: () => {} })
@@ -103,13 +107,14 @@ const dbA = openDatabase(join(directory, 'node-a.db'))
 const dbB = openDatabase(join(directory, 'node-b.db'))
 const network = new Network()
 const nodeA = node('node-a', dbA, network, (peerId) =>
-  peerId === 'node-b' ? [CAPS.taskSharing] : null
+  peerId === 'node-b' ? [CAPS.taskSharing, CAPS.taskAssign] : null
 )
 const nodeB = node('node-b', dbB, network, (peerId) =>
-  peerId === 'node-a' ? [CAPS.taskSharing] : null
+  peerId === 'node-a' ? [CAPS.taskSharing, CAPS.taskAssign] : null
 )
 
 async function run(): Promise<void> {
+  network.online.add('node-a')
   const project = nodeA.service.createProject('五期测试')
   const task = nodeA.service.createTask({
     projectId: project.id,
@@ -222,13 +227,38 @@ async function run(): Promise<void> {
   assert.equal(remote?.title, '撤销后编辑')
   assert.ok(remote!.revision > currentRevision, '重新共享必须使用更高 revision')
 
+  const assigned = await nodeA.service.assignTask(task.id, 'node-b')
+  assert.equal(assigned.assigneeNodeId, 'node-b')
+  assert.equal(assigned.assignmentState, 'pending')
+  remote = nodeB.repo.listTasks({ scope: 'shared' }, 'node-b')[0]
+  assert.equal(remote?.assignedToMe, true, '被指派方应识别自己为负责人')
+  assert.equal(remote?.assignmentState, 'pending')
+
+  await nodeB.service.respondAssignment(task.id, true)
+  assert.equal(
+    nodeA.repo.getTask('node-a', task.id)?.assignmentState,
+    'accepted',
+    'owner 收到接受回执后进入 accepted'
+  )
+  remote = nodeB.repo.listTasks({ scope: 'shared' }, 'node-b')[0]
+  assert.equal(remote?.assignmentState, 'accepted')
+
+  await nodeB.service.setAssignedStatus(task.id, 'completed')
+  assert.equal(
+    nodeA.repo.getTask('node-a', task.id)?.status,
+    'completed',
+    '负责人状态回传到 owner'
+  )
+  remote = nodeB.repo.listTasks({ scope: 'shared' }, 'node-b')[0]
+  assert.equal(remote?.status, 'completed')
+
   await assert.rejects(
     nodeA.service.shareTask(task.id, ['node-c']),
     /该同事版本不支持任务共享/
   )
   await assert.rejects(nodeA.service.shareTask(task.id, []), /共享同事数量不合法/)
 
-  console.log('[work-task-sharing-selftest] PASS —— 离线共享、补发、更新、伪造/旧版本拒绝、撤销与重新共享通过')
+  console.log('[work-task-sharing-selftest] PASS —— 离线共享、补发、更新、指派接受/状态回传、伪造/旧版本拒绝、撤销与重新共享通过')
 }
 
 run()

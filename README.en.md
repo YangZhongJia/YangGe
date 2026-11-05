@@ -48,7 +48,19 @@
 
 Start YangGe on computers connected to the same local network and they discover each other automatically. Open a peer to chat, transfer files, manage tasks, or challenge them to a quick duel. No cloud account, central server, telemetry, or Internet access is involved. YangGe is designed for corporate intranets, isolated networks, and laboratories where external connectivity is limited or prohibited.
 
-## Recent updates (v1.11.0)
+## Recent updates (v1.11.2)
+
+- **Unread indicators**: conversation avatars show a red count and a "new messages" prompt after returning.
+- **Desktop interaction effects**: paper planes / ink bombs can play inside chat or full-screen on the desktop.
+- **Notification privacy**: while locked, system notifications only show "You received a new message".
+- **Fixes**: dark-mode settings sidebar frame and delayed group interaction animations.
+
+**v1.11.1**
+
+- **Group avatar opens private chat**: click a member avatar in a group message to open a private chat directly.
+- **Known bug fixes**.
+
+**v1.11.0**
 
 - **Two-player duel arena**: invite a contact from the PK menu; both players have 100 HP, pick attack / guard / goofy skill in 10-second rounds, and the result is saved to each player's chat. Disconnects never invent a winner.
 - **Task center**: projects, tasks, start/due dates, reminders, completion badges, and LAN task sharing with offline queueing and delivery status.
@@ -75,6 +87,7 @@ Moving a file or sending a short message inside an office network should be effo
 - **Built-in screenshot utility** — One-key global shortcut capture; rectangular selection, pencil, arrows, mosaic, and in-place single-line text annotations; includes a magnifier and coordinate/color inspector; compatible with Linux Wayland and X11 environments.
 - **View-only screen assistance** — Request from a private chat; the peer consents and selects a screen each time. An independent viewer provides Auto and 3/5/10 fps modes with immediate stop. Plaintext LAN transport; local loopback and synthetic Electron capture are validated, while physical-screen permissions and target performance remain pending. See [technical boundaries](docs/en/tech-design.md#remote-view).
 - **Local history & full-text search** — Powered by SQLite WAL mode and FTS full-text index; quickly search contacts, groups, and message history globally or filter within a specific chat; supports local backup export and device migration.
+- **Lock screen & what's new** — Optional 6-digit lock screen with a particle veil after launch, minimize, or tray restore; after an update, the first visit summarizes new features and known bug fixes for the current version.
 - **Bilingual interface switching** — Native support for Simplified Chinese and English; switch instantly across all active windows via Settings → General → Language; fresh installations initialize automatically based on system locale.
 - **LAN security boundary** — Globally appends `--no-proxy-server` at startup to bypass any system or environment proxies; zero external network requests, zero telemetry, and zero remote CDN dependencies; context isolation and Chromium sandboxing enabled in renderers; strict network packet allowlist validation; destination path traversal sanitization; inline chat images bounded to ≤8192px and ≤32 megapixels; strict log sanitization keeping message bodies and file contents out of logs.
 

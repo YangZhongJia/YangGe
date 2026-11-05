@@ -45,6 +45,7 @@ import GroupAvatar from './GroupAvatar.vue'
 import ForwardDialog from './ForwardDialog.vue'
 import ScreenRequestDialog from './ScreenRequestDialog.vue'
 import DuelArena from './DuelArena.vue'
+import MessageTaskDialog from './MessageTaskDialog.vue'
 import PantryIcon from './PantryIcon.vue'
 import PendingAttachments from './PendingAttachments.vue'
 import NudgeEffect from './NudgeEffect.vue'
@@ -200,6 +201,11 @@ const peerProfileScope = ref<HTMLElement | null>(null)
 const historySearchInput = ref<HTMLInputElement | null>(null)
 const inputScrollTop = ref(0)
 const msgMenu = ref<{ x: number; y: number; msg: MessageView } | null>(null)
+const taskFromMsg = ref<MessageView | null>(null)
+const favoriteIds = ref(new Set<string>())
+const favoritesOpen = ref(false)
+const favorites = ref<MessageView[]>([])
+const favoritesLoading = ref(false)
 const forwardMsg = ref<MessageView | null>(null)
 const replyToId = ref<string | null>(null)
 const replyToMeta = ref({id: '', senderName: '', text: ''})
@@ -375,10 +381,13 @@ const nudgeRetryRemainingMs = computed(() => Math.max(0, nudgeRetryUntil.value -
 const canSendNudge = computed(
   () => !isGroup.value && peerOnline.value && !nudgeSending.value && nudgeRetryRemainingMs.value <= 0
 )
-// 纸飞机 / 墨弹不限次数与间隔，只要求私聊、在线、没有正在发送。
-const canSendInteraction = computed(
-  () => !isGroup.value && peerOnline.value && !nudgeSending.value
-)
+// 纸飞机 / 墨弹不限次数与间隔；私聊要求对方在线，群聊要求至少一名成员在线。
+const canSendInteraction = computed(() => {
+  if (nudgeSending.value) return false
+  return isGroup.value
+    ? canSend.value && onlineGroupRecipientCount.value > 0
+    : peerOnline.value
+})
 const nudgeToolTip = computed(() => {
   if (isGroup.value) return tr('窗口震动仅支持私聊')
   if (!peerOnline.value) return tr('对方离线，无法震动')
@@ -387,8 +396,14 @@ const nudgeToolTip = computed(() => {
   }
   return tr('窗口震动')
 })
-const nudgeMenuHint = computed(() =>
-  peerOnline.value ? '' : tr('对方离线，扔不过去')
+const nudgeMenuHint = computed(() => {
+  if (isGroup.value) {
+    return onlineGroupRecipientCount.value > 0 ? '' : tr('群里没有在线成员，扔不过去')
+  }
+  return peerOnline.value ? '' : tr('对方离线，扔不过去')
+})
+const nudgeMenuTitle = computed(() =>
+  isGroup.value ? tr('往群里扔点什么') : tr('扔点什么给 {0}', { 0: peerName.value })
 )
 const mentionMembers = computed(() =>
   group.value ? group.value.members.filter((id) => id !== chatStore.selfId) : []
@@ -515,6 +530,7 @@ function onEscape(event: KeyboardEvent): void {
 
 onMounted(async () => {
   void duelStore.init()
+  void window.pantry.listMessageFavoriteIds().then((ids) => { favoriteIds.value = new Set(ids) })
   stopScreenState = window.pantry.onScreenState(receiveScreenState)
   void window.pantry.getScreenState().then(receiveScreenState)
   void refreshScreenAvailability()
@@ -648,6 +664,7 @@ watch(
 )
 
 function senderName(msg: MessageView): string {
+  if (msg.isMine) return chatStore.selfNick || tr('我')
   return peersStore.nameOf(msg.senderId)
 }
 
@@ -818,6 +835,12 @@ function closePeerProfile(): void {
     clearTimeout(peerProfileSavedTimer)
     peerProfileSavedTimer = null
   }
+}
+
+async function openGroupMemberChat(peerId: string): Promise<void> {
+  if (!isGroup.value || !peerId || peerId === chatStore.selfId) return
+  showMembers.value = false
+  await chatStore.openPeer(peerId)
 }
 
 function openPeerProfile(): void {
@@ -1384,7 +1407,7 @@ function startNudgeRetry(ms: number): void {
 }
 
 function openNudgeMenu(event: MouseEvent): void {
-  if (isGroup.value || !peer.value) return
+  if (!isGroup.value && !peer.value) return
   nudgeMenu.value = clampMenuPosition(event, NUDGE_MENU_WIDTH, NUDGE_MENU_HEIGHT)
 }
 
@@ -1399,23 +1422,37 @@ watch(nudgeMenu, (menu) => {
 
 async function throwNudge(style: NudgeStyle): Promise<void> {
   nudgeMenu.value = null
-  await performNudge(style)
+  // 群互动要等所有在线成员 ACK；先把本地动画放出去，避免网络慢时只看到系统文案。
+  const optimisticLocal =
+    isGroup.value &&
+    canSendInteraction.value &&
+    settings.value?.nudgeEffects !== false &&
+    settings.value?.nudgeEffectSurface !== 'desktop'
+  if (optimisticLocal) {
+    await nextTick()
+    nudgeFx.value?.play('out', style)
+  }
+  await performNudge(style, optimisticLocal)
 }
 
-async function performNudge(style?: NudgeStyle): Promise<void> {
+async function performNudge(style?: NudgeStyle, localAlreadyPlayed = false): Promise<void> {
   if (style ? !canSendInteraction.value : !canSendNudge.value) {
     if (style) setNudgeFeedback(nudgeMenuHint.value, 'warn')
     return
   }
   nudgeSending.value = true
   try {
-    const result = await chatStore.sendNudge(style)
+    const result = isGroup.value && style
+      ? await chatStore.sendGroupNudge(style)
+      : await chatStore.sendNudge(style)
     if (result.ok) {
       if (!style) startNudgeRetry(NUDGE_MIN_INTERVAL_MS)
       if (style) {
         if (settings.value?.nudgeEffects === false) {
           setNudgeFeedback(tr('已送达'))
-        } else {
+        } else if (settings.value?.nudgeEffectSurface === 'desktop') {
+          void window.pantry.playDesktopNudge(style)
+        } else if (!localAlreadyPlayed) {
           await nextTick()
           nudgeFx.value?.play('out', style)
         }
@@ -1429,8 +1466,8 @@ async function performNudge(style?: NudgeStyle): Promise<void> {
       return
     }
     if (result.reason === 'undelivered') {
-      startNudgeRetry(NUDGE_MIN_INTERVAL_MS)
-      setNudgeFeedback(tr('对方暂时无响应'), 'warn')
+      if (!isGroup.value) startNudgeRetry(NUDGE_MIN_INTERVAL_MS)
+      setNudgeFeedback(isGroup.value ? tr('群里暂时没有可送达的在线成员') : tr('对方暂时无响应'), 'warn')
       return
     }
     setNudgeFeedback(style ? tr('当前会话无法互动') : tr('当前会话无法震动'), 'warn')
@@ -1443,6 +1480,7 @@ watch(
   () => chatStore.lastNudge,
   (event) => {
     if (!event?.style || settings.value?.nudgeEffects === false) return
+    if (settings.value?.nudgeEffectSurface === 'desktop') return
     void nextTick(() => nudgeFx.value?.play('in', event.style!))
   }
 )
@@ -1738,12 +1776,73 @@ function quoteSelectedMessage(): void {
   replyToId.value = String(msg.id)
 }
 
+function canConvertToTask(msg: MessageView): boolean {
+  return msg.status !== 'recalled' && msg.kind !== 'system'
+}
+
+function isFavoriteMessage(msg: MessageView): boolean {
+  return favoriteIds.value.has(msg.id)
+}
+
+function canFavoriteMessage(msg: MessageView): boolean {
+  return msg.status !== 'recalled' && msg.kind !== 'system'
+}
+
+async function toggleFavoriteMessage(): Promise<void> {
+  const msg = msgMenu.value?.msg
+  msgMenu.value = null
+  if (!msg || !canFavoriteMessage(msg)) return
+  const next = await window.pantry.toggleMessageFavorite(msg.id)
+  const ids = new Set(favoriteIds.value)
+  if (next) ids.add(msg.id)
+  else ids.delete(msg.id)
+  favoriteIds.value = ids
+  if (favoritesOpen.value) await loadFavorites()
+}
+
+async function loadFavorites(): Promise<void> {
+  favoritesLoading.value = true
+  try {
+    favorites.value = await window.pantry.listFavoriteMessages()
+    favoriteIds.value = new Set(favorites.value.map((msg) => msg.id))
+  } finally {
+    favoritesLoading.value = false
+  }
+}
+
+async function openFavorites(): Promise<void> {
+  favoritesOpen.value = true
+  await loadFavorites()
+}
+
+async function jumpToFavorite(msg: MessageView): Promise<void> {
+  favoritesOpen.value = false
+  await chatStore.jumpToMessageById(msg.id)
+}
+
+function favoriteConvName(msg: MessageView): string {
+  const conv = chatStore.convs.find((item) => item.id === msg.convId)
+  if (!conv) return tr('会话')
+  return conv.type === 'group' ? groupsStore.nameOf(conv.peerId) : peersStore.nameOf(conv.peerId)
+}
+
+function favoritePreview(msg: MessageView): string {
+  if (msg.kind === 'text') return msg.text
+  if (msg.kind === 'file') return msg.text
+  if (msg.kind === 'image') return tr('[图片]')
+  if (msg.kind === 'sticker') return tr('[表情]')
+  if (msg.kind === 'pk') return msg.text
+  return msg.text || tr('[消息]')
+}
+
 function messageMenuItemCount(msg: MessageView): number {
   return (
     Number(canCopyMessage(msg)) +
     Number(canForwardMessage(msg)) +
     Number(isRecallableKind(msg)) +
-    Number(canQuoteMessage(msg) && isGroup.value)
+    Number(canQuoteMessage(msg) && isGroup.value) +
+    Number(canConvertToTask(msg)) +
+    Number(canFavoriteMessage(msg))
   )
 }
 
@@ -1793,6 +1892,18 @@ async function remindSelected(remindAt: number): Promise<void> {
   } catch {
     setNudgeFeedback(tr('设置失败，请稍后再试'), 'warn')
   }
+}
+
+function convertSelectedToTask(): void {
+  const msg = msgMenu.value?.msg
+  msgMenu.value = null
+  if (!msg || !canConvertToTask(msg)) return
+  taskFromMsg.value = msg
+}
+
+function onTaskCreated(title: string): void {
+  taskFromMsg.value = null
+  setNudgeFeedback(tr('任务已创建：{0}', { 0: title }), 'ok')
 }
 
 async function copySelectedMessage(): Promise<void> {
@@ -2399,6 +2510,7 @@ async function onDrop(event: DragEvent): Promise<void> {
         @reply-to="jumpToReplyTarget"
         @participate-pk="sendPk"
         @resend="chatStore.resend"
+        @open-chat="openGroupMemberChat"
       />
       </div>
       </div>
@@ -2413,6 +2525,15 @@ async function onDrop(event: DragEvent): Promise<void> {
           <PantryIcon name="chevron-down" :size="20" />
         </button>
       </Transition>
+      <div
+        v-if="chatStore.unreadPrompt?.convId === chatStore.activeConvId"
+        class="unread-prompt"
+        role="status"
+      >
+        <span class="unread-prompt-dot" aria-hidden="true"></span>
+        <span>{{ tr('收到 {0} 条新消息', { 0: chatStore.unreadPrompt.count }) }}</span>
+        <button type="button" :aria-label="tr('知道了')" @click.stop="chatStore.acknowledgeUnreadPrompt()">×</button>
+      </div>
     </div>
 
     <div
@@ -2424,6 +2545,12 @@ async function onDrop(event: DragEvent): Promise<void> {
       <button v-if="canCopyMessage(msgMenu.msg)" @click="copySelectedMessage">{{ tr('复制') }}</button>
       <button v-if="canForwardMessage(msgMenu.msg)" @click="forwardSelectedMessage">{{ tr('转发') }}</button>
       <button v-if="canQuoteMessage(msgMenu.msg) && isGroup && !msgMenu.msg.isMine" @click="quoteSelectedMessage">{{ tr('引用回复') }}</button>
+      <button v-if="canFavoriteMessage(msgMenu.msg)" @click="toggleFavoriteMessage">
+        {{ isFavoriteMessage(msgMenu.msg) ? tr('取消收藏') : tr('收藏') }}
+      </button>
+      <button v-if="canConvertToTask(msgMenu.msg)" @click="convertSelectedToTask">
+        {{ tr('转为任务') }}
+      </button>
       <button v-if="canRemindMessage(msgMenu.msg)" @click="remindSelected(60 * 60 * 1000)">
         {{ tr('1 小时后提醒我') }}
       </button>
@@ -2459,7 +2586,7 @@ async function onDrop(event: DragEvent): Promise<void> {
       :style="{ left: `${nudgeMenu.x}px`, top: `${nudgeMenu.y}px` }"
       @click.stop
     >
-      <p class="nudge-menu-title">{{ tr('扔点什么给 {0}', { 0: peerName }) }}</p>
+      <p class="nudge-menu-title">{{ nudgeMenuTitle }}</p>
       <button
         type="button"
         role="menuitem"
@@ -2588,6 +2715,17 @@ async function onDrop(event: DragEvent): Promise<void> {
             </button>
           </span>
         </span>
+        <span v-if="isGroup" class="tool-wrap" :data-tip="tr('纸飞机 / 墨弹')">
+          <button
+            class="tool"
+            type="button"
+            :aria-label="tr('群互动')"
+            :disabled="!canSendInteraction"
+            @click.stop="openNudgeMenu"
+          >
+            <PantryIcon name="nudge" :size="26" />
+          </button>
+        </span>
         <span v-if="!isGroup" class="tool-wrap" :data-tip="nudgeToolTip">
           <button
             class="tool"
@@ -2697,6 +2835,16 @@ async function onDrop(event: DragEvent): Promise<void> {
           {{ nudgeFeedback.text }}
         </span>
         <span class="toolbar-spacer"></span>
+        <span class="tool-wrap" :data-tip="tr('收藏的消息')">
+          <button
+            class="tool"
+            type="button"
+            :aria-label="tr('收藏的消息')"
+            @click="openFavorites"
+          >
+            <PantryIcon name="star" :size="22" />
+          </button>
+        </span>
         <span class="history-search-scope">
           <span class="tool-wrap" :data-tip="tr('历史搜索')">
             <button
@@ -2846,6 +2994,40 @@ async function onDrop(event: DragEvent): Promise<void> {
       </div>
     </footer>
     <NudgeEffect ref="nudgeFx" />
+    <Teleport to="body">
+      <div v-if="favoritesOpen" class="favorites-mask" @click.self="favoritesOpen = false">
+        <section class="favorites-card" role="dialog" aria-modal="true" aria-labelledby="favorites-title">
+          <header>
+            <div>
+              <p class="favorites-eyebrow">{{ tr('STARRED') }}</p>
+              <h3 id="favorites-title">{{ tr('收藏的消息') }}</h3>
+            </div>
+            <button type="button" :aria-label="tr('关闭')" @click="favoritesOpen = false">×</button>
+          </header>
+          <p v-if="favoritesLoading" class="favorites-empty">{{ tr('正在读取收藏…') }}</p>
+          <p v-else-if="favorites.length === 0" class="favorites-empty">{{ tr('还没有收藏消息。在消息右键菜单里点「收藏」。') }}</p>
+          <ul v-else class="favorites-list">
+            <li v-for="msg in favorites" :key="msg.id">
+              <button type="button" class="favorite-row" @click="jumpToFavorite(msg)">
+                <span class="favorite-main">
+                  <span class="favorite-meta">{{ favoriteConvName(msg) }}</span>
+                  <span class="favorite-text">{{ favoritePreview(msg) }}</span>
+                </span>
+                <time>{{ new Date(msg.ts).toLocaleString() }}</time>
+              </button>
+            </li>
+          </ul>
+        </section>
+      </div>
+    </Teleport>
+    <MessageTaskDialog
+      v-if="taskFromMsg"
+      :msg="taskFromMsg"
+      :sender-name="senderName(taskFromMsg)"
+      :conv-name="peerName"
+      @close="taskFromMsg = null"
+      @created="onTaskCreated"
+    />
   </div>
 </template>
 
@@ -3947,6 +4129,50 @@ async function onDrop(event: DragEvent): Promise<void> {
   overflow: hidden;
   position: relative;
 }
+.unread-prompt {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  z-index: 7;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px 8px 13px;
+  border: 1px solid var(--primary-border);
+  border-radius: 999px;
+  background: var(--material-strong);
+  color: var(--text-1);
+  font-size: 12px;
+  box-shadow: var(--highlight-edge), 0 8px 22px rgba(15, 23, 42, 0.16);
+  transform: translateX(-50%);
+  animation: unread-prompt-in 180ms ease-out;
+}
+.unread-prompt-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-weak);
+}
+.unread-prompt button {
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-3);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+.unread-prompt button:hover {
+  background: var(--surface-hover);
+  color: var(--text-1);
+}
+@keyframes unread-prompt-in {
+  from { opacity: 0; transform: translate(-50%, 6px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
 .msgs {
   flex: 1;
   min-width: 0;
@@ -4063,6 +4289,86 @@ async function onDrop(event: DragEvent): Promise<void> {
 .msg-menu button:disabled:hover {
   background: transparent;
 }
+
+.favorites-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 86;
+  display: grid;
+  place-items: center;
+  background: var(--scrim);
+}
+.favorites-card {
+  width: min(560px, calc(100vw - 48px));
+  max-height: min(620px, calc(100vh - 72px));
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  padding: 18px 20px;
+  background: var(--material-strong);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--highlight-edge), var(--shadow-float);
+}
+.favorites-card header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.favorites-card h3 { margin: 2px 0 0; font-size: var(--font-md); }
+.favorites-card header > button {
+  border: 0;
+  background: none;
+  color: var(--text-3);
+  font-size: 18px;
+  cursor: pointer;
+}
+.favorites-eyebrow {
+  margin: 0;
+  color: var(--text-3);
+  font-size: var(--font-xs);
+  letter-spacing: 0.12em;
+}
+.favorites-empty {
+  padding: 28px 10px;
+  color: var(--text-3);
+  font-size: var(--font-sm);
+  text-align: center;
+}
+.favorites-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+.favorites-list li { border-bottom: 1px solid var(--line); }
+.favorite-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 9px 4px;
+  border: 0;
+  background: transparent;
+  color: var(--text-1);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.favorite-row:hover { background: var(--surface-hover); }
+.favorite-main { display: grid; flex: 1; gap: 3px; min-width: 0; }
+.favorite-meta { color: var(--text-3); font-size: 11px; }
+.favorite-text {
+  overflow: hidden;
+  color: var(--text-2);
+  font-size: var(--font-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.favorite-row time { flex: none; color: var(--text-3); font-size: 11px; }
 
 .nudge-menu {
   animation: iris-pop-in 140ms ease-out;
