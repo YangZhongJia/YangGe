@@ -12,11 +12,23 @@ import type {
 } from '../../../shared/ipc'
 import type { PkGame } from '../../../shared/pk'
 import { isWindowAttended } from '../utils/window-attention'
+import {
+  playMessageSound,
+  resolveMessageSound,
+  type MessageSoundSetting
+} from '../utils/message-sound'
+import { shouldShowNoodleBurst, unreadNoodleMessage, NOODLE_BURST_COOLDOWN_MS } from '../utils/noodle-effect'
 import { TYPING_SHOW_MS, TYPING_THROTTLE_MS, type NudgeStyle } from '../../../shared/protocol'
 import type { PendingAttachment } from '../utils/pending-attachments'
 
 // 主进程聊天数据的投影 + 乐观更新（tech-design §7 状态流）
 let nudgeClearTimer: ReturnType<typeof setTimeout> | null = null
+/** 提示音设置跟随主进程设置广播，避免每条消息都读一次设置。 */
+let messageSound: MessageSoundSetting = 'none'
+/** 面碗特效上次播放时间，冷却期内连发不重复放大。 */
+let lastNoodleAt = 0
+/** 已经播过特效的面条消息 id，进入会话补播时不重复。 */
+let lastCelebratedNoodleId = ''
 let unreadPromptTimer: ReturnType<typeof setTimeout> | null = null
 let nudgeOpenRun = 0
 let navigationRun = 0
@@ -109,6 +121,8 @@ export const useChatStore = defineStore('chat', {
     selfAvatar: -1,
     selfAvatarHash: '',
     lastNudge: null as NudgeEvent | null,
+    /** 面条表情触发的巨型面碗特效；每次事件换新对象驱动播放 */
+    noodleBurst: null as { id: string; at: number } | null,
     unreadPrompt: null as { convId: string; count: number } | null,
     /** 移除聊天的待删除项（决议 #125）：非空时该会话在列表中隐藏，10 秒倒计时内可撤回 */
     pendingRemoval: null as PendingRemoval | null,
@@ -146,11 +160,13 @@ export const useChatStore = defineStore('chat', {
         this.selfNick = selfSettings.nick
         this.selfAvatar = selfSettings.avatar
         this.selfAvatarHash = selfSettings.avatarHash
+        messageSound = selfSettings.sound
       }
       window.pantry.onSettingsUpdated((next) => {
         this.selfNick = next.nick
         this.selfAvatar = next.avatar
         this.selfAvatarHash = next.avatarHash
+        messageSound = next.sound
       })
 
       window.pantry.onConvsUpdated((convs) => {
@@ -170,6 +186,32 @@ export const useChatStore = defineStore('chat', {
       })
       window.pantry.onMsgNew((msg) => {
         if (this.messages[msg.convId]) this.appendConversationMessage(msg.convId, msg)
+        const tone = resolveMessageSound({
+          sound: messageSound,
+          isMine: msg.isMine,
+          kind: msg.kind,
+          muted: this.convs.find((c) => c.id === msg.convId)?.muted === true
+        })
+        if (tone) playMessageSound(tone)
+        const now = Date.now()
+        if (shouldShowNoodleBurst({
+          kind: msg.kind,
+          text: msg.text,
+          convId: msg.convId,
+          activeConvId: this.activeConvId,
+          attended: isWindowAttended(),
+          now,
+          lastAt: lastNoodleAt
+        })) {
+          lastNoodleAt = now
+          lastCelebratedNoodleId = msg.id
+          this.noodleBurst = { id: msg.id, at: now }
+        }
+        // 自己发出的消息不产生未读；若之前有未读提示，说明用户已经在回复，直接确认。
+        if (msg.isMine) {
+          if (this.unreadPrompt?.convId === msg.convId) this.acknowledgeUnreadPrompt()
+          return
+        }
         // 只有窗口可见且聚焦才把当前会话新消息即时置读；最小化 / 托盘 / 失焦时
         // 保留未读，托盘闪烁与角标才能被感知（决议 #220）
         if (msg.convId === this.activeConvId) {
@@ -194,6 +236,7 @@ export const useChatStore = defineStore('chat', {
         if (convId && conv && conv.unread > 0) {
           // 保留未读角标，等用户看完提示并点「知道了」后再置读。
           this.showUnreadPrompt(convId, conv.unread)
+          this.celebrateUnreadNoodle(convId, conv.unread)
         } else if (convId && this.unreadPrompt?.convId === convId) {
           this.scheduleUnreadPromptClear(convId)
         }
@@ -277,6 +320,7 @@ export const useChatStore = defineStore('chat', {
         if (run !== navigationRun) return
         this.setConversationMessages(conv.id, messages)
       }
+      if (scroll === 'latest') this.celebrateUnreadNoodle(conv.id, before)
       if (run !== navigationRun) return
       this.requestConversationScroll(scroll)
     },
@@ -300,9 +344,22 @@ export const useChatStore = defineStore('chat', {
         if (run !== navigationRun) return
         this.setConversationMessages(convId, messages)
       }
+      if (scroll === 'latest') this.celebrateUnreadNoodle(convId, before)
       await window.pantry.markRead(convId)
       if (run !== navigationRun) return
       this.requestConversationScroll(scroll)
+    },
+
+    /** 补播：进入会话或回到窗口时，未读里若有面条消息，补一次巨型面碗。 */
+    celebrateUnreadNoodle(convId: string, unread: number): void {
+      if (unread <= 0 || this.activeConvId !== convId || document.visibilityState !== 'visible') return
+      const msg = unreadNoodleMessage(this.messages[convId], unread)
+      if (!msg || msg.id === lastCelebratedNoodleId) return
+      const now = Date.now()
+      if (now - lastNoodleAt < NOODLE_BURST_COOLDOWN_MS) return
+      lastNoodleAt = now
+      lastCelebratedNoodleId = msg.id
+      this.noodleBurst = { id: msg.id, at: now }
     },
 
     /** 搜索结果跳转：载入目标前后窗口并短暂高亮（ui-design §6） */
@@ -323,7 +380,7 @@ export const useChatStore = defineStore('chat', {
           void window.pantry.markRead(convId)
         }
         unreadPromptTimer = null
-      }, 15000)
+      }, 5000)
     },
 
     acknowledgeUnreadPrompt(): void {

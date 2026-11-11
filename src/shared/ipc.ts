@@ -1003,7 +1003,7 @@ export interface LockVerifyResult {
 }
 
 export interface LockRequestedEvent {
-  reason: 'hidden' | 'minimize' | 'system' | 'manual'
+  reason: 'hidden' | 'minimize' | 'system' | 'manual' | 'blur'
 }
 
 export interface DesktopNudgeEvent {

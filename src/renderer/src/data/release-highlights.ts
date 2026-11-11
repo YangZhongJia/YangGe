@@ -10,6 +10,39 @@ export interface ReleaseHighlights {
  * 主窗按 localStorage 中的 lastSeenVersion 判断是否展示，避免每次启动重复弹出。
  */
 export const RELEASE_HIGHLIGHTS: Record<string, ReleaseHighlights> = {
+  '1.11.6': {
+    version: '1.11.6',
+    notes: [
+      '在别的会话、窗口隐藏或应用重启后才收到 🍜 时，进入该会话会补播一次面碗特效。',
+      '同一条面条消息不会重复播放。'
+    ],
+    fixed: true
+  },
+  '1.11.5': {
+    version: '1.11.5',
+    notes: [
+      '设置 → 通知新增「消息提示音」，可选水滴 / 木鱼 / 叮咚并试听，免打扰会话不响。',
+      '锁屏右上角新增关闭按钮，与标题栏关闭一致，不会绕过锁屏。',
+      '在聊天里发送或收到 🍜 时，当前会话弹出巨型面碗特效。'
+    ],
+    fixed: true
+  },
+  '1.11.4': {
+    version: '1.11.4',
+    notes: [
+      '锁屏新增「切换到其他应用」触发：点击非阳鸽窗口后自动锁定。',
+      '设置窗、图片查看器等阳鸽自己的窗口切换不会误锁。'
+    ],
+    fixed: true
+  },
+  '1.11.3': {
+    version: '1.11.3',
+    notes: [
+      '修复自己发送消息也会触发「收到新消息」提示的问题。',
+      '未读提示在查看聊天、发送消息或点击聊天区后自动收起，未读红点保留到确认读取。'
+    ],
+    fixed: true
+  },
   '1.11.2': {
     version: '1.11.2',
     notes: [

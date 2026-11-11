@@ -30,6 +30,7 @@ import WindowControls from './components/WindowControls.vue'
 import WindowDragStrip from './components/WindowDragStrip.vue'
 import StartupParticle from './components/StartupParticle.vue'
 import LockScreen from './components/LockScreen.vue'
+import NoodleBowlEffect from './components/NoodleBowlEffect.vue'
 import VersionHighlights from './components/VersionHighlights.vue'
 import DuelInviteToast from './components/DuelInviteToast.vue'
 import startupIconUrl from '../../../build/icons/pantry-logo-icon.png?url'
@@ -219,6 +220,14 @@ let stopLockRequested: (() => void) | null = null
 const settingsWindowOpen = ref(false)
 const peersStore = usePeersStore()
 const chatStore = useChatStore()
+const noodleFx = ref<{ play: () => void } | null>(null)
+watch(
+  () => chatStore.noodleBurst,
+  (burst) => {
+    if (!burst) return
+    void nextTick(() => noodleFx.value?.play())
+  }
+)
 let stopSettings: (() => void) | null = null
 let stopSettingsWindowState: (() => void) | null = null
 let stopCabinetOpen: (() => void) | null = null
@@ -938,6 +947,7 @@ onUnmounted(() => {
         @click="blockedTransferPort = null; dismissCaptureFailure()">×</button>
     </div>
   </Transition>
+  <NoodleBowlEffect ref="noodleFx" />
   <LockScreen
     v-if="appLocked && settings"
     :nick="settings.nick"

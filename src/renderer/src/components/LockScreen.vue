@@ -82,6 +82,11 @@ async function submit(): Promise<void> {
   }
 }
 
+function closeApp(): void {
+  // 与标题栏关闭一致：主进程按「关闭进托盘」处理；锁屏期间窗口控制被遮住，这里补回关闭入口。
+  void window.pantry.closeWindow()
+}
+
 function startCooldownClock(): void {
   cooldownTimer = setInterval(() => {
     now.value = Date.now()
@@ -248,6 +253,13 @@ onBeforeUnmount(() => {
     <div class="lock-aurora" aria-hidden="true"></div>
     <div class="lock-vignette" aria-hidden="true"></div>
     <section class="lock-card">
+      <button
+        type="button"
+        class="lock-close"
+        :aria-label="tr('关闭')"
+        :title="tr('关闭')"
+        @click="closeApp"
+      >×</button>
       <div class="lock-brand">
         <img :src="iconUrl" alt="" draggable="false" />
       </div>
@@ -345,6 +357,32 @@ onBeforeUnmount(() => {
   backdrop-filter: blur(14px) saturate(1.15);
   text-align: center;
   animation: lock-card-in 420ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.lock-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: rgba(203, 213, 225, 0.55);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+.lock-close:hover {
+  background: rgba(148, 163, 184, 0.16);
+  color: #eef2ff;
+}
+.lock-close:focus-visible {
+  outline: 2px solid rgba(165, 180, 252, 0.7);
+  outline-offset: 2px;
 }
 .lock-brand {
   width: 58px;

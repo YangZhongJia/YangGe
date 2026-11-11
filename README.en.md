@@ -48,7 +48,25 @@
 
 Start YangGe on computers connected to the same local network and they discover each other automatically. Open a peer to chat, transfer files, manage tasks, or challenge them to a quick duel. No cloud account, central server, telemetry, or Internet access is involved. YangGe is designed for corporate intranets, isolated networks, and laboratories where external connectivity is limited or prohibited.
 
-## Recent updates (v1.11.2)
+## Recent updates (v1.11.6)
+
+- **Noodle effect catch-up**: a 🍜 received while you were in another chat, with the window hidden, or before a restart now plays when you open that conversation; the same message never replays.
+
+**v1.11.5**
+
+- **Message sound**: a new switch in Settings → Notifications with three tones (water drop / wood block / chime) and a preview button; muted chats stay silent.
+- **Lock screen close button**: the top-right corner of the lock screen now closes the window like the title bar (hides to tray by default, never bypasses the lock).
+- **Noodle effect**: sending or receiving 🍜 in the active chat triggers a giant ramen-bowl animation with beef, egg, and naruto toppings.
+
+**v1.11.4**
+
+- **Lock screen**: with lock enabled, switching to another application locks YangGe automatically; opening YangGe's own settings or image viewer does not.
+
+**v1.11.3**
+
+- **Fix**: your own sent messages no longer trigger the unread prompt, and the prompt clears after viewing or sending in the chat.
+
+**v1.11.2**
 
 - **Unread indicators**: conversation avatars show a red count and a "new messages" prompt after returning.
 - **Desktop interaction effects**: paper planes / ink bombs can play inside chat or full-screen on the desktop.
@@ -87,7 +105,7 @@ Moving a file or sending a short message inside an office network should be effo
 - **Built-in screenshot utility** — One-key global shortcut capture; rectangular selection, pencil, arrows, mosaic, and in-place single-line text annotations; includes a magnifier and coordinate/color inspector; compatible with Linux Wayland and X11 environments.
 - **View-only screen assistance** — Request from a private chat; the peer consents and selects a screen each time. An independent viewer provides Auto and 3/5/10 fps modes with immediate stop. Plaintext LAN transport; local loopback and synthetic Electron capture are validated, while physical-screen permissions and target performance remain pending. See [technical boundaries](docs/en/tech-design.md#remote-view).
 - **Local history & full-text search** — Powered by SQLite WAL mode and FTS full-text index; quickly search contacts, groups, and message history globally or filter within a specific chat; supports local backup export and device migration.
-- **Lock screen & what's new** — Optional 6-digit lock screen with a particle veil after launch, minimize, or tray restore; after an update, the first visit summarizes new features and known bug fixes for the current version.
+- **Lock screen & what's new** — Optional 6-digit lock screen with a particle veil after launch, switching to another app, minimize, or tray restore; after an update, the first visit summarizes new features and known bug fixes for the current version.
 - **Bilingual interface switching** — Native support for Simplified Chinese and English; switch instantly across all active windows via Settings → General → Language; fresh installations initialize automatically based on system locale.
 - **LAN security boundary** — Globally appends `--no-proxy-server` at startup to bypass any system or environment proxies; zero external network requests, zero telemetry, and zero remote CDN dependencies; context isolation and Chromium sandboxing enabled in renderers; strict network packet allowlist validation; destination path traversal sanitization; inline chat images bounded to ≤8192px and ≤32 megapixels; strict log sanitization keeping message bodies and file contents out of logs.
 

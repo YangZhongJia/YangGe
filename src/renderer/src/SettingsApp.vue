@@ -31,6 +31,7 @@ import { applyAppearance } from './utils/appearance'
 import { accentPalette, normalizeAccent } from './utils/accents'
 import { formatBytes } from './utils/format'
 import { applyPerformanceProfile } from './utils/performance-profile'
+import { playMessageSound, type MessageSoundTone } from './utils/message-sound'
 import {
   AVATAR_COLORS,
   AVATAR_EMOJIS,
@@ -122,6 +123,8 @@ async function selectSection(next: Section): Promise<void> {
   if (settingsBody.value) settingsBody.value.scrollTop = 0
 }
 const settings = ref<SettingsView | null>(null)
+// 提示音关闭时记住上次音色，重新开启时恢复，而不是跳回默认音色。
+const lastSoundTone = ref<MessageSoundTone>('ding')
 const info = ref<AppInfo | null>(null)
 const lockPin = ref('')
 const lockPinConfirm = ref('')
@@ -283,7 +286,6 @@ const fontScaleOptions = [
   { label: '125%', value: 125 }
 ]
 const soundOptions = computed(() => ([
-  { label: tr('关闭提示音'), value: 'none' },
   { label: tr('水滴'), value: 'drop' },
   { label: tr('木鱼'), value: 'wood' },
   { label: tr('叮咚'), value: 'ding' }
@@ -340,6 +342,7 @@ function syncForm(s: SettingsView): void {
     avatarMode.value = s.avatarHash ? 'custom' : isInitialAvatar(s.avatar) ? 'initial' : 'animal'
   }
   fileDir.value = s.fileDir
+  if (s.sound !== 'none') lastSoundTone.value = s.sound
   udpPortInput.value = String(s.udpPort)
   tcpPortInput.value = String(s.tcpPort)
   captureShortcut.value = s.captureShortcut
@@ -685,10 +688,20 @@ async function changeFontScale(value: string | number | null): Promise<void> {
   if (value === 100 || value === 110 || value === 125) await saveApp({ fontScale: value })
 }
 
+async function toggleMessageSound(value: boolean): Promise<void> {
+  await saveApp({ sound: value ? lastSoundTone.value : 'none' })
+}
+
 async function changeSound(value: string | number | null): Promise<void> {
-  if (value === 'none' || value === 'drop' || value === 'wood' || value === 'ding') {
+  if (value === 'drop' || value === 'wood' || value === 'ding') {
+    lastSoundTone.value = value
     await saveApp({ sound: value })
   }
+}
+
+function previewSound(): void {
+  const current = settings.value?.sound
+  playMessageSound(current && current !== 'none' ? current : lastSoundTone.value, { force: true })
 }
 
 async function changeTheme(value: 'light' | 'dark' | 'auto'): Promise<void> {
@@ -1222,7 +1235,7 @@ async function confirmRemove(cidr: string): Promise<void> {
           <div class="panel">
             <div class="panel-head">
               <h2>{{ tr('锁屏密码') }}</h2>
-              <p>{{ tr('开启后，启动阳鸽、最小化或从托盘恢复时需要输入 6 位数字密码。') }}</p>
+              <p>{{ tr('开启后，启动阳鸽、切换到其他应用窗口、最小化或从托盘恢复时需要输入 6 位数字密码。') }}</p>
             </div>
             <div class="setting-line">
               <div>
@@ -1452,18 +1465,28 @@ async function confirmRemove(cidr: string): Promise<void> {
                 <option v-for="p in onlinePeers" :key="p.nodeId" :value="p.nodeId">{{ p.nick }}</option>
               </select>
             </div>
-            <label class="setting-line">
+            <div class="setting-line">
               <div>
-                <strong>{{ tr('提示音') }}</strong>
-                <small>{{ tr('默认关闭，减少办公环境打扰。') }}</small>
+                <strong>{{ tr('消息提示音') }}</strong>
+                <small>{{ tr('新消息到达时播放提示音；免打扰会话不会响。') }}</small>
               </div>
-              <NSelect
-                class="control-select"
-                :value="settings.sound"
-                :options="soundOptions"
-                @update:value="changeSound"
-              />
-            </label>
+              <NSwitch :value="settings.sound !== 'none'" @update:value="toggleMessageSound" />
+            </div>
+            <div v-if="settings.sound !== 'none'" class="setting-line">
+              <div>
+                <strong>{{ tr('提示音音色') }}</strong>
+                <small>{{ tr('选择后点「试听」确认音量与音色。') }}</small>
+              </div>
+              <div class="sound-controls">
+                <NSelect
+                  class="control-select"
+                  :value="settings.sound"
+                  :options="soundOptions"
+                  @update:value="changeSound"
+                />
+                <NButton secondary @click="previewSound">{{ tr('试听') }}</NButton>
+              </div>
+            </div>
 
           </div>
 
@@ -2261,6 +2284,13 @@ async function confirmRemove(cidr: string): Promise<void> {
 
 .control-select {
   width: 156px;
+  flex: 0 0 auto;
+}
+
+.sound-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   flex: 0 0 auto;
 }
 

@@ -25,7 +25,7 @@ describe('页面缩放主进程接线', () => {
     expect(mainSource).toContain("mainWindow.webContents.on('did-finish-load', syncMainWindowZoom)")
     expect(mainSource).toContain('syncMainWindowZoom()')
     expect(mainSource).toContain('syncSettingsWindowZoom(view.fontScale)')
-    expect(mainSource).toContain('openSettingsWindow(mainWindow, settingsView().fontScale)')
+    expect(mainSource).toContain('openSettingsWindow(mainWindow, settingsView().fontScale, () => {')
   })
 
   it('设置窗口在加载前应用倍率并在重复打开时刷新', () => {

@@ -661,6 +661,10 @@ if (!gotLock) {
   // 锁屏请求是“主进程 → 渲染层”的单向门闩：窗口隐藏/最小化/系统锁屏/手动锁定都会走这里。
   // 截图隐藏主窗只短暂让出画面，不应把用户锁在门外，因此单独抑制一次 hide。
   let suppressLockOnHide = false
+  let blurLockTimer: ReturnType<typeof setTimeout> | null = null
+  let appBlurHookInstalled = false
+  // 设置窗从创建到 ready-to-show 期间主窗会短暂失焦；这段过渡期不锁。
+  let suppressBlurLockUntil = 0
   function requestAppLock(reason: LockRequestedEvent['reason']): boolean {
     if (isQuitting) return false
     const config = appState?.config
@@ -1957,7 +1961,8 @@ if (!gotLock) {
       senderNick,
       groupName,
       hidePreview,
-      silent: appState?.config.sound === 'none'
+      // 声音统一由主窗口按「消息提示音」设置播放，系统通知不再自带声音，避免一条消息响两声。
+      silent: true
     })
     const notification = new Notification({
       ...options,
@@ -2062,9 +2067,51 @@ if (!gotLock) {
       if (!suppressLockOnHide) requestAppLock('hidden')
     })
     mainWindow.on('minimize', () => requestAppLock('minimize'))
+    // 点击其他应用窗口：焦点离开所有阳鸽窗口后立即请求锁屏。
+    // 延迟 180ms 合并“切到同应用设置窗 / 系统文件对话框 / 立刻切回”的短暂失焦。
+    // 设置窗、图片查看器等独立窗口失焦也要走同一判断，否则开着设置窗切走不会锁。
+    const scheduleBlurLock = (source: BrowserWindow): void => {
+      if (isQuitting || suppressLockOnHide || lockScreenActive) return
+      if (blurLockTimer) clearTimeout(blurLockTimer)
+      blurLockTimer = setTimeout(() => {
+        blurLockTimer = null
+        if (isQuitting || lockScreenActive) return
+        if (Date.now() < suppressBlurLockUntil) return
+        if (!mainWindow || mainWindow.isDestroyed() || !mainWindow.isVisible()) return
+        // 设置窗等子窗创建到 ready-to-show 之间会短暂没有焦点，不能误判为切到了别的应用。
+        const childWindows = mainWindow.getChildWindows().filter((child) => !child.isDestroyed())
+        if (childWindows.some((child) => !child.isVisible())) return
+        // 原生模态对话框会禁用其来源窗；设置窗本身是主窗的模态子窗，
+        // 所以主窗被设置窗禁用是正常状态，不能据此跳过锁屏。
+        const hasVisibleChild = childWindows.some((child) => child.isVisible())
+        if (!mainWindow.isEnabled() && !hasVisibleChild) return
+        if (source !== mainWindow && !source.isDestroyed() && !source.isEnabled()) return
+        const focused = BrowserWindow.getFocusedWindow()
+        if (focused && !focused.isDestroyed() && BrowserWindow.getAllWindows().includes(focused)) {
+          return
+        }
+        requestAppLock('blur')
+      }, 180)
+      blurLockTimer.unref?.()
+    }
+    mainWindow.on('blur', () => {
+      if (mainWindow) scheduleBlurLock(mainWindow)
+    })
+    if (!appBlurHookInstalled) {
+      appBlurHookInstalled = true
+      app.on('browser-window-blur', (_event, window) => {
+        if (window !== mainWindow) scheduleBlurLock(window)
+      })
+      // 打开图片查看器、远程画面等阳鸽自己的窗口时也可能短暂失焦，给创建后 1.5s 稳定期。
+      app.on('browser-window-created', () => {
+        suppressBlurLockUntil = Math.max(suppressBlurLockUntil, Date.now() + 1500)
+      })
+    }
     mainWindow.on('focus', () => mainWindow?.flashFrame(false))
     mainWindow.on('closed', () => {
       clearNudgeShake(false)
+      if (blurLockTimer) clearTimeout(blurLockTimer)
+      blurLockTimer = null
       mainWindow = null
     })
 
@@ -3659,7 +3706,10 @@ if (!gotLock) {
   })
 
   ipcMain.handle(IpcChannels.uiOpenSettings, () => {
-    openSettingsWindow(mainWindow, settingsView().fontScale)
+    suppressBlurLockUntil = Date.now() + 10_000
+    openSettingsWindow(mainWindow, settingsView().fontScale, () => {
+      suppressBlurLockUntil = Date.now() + 600
+    })
   })
 
   // 文件柜（决议 #283，形态改为主窗页签见 #284）：把主窗切到文件柜页签，

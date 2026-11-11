@@ -79,7 +79,8 @@ export function syncSettingsWindowZoom(fontScale: SettingsView['fontScale']): vo
 
 export function openSettingsWindow(
   parent: BrowserWindow | null,
-  fontScale: SettingsView['fontScale']
+  fontScale: SettingsView['fontScale'],
+  onShown?: () => void
 ): void {
   const activeParent = parent && !parent.isDestroyed() ? parent : null
   if (win && !win.isDestroyed()) {
@@ -87,6 +88,7 @@ export function openSettingsWindow(
     notifySettingsWindowState(activeParent, true)
     win.show()
     win.focus()
+    onShown?.()
     return
   }
   win = new BrowserWindow({
@@ -121,7 +123,10 @@ export function openSettingsWindow(
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   win.webContents.on('will-navigate', (event) => event.preventDefault())
   notifySettingsWindowState(activeParent, true)
-  win.once('ready-to-show', () => win?.show())
+  win.once('ready-to-show', () => {
+    win?.show()
+    onShown?.()
+  })
   win.on('closed', () => {
     notifySettingsWindowState(activeParent, false)
     win = null

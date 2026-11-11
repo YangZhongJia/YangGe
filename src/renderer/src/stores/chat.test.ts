@@ -18,6 +18,10 @@ function msg(id: string, convId = 'single:node-bob', seq = 1): MessageView {
   }
 }
 
+function incomingMsg(id: string, convId = 'single:node-bob', seq = 1): MessageView {
+  return { ...msg(id, convId, seq), senderId: 'node-bob', isMine: false, status: 'sent' }
+}
+
 function conv(id = 'single:node-bob'): ConversationView {
   return {
     id,
@@ -447,7 +451,7 @@ describe('未读置读需窗口可见且聚焦（决议 #220）', () => {
     await store.init()
     store.activeConvId = 'single:node-bob'
 
-    msgNewHandler?.(msg('in-1'))
+    msgNewHandler?.(incomingMsg('in-1'))
 
     expect(markRead).toHaveBeenCalledWith('single:node-bob')
   })
@@ -460,7 +464,7 @@ describe('未读置读需窗口可见且聚焦（决议 #220）', () => {
     store.convs = [{ ...conv(), unread: 2 }]
     store.setConversationMessages('single:node-bob', [])
     await store.toggleConv('single:node-bob')
-    msgNewHandler?.(msg('hidden-new'))
+    msgNewHandler?.(incomingMsg('hidden-new'))
     focusHandler?.()
     expect(store.activeConv).toBeNull()
     expect(store.messages['single:node-bob']).toHaveLength(1)
@@ -489,7 +493,7 @@ describe('未读置读需窗口可见且聚焦（决议 #220）', () => {
     await store.init()
     store.activeConvId = 'single:node-bob'
 
-    msgNewHandler?.(msg('in-2'))
+    msgNewHandler?.(incomingMsg('in-2'))
 
     expect(markRead).not.toHaveBeenCalled()
   })
@@ -502,7 +506,7 @@ describe('未读置读需窗口可见且聚焦（决议 #220）', () => {
     store.convs = [{ ...conv(), unread: 3 }]
     for (let i = 0; i < 12; i++) store.setConversationMessages(`group:${i}`, [msg(`m${i}`, `group:${i}`)])
     expect(store.messages['group:0']).toBeUndefined()
-    msgNewHandler?.(msg('background', 'group:0'))
+    msgNewHandler?.(incomingMsg('background', 'group:0'))
     expect(store.messages['group:0']).toBeUndefined()
     expect(store.totalUnread).toBe(3)
     expect(markRead).not.toHaveBeenCalled()
@@ -514,9 +518,22 @@ describe('未读置读需窗口可见且聚焦（决议 #220）', () => {
     await store.init()
     store.activeConvId = 'single:node-bob'
 
-    msgNewHandler?.(msg('in-3'))
+    msgNewHandler?.(incomingMsg('in-3'))
 
     expect(markRead).not.toHaveBeenCalled()
+  })
+
+  it('自己发送的消息不新增未读提示，并清除已有提示', async () => {
+    const { markRead } = stubEnv({ visibilityState: 'hidden', focused: false })
+    const store = useChatStore()
+    await store.init()
+    store.activeConvId = 'single:node-bob'
+    store.unreadPrompt = { convId: 'single:node-bob', count: 4 }
+
+    msgNewHandler?.(msg('mine-new'))
+
+    expect(store.unreadPrompt).toBeNull()
+    expect(markRead).toHaveBeenCalledWith('single:node-bob')
   })
 
   it('重新聚焦窗口时提示当前会话攒下的未读，确认后再置读', async () => {

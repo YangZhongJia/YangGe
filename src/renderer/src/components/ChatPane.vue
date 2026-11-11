@@ -843,6 +843,11 @@ async function openGroupMemberChat(peerId: string): Promise<void> {
   await chatStore.openPeer(peerId)
 }
 
+function onChatClick(): void {
+  msgMenu.value = null
+  if (chatStore.unreadPrompt) chatStore.acknowledgeUnreadPrompt()
+}
+
 function openPeerProfile(): void {
   const current = peer.value
   if (!current) return
@@ -2182,7 +2187,7 @@ async function onDrop(event: DragEvent): Promise<void> {
 <template>
   <div
     class="chat"
-    @click="msgMenu = null"
+    @click="onChatClick"
     @dragover="onDragOver"
     @dragleave="onDragLeave"
     @drop="onDrop"
