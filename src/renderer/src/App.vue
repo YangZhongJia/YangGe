@@ -119,6 +119,13 @@ function openSettings(event?: Event): void {
   void window.pantry.openSettings()
 }
 
+// 内嵌掼蛋：独立游戏窗口（第三方静态包 + 本地自定义协议），不占主窗渲染包。
+function openGuandan(event?: Event): void {
+  hideRailHint()
+  releaseRailFocus(event)
+  void window.pantry.openGuandan()
+}
+
 // 文件柜（决议 #283，形态改为主窗页签见 #284）：底部工具组最上一格，切到文件柜页签；
 // 未设共享目录也可点——进去就是引导设置的空态
 function openCabinet(event?: Event): void {
@@ -719,6 +726,43 @@ onUnmounted(() => {
       >
         <RailNavIcon name="agent" />
       </button>
+      <button
+        type="button"
+        class="rail-btn rail-hint rail-game"
+        :class="{ 'show-hint': activeRailHint === 'game' }"
+        :data-label="tr('掼蛋')"
+        :aria-label="tr('掼蛋')"
+        @pointermove="scheduleRailHint('game')"
+        @pointerleave="hideRailHint('game')"
+        @click="openGuandan($event)"
+      >
+        <svg width="21" height="21" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect
+            x="5.4"
+            y="4.2"
+            width="9.2"
+            height="13.4"
+            rx="2.2"
+            transform="rotate(-12 10 10.9)"
+            stroke="currentColor"
+            stroke-width="1.7"
+          />
+          <rect
+            x="9.6"
+            y="6.4"
+            width="9.2"
+            height="13.4"
+            rx="2.2"
+            transform="rotate(9 14.2 13.1)"
+            stroke="currentColor"
+            stroke-width="1.7"
+          />
+          <path
+            d="M14.3 11.1c.7.5 1.3 1.1 1.3 1.8 0 .7-.6 1.2-1.3 1.2s-1.3-.5-1.3-1.2c0-.7.6-1.3 1.3-1.8Z"
+            fill="currentColor"
+          />
+        </svg>
+      </button>
       <div class="spacer"></div>
       <button
         v-if="updateStore.available"
@@ -1210,6 +1254,30 @@ onUnmounted(() => {
   outline-offset: 2px;
   box-shadow: none;
 }
+/* 掼蛋入口：比常规导航按钮更大，但保持与其它导航一致的静默外观 */
+.rail-game {
+  width: 52px;
+  height: 52px;
+  margin: 3px 0;
+  border-radius: 14px;
+  border: none;
+  background: transparent;
+  color: var(--rail-text);
+  box-shadow: none;
+}
+.rail-game:hover {
+  background: var(--rail-hover);
+  color: var(--rail-text);
+}
+.rail-game:focus-visible {
+  outline: 2px solid var(--rail-focus);
+  outline-offset: -2px;
+}
+.rail-game svg {
+  width: 29px;
+  height: 29px;
+}
+
 .rail-hint::after {
   content: attr(data-label);
   position: absolute;

@@ -240,6 +240,7 @@ const english: Record<string, string> = {
   "聊天": "Chats",
   "通讯录": "Contacts",
   "文件柜": "File cabinet",
+  "掼蛋": "Guandan",
   "设置": "Settings",
   "浅色": "Light",
   "深色": "Dark",

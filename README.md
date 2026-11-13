@@ -10,7 +10,7 @@
 
 <p>
   <a href="https://github.com/YangZhongJia/YangGe/releases">
-    <img src="https://img.shields.io/badge/version-1.11.6-3D8B6B?style=flat-square" alt="Version 1.11.6" />
+    <img src="https://img.shields.io/badge/version-1.11.8-3D8B6B?style=flat-square" alt="Version 1.11.8" />
   </a>
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/License-GPL--3.0--only-3D8B6B?style=flat-square" alt="GPL-3.0-only" />
@@ -65,6 +65,18 @@
 干脆自己写一个：免费开源、纯内网直连、从 Windows 7 到国产统信 UOS 再到 macOS 全平台覆盖、打开就会用。这就是阳鸽。
 
 ## 最近更新
+
+**v1.11.8**
+
+- **掼蛋修复**：补回内置背景资源（宣纸/远山/竹影/江波/梅枝），修复黑色花色不可见与新手指南低对比度。
+- **联机牌桌**：座位显示同事的阳鸽头像与昵称（预设动物/首字/自定义头像），顶栏与座位布局收紧。
+- **内网更新**：版本递增，1.11.7 及更早客户端会重新出现更新入口。
+
+**v1.11.7**
+
+- **掼蛋联机**：左侧导航新增「掼蛋」入口，可内网开房间、4 人两两组队；房主端保存「掼蛋王」排行榜。
+- **积分规则**：每人初始 1000 分；双下（1+2）赢家 +40 / 输家 −20，1+3 赢家 +30 / 输家 −15，1+4 赢家 +20 / 输家 −10，最低 0 分。
+- **界面重做**：暖白纸感背景 + 茶青强调，去掉深色金光、全屏光晕与雷达扫描动画。
 
 **v1.11.6**
 

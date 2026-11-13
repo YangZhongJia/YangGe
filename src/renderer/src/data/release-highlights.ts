@@ -10,6 +10,24 @@ export interface ReleaseHighlights {
  * 主窗按 localStorage 中的 lastSeenVersion 判断是否展示，避免每次启动重复弹出。
  */
 export const RELEASE_HIGHLIGHTS: Record<string, ReleaseHighlights> = {
+  '1.11.8': {
+    version: '1.11.8',
+    notes: [
+      '掼蛋补回内置背景资源，修复黑色花色与教程文字看不清的问题。',
+      '联机牌桌显示同事的阳鸽头像和昵称，顶栏与座位布局更紧凑。',
+      '版本递增，1.11.7 及更早客户端会重新出现内网更新入口。'
+    ],
+    fixed: true
+  },
+  '1.11.7': {
+    version: '1.11.7',
+    notes: [
+      '左侧导航新增「掼蛋」：内网开房间，4 人两两组队。',
+      '每人初始 1000 分，按名次加减积分，房主端保存掼蛋王排行榜。',
+      '游戏界面改为暖白纸感与茶青强调，去掉深色金光和全屏光晕。'
+    ],
+    fixed: true
+  },
   '1.11.6': {
     version: '1.11.6',
     notes: [

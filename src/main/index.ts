@@ -151,6 +151,8 @@ import {
 import { refreshTrayLanguage, setupTray, stopTrayUnreadFlash, updateTrayUnread } from './windows/tray'
 import { WindowDragController } from './windows/window-drag'
 import { syncSettingsWindowLanguage, openSettingsWindow, syncSettingsWindowZoom, getSettingsWindow } from './windows/settings-window'
+import { guandanRoot, openGuandanWindow, registerGuandanProtocol, type GuandanContext } from './windows/guandan-window'
+import { GUANDAN_PORT, startGuandanServer, stopGuandanServer } from './games/guandan-server-process'
 import {
   closeCaptureWindow,
   openCaptureWindow,
@@ -253,7 +255,9 @@ if (WAYLAND_SESSION) {
 // 受管头像使用固定 authority + 哈希路径；提前登记为标准安全 scheme，确保 Chrome 108
 // 在 Windows / Linux / macOS 上按同一规则解析后再交给受限文件协议处理器。
 protocol.registerSchemesAsPrivileged([
-  { scheme: 'pantry-avatar', privileges: { standard: true, secure: true } }
+  { scheme: 'pantry-avatar', privileges: { standard: true, secure: true } },
+  // 内嵌掼蛋静态包：标准协议 + 安全上下文，模块 Worker 与相对路径才能正常工作。
+  { scheme: 'yangge-game', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }
 ])
 
 // 纯内网 IP 工具：全局禁用代理、强制直连（决议 #78）。不走系统/环境代理，
@@ -924,6 +928,29 @@ if (!gotLock) {
 
   function peerViews(): PeerView[] {
     return registry ? registry.list().map(toPeerView) : []
+  }
+
+  /** 掼蛋联机大厅的上下文：本机昵称/地址/端口 + 在线同事，开局前一次性注入游戏窗口。 */
+  function guandanContext(): GuandanContext {
+    const peers = registry
+      ? registry.values()
+        .filter((record) => record.online && record.profile.nodeId !== appState?.nodeId)
+        .slice(0, 30)
+        .map((record) => ({
+          nick: resolvePeerDisplayName(record.profile.nodeId) || record.profile.nick,
+          ip: record.ip,
+          avatar: record.profile.avatar,
+          avatarHash: record.profile.avatarHash ?? ''
+        }))
+      : []
+    return {
+      nick: appState?.profile.nick ?? '',
+      avatar: appState?.profile.avatar ?? -1,
+      avatarHash: appState?.profile.avatarHash ?? '',
+      ip: currentLocalIpv4(),
+      port: GUANDAN_PORT,
+      peers
+    }
   }
 
   /** 局域网自更新（决议 #166）：在线节点里同平台、更高版本、可作源的最佳更新来源，无则 null。 */
@@ -3712,6 +3739,10 @@ if (!gotLock) {
     })
   })
 
+  ipcMain.handle(IpcChannels.gameOpenGuandan, () => {
+    openGuandanWindow(mainWindow, guandanContext())
+  })
+
   // 文件柜（决议 #283，形态改为主窗页签见 #284）：把主窗切到文件柜页签，
   // 带 peerId 时直接定位到该同事的柜子。设置窗与托盘等非主窗调用方都走这里。
   ipcMain.handle(IpcChannels.uiOpenCabinet, (_event, peerId: unknown) => {
@@ -4138,6 +4169,13 @@ if (!gotLock) {
   app.whenReady().then(async () => {
     remoteView.start()
     void imagePreview.prune()
+    registerGuandanProtocol(guandanRoot(app.getAppPath(), process.resourcesPath, app.isPackaged))
+    startGuandanServer({
+      scriptPath: app.isPackaged
+        ? join(process.resourcesPath, 'guandan-server', 'server.cjs')
+        : join(app.getAppPath(), 'build', 'guandan-server', 'server.cjs'),
+      scoresPath: join(app.getPath('userData'), 'data', 'guandan-scores.json')
+    })
     const updateCaps = canAdvertiseUpdateSource() ? [CAPS.updateSource] : []
     appState = loadAppState(app.getPath('userData'), app.getVersion(), tcpPort, udpPort, [
       DISCOVERY_PROBE_CAP,
@@ -4263,6 +4301,7 @@ if (!gotLock) {
   app.on('activate', () => showMainWindow()) // macOS 点 Dock 唤起
 
   app.on('will-quit', () => {
+    stopGuandanServer()
     globalShortcut.unregisterAll()
     duel?.dispose()
   })

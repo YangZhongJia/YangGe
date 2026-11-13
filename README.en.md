@@ -48,7 +48,19 @@
 
 Start YangGe on computers connected to the same local network and they discover each other automatically. Open a peer to chat, transfer files, manage tasks, or challenge them to a quick duel. No cloud account, central server, telemetry, or Internet access is involved. YangGe is designed for corporate intranets, isolated networks, and laboratories where external connectivity is limited or prohibited.
 
-## Recent updates (v1.11.6)
+## Recent updates (v1.11.8)
+
+- **Guandan fixes**: bundled background artwork restored, black suits visible again, and tutorial contrast fixed.
+- **LAN table**: seats show each colleague's YangGe avatar and nickname; tighter top bar and seat layout.
+- **LAN update**: version bumped so 1.11.7 and older clients see the update entry again.
+
+**v1.11.7**
+
+- **Guandan rooms**: a new Guandan entry in the left rail; open a LAN room and play 4-player partnership Guandan. The host keeps a "Guandan King" leaderboard.
+- **Scoring**: everyone starts at 1000. Double-down (1st+2nd) +40/−20, 1st+3rd +30/−15, 1st+4th +20/−10, floor 0.
+- **Calmer UI**: warm paper background with tea-green accents; dark-gold glows and radar animations removed.
+
+**v1.11.6**
 
 - **Noodle effect catch-up**: a 🍜 received while you were in another chat, with the window hidden, or before a restart now plays when you open that conversation; the same message never replays.
 

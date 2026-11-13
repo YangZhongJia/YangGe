@@ -118,6 +118,8 @@ export const IpcChannels = {
   peersCleanupCandidates: 'peers:cleanup-candidates',
   peersCleanup: 'peers:cleanup',
   uiOpenSettings: 'ui:open-settings',
+  /** 内嵌掼蛋游戏窗口 */
+  gameOpenGuandan: 'game:open-guandan',
   /** 文件柜独立窗口（决议 #283）：懒创建 / 聚焦，可带 peerId 直接定位到某位同事 */
   uiOpenCabinet: 'ui:open-cabinet',
   groupCreate: 'group:create',
@@ -1621,6 +1623,8 @@ export interface PantryApi {
   setPeerRemark(nodeId: string, remark: string): Promise<void>
   /** 打开设置窗口 */
   openSettings(): Promise<void>
+  /** 打开内嵌掼蛋游戏窗口 */
+  openGuandan(): Promise<void>
   /** 打开文件柜窗口（决议 #283）；带 peerId 时直接定位到该同事的柜子 */
   openCabinet(peerId?: string): Promise<void>
   /** 建讨论组（自动含自己，≥2 人）；adminPassword/adminHint 可空；返回 null 表示参数不足 */

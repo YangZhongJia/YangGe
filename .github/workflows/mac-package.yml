@@ -1,0 +1,72 @@
+name: macOS 安装包
+
+on:
+  push:
+    branches:
+      - mac-1.11.8
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CI: "true"
+  NO_UPDATE_NOTIFIER: "1"
+  ELECTRON_MIRROR: "https://github.com/electron/electron/releases/download/"
+  ELECTRON_BUILDER_BINARIES_MIRROR: "https://github.com/electron-userland/electron-builder-binaries/releases/download/"
+  ELECTRON_CACHE: ${{ github.workspace }}/.cache/electron
+  electron_config_cache: ${{ github.workspace }}/.cache/electron
+  ELECTRON_BUILDER_CACHE: ${{ github.workspace }}/.cache/electron-builder
+
+jobs:
+  mac:
+    name: macOS arm64 + x64
+    runs-on: macos-14
+    steps:
+      - name: 拉取源码
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: npm
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 构建渲染层与主进程
+        run: npm run build
+
+      - name: 构建 macOS DMG / ZIP
+        run: npx electron-builder --mac --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - name: 校验产物
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd release
+          ls -lh YangGe-*-mac-*.dmg YangGe-*-mac-*.zip
+          shasum -a 256 YangGe-*-mac-*.dmg YangGe-*-mac-*.zip > SHA256SUMS-mac.txt
+
+      - name: 发布到 GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.11.8-mac
+          name: 阳鸽 1.11.8 macOS 安装包
+          prerelease: true
+          body: |
+            阳鸽 1.11.8 macOS 安装包（未签名）。
+            - Apple Silicon：YangGe-1.11.8-mac-arm64.dmg
+            - Intel：YangGe-1.11.8-mac-x64.dmg
+            首次打开如提示无法验证开发者，请右键 App → 打开；或执行 `xattr -cr /Applications/阳鸽.app`。
+          files: |
+            release/YangGe-*-mac-arm64.dmg
+            release/YangGe-*-mac-x64.dmg
+            release/YangGe-*-mac-arm64.zip
+            release/YangGe-*-mac-x64.zip
+            release/SHA256SUMS-mac.txt

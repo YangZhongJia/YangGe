@@ -1,7 +1,7 @@
 {
   "name": "yangge",
   "productName": "阳鸽",
-  "version": "1.11.6",
+  "version": "1.11.8",
   "description": "阳鸽（YangGe）—— 纯内网、基于 IP 的局域网即时通讯与文件传输工具（衍生自开源项目 Teahouse，GPL-3.0）",
   "license": "GPL-3.0-only",
   "private": true,
@@ -39,7 +39,7 @@
     "test:work-task-repo": "esbuild src/main/store/work-task-repo-selftest.ts --bundle --platform=node --target=node16 --external:better-sqlite3 --outfile=out/work-task-repo-selftest.cjs --log-level=warning && cross-env ELECTRON_RUN_AS_NODE=1 electron out/work-task-repo-selftest.cjs",
     "test:work-task-sharing": "esbuild src/main/store/work-task-sharing-selftest.ts --bundle --platform=node --target=node16 --external:better-sqlite3 --outfile=out/work-task-sharing-selftest.cjs --log-level=warning && cross-env ELECTRON_RUN_AS_NODE=1 electron out/work-task-sharing-selftest.cjs",
     "smoke": "npm run build && cross-env PANTRY_SMOKE=1 electron .",
-    "dist:win": "npm run build && cross-env NO_UPDATE_NOTIFIER=1 electron-builder --win --x64 --publish never"
+    "dist:win": "node scripts/check-release-version.mjs && npm run build && cross-env NO_UPDATE_NOTIFIER=1 electron-builder --win --x64 --publish never"
   },
   "build": {
     "appId": "com.yangge.app",
@@ -89,6 +89,14 @@
       {
         "from": "build/licenses/navigation-icons.txt",
         "to": "licenses/navigation-icons.txt"
+      },
+      {
+        "from": "build/guandan",
+        "to": "guandan"
+      },
+      {
+        "from": "build/guandan-server",
+        "to": "guandan-server"
       }
     ],
     "mac": {

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f7f4eb"/><stop offset="0.62" stop-color="#eef0e8"/><stop offset="1" stop-color="#e3e7dd"/></linearGradient>
+    <linearGradient id="far" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c3d0c5" stop-opacity="0.55"/><stop offset="1" stop-color="#c3d0c5" stop-opacity="0.08"/></linearGradient>
+    <linearGradient id="mid" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9fb5a6" stop-opacity="0.62"/><stop offset="1" stop-color="#9fb5a6" stop-opacity="0.05"/></linearGradient>
+    <linearGradient id="near" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7f9c8a" stop-opacity="0.55"/><stop offset="1" stop-color="#7f9c8a" stop-opacity="0"/></linearGradient>
+  </defs>
+  <rect width="1600" height="900" fill="url(#sky)"/>
+  <path fill="url(#far)" d="M0 520c120-40 190-120 280-110 70 8 96 62 170 58 96-6 130-92 238-84 86 6 120 74 220 70 110-4 170-70 260-56 92 14 142 82 232 76 80-6 130-54 200-34v280H0Z"/>
+  <path fill="url(#mid)" d="M0 620c120-16 190-112 300-100 86 10 120 96 230 92 104-4 150-108 268-100 96 6 140 88 250 84 106-4 160-74 270-58 74 10 120 38 182 30v208H0Z"/>
+  <path fill="url(#near)" d="M0 716c140-8 210-62 330-56 100 6 160 64 278 58 112-6 186-64 306-52 98 10 154 48 262 40 90-6 150-30 224-18v150H0Z"/>
+  <g fill="#6f8b78" opacity="0.28"><path d="M1180 196c12-22 28-22 40 0 10-16 22-16 34 2-24 10-52 10-74-2Z"/><path d="M1268 240c10-18 22-18 32 0 8-12 18-12 28 2-20 8-44 8-60-2Z"/></g>
+</svg>

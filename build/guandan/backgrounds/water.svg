@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="w" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f7f4ea"/><stop offset="0.6" stop-color="#edf1ee"/><stop offset="1" stop-color="#dfe7e2"/></linearGradient>
+    <linearGradient id="wave" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#9db5ab" stop-opacity="0"/><stop offset="0.5" stop-color="#9db5ab" stop-opacity="0.55"/><stop offset="1" stop-color="#9db5ab" stop-opacity="0"/></linearGradient>
+  </defs>
+  <rect width="1600" height="900" fill="url(#w)"/>
+  <g stroke="url(#wave)" fill="none" stroke-width="2">
+    <path d="M-40 470c120-18 220 18 340 2s220-26 340-6 220 30 340 10 220-26 340-4"/>
+    <path d="M-60 540c140-22 240 20 380 4s240-30 360-8 240 32 380 10 220-28 360-6"/>
+    <path d="M-30 620c120-20 230 18 350 2s230-28 350-6 230 30 350 8 230-26 350-4"/>
+    <path d="M-50 700c140-24 250 20 390 4s250-30 370-8 250 32 390 8 210-26 350-4"/>
+  </g>
+</svg>
