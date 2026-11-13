@@ -45,13 +45,21 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
-      - name: 为 Intel 重建 better-sqlite3
-        run: node node_modules/@electron/rebuild/lib/cli.js -f -o better-sqlite3 --arch x64
-
-      - name: 构建 macOS x64 DMG / ZIP
-        run: npx electron-builder --mac --x64 --publish never
+      - name: 在独立 worktree 构建 Intel x64（原生模块隔离）
+        shell: bash
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: |
+          set -euo pipefail
+          git worktree add ../x64 HEAD
+          cd ../x64
+          npm ci
+          npm run build
+          node node_modules/@electron/rebuild/lib/cli.js -f -o better-sqlite3 --arch x64
+          npx electron-builder --mac --x64 --publish never
+          shopt -s nullglob
+          files=(release/YangGe-*-mac-x64.dmg release/YangGe-*-mac-x64.zip)
+          cp "${files[@]}" "$GITHUB_WORKSPACE/release/"
 
       - name: 校验产物
         shell: bash
