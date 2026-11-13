@@ -21,7 +21,7 @@ env:
 jobs:
   mac:
     name: macOS arm64 + x64
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - name: 拉取源码
         uses: actions/checkout@v4
