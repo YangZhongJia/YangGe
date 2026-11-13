@@ -40,8 +40,16 @@ jobs:
       - name: 构建渲染层与主进程
         run: npm run build
 
-      - name: 构建 macOS DMG / ZIP
-        run: npx electron-builder --mac --publish never
+      - name: 构建 macOS arm64 DMG / ZIP
+        run: npx electron-builder --mac --arm64 --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - name: 为 Intel 重建 better-sqlite3
+        run: node node_modules/@electron/rebuild/lib/cli.js -f -o better-sqlite3 --arch x64
+
+      - name: 构建 macOS x64 DMG / ZIP
+        run: npx electron-builder --mac --x64 --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
@@ -59,6 +67,7 @@ jobs:
           tag_name: v1.11.8-mac
           name: 阳鸽 1.11.8 macOS 安装包
           prerelease: true
+          overwrite_files: true
           body: |
             阳鸽 1.11.8 macOS 安装包（未签名）。
             - Apple Silicon：YangGe-1.11.8-mac-arm64.dmg
