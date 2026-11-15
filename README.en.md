@@ -6,14 +6,14 @@
 
 <h1>阳鸽 &nbsp;·&nbsp; YangGe</h1>
 
-<p><b>Chat and transfer files across a LAN, with no Internet connection or server (original Iris indigo UI)</b></p>
+<p><b>Chat, transfer files, and play local games across a LAN — no Internet connection or server required</b></p>
 
 > **Fork notice**: YangGe is a secondary-development fork of the open-source [Teahouse](https://github.com/skyjt/teahouse) project (GPL-3.0-only).
 > It goes far beyond a rebrand: rebuilt brand & UI, new features (AI avatar, clipboard send, typing indicator, AI group summary, task center, two-player arena, playful avatar interactions), one-click LAN self-update, multi-platform packaging with CI auto-release — see the [fork content](#fork-contentwhat-yangge-changes-upstream) for the full list. Thanks to the upstream authors.
 
 <p>
-  <a href="https://github.com/YangZhongJia/YangGe/releases/latest">
-    <img src="https://img.shields.io/github/v/release/skyjt/teahouse?style=flat-square&label=latest&color=3D8B6B&logo=github&logoColor=white" alt="Latest release" />
+  <a href="https://github.com/YangZhongJia/YangGe/releases">
+    <img src="https://img.shields.io/badge/version-1.11.10-3D8B6B?style=flat-square" alt="Version 1.11.10" />
   </a>
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/License-GPL--3.0--only-3D8B6B?style=flat-square" alt="GPL-3.0-only" />
@@ -28,6 +28,8 @@
   <a href="#why-yangge">Why YangGe</a>
   &nbsp;·&nbsp;
   <a href="#features">Features</a>
+  &nbsp;·&nbsp;
+  <a href="#game-center">Game center</a>
   &nbsp;·&nbsp;
   <a href="#platform-support">Platforms</a>
   &nbsp;·&nbsp;
@@ -46,7 +48,9 @@
 
 ---
 
-Start YangGe on computers connected to the same local network and they discover each other automatically. Open a peer to chat, transfer files, manage tasks, or challenge them to a quick duel. No cloud account, central server, telemetry, or Internet access is involved. YangGe is designed for corporate intranets, isolated networks, and laboratories where external connectivity is limited or prohibited.
+Start YangGe on computers connected to the same local network and they discover each other automatically. Open a peer to chat, transfer files, browse shared folders, or challenge them to a quick duel. No cloud account, central server, telemetry, or Internet access is involved. YangGe is designed for corporate intranets, isolated networks, and laboratories where external connectivity is limited or prohibited.
+
+> **1.11.10 status**: The Task center and local Agent entries are temporarily hidden; their implementation and data remain. The lock screen is now a minimal morning design, and the game center includes local Mahjong.
 
 ## Recent updates (v1.11.10)
 
@@ -66,6 +70,9 @@ Start YangGe on computers connected to the same local network and they discover 
 - **Guandan fixes**: bundled background artwork restored, black suits visible again, and tutorial contrast fixed.
 - **LAN table**: seats show each colleague's YangGe avatar and nickname; tighter top bar and seat layout.
 - **LAN update**: version bumped so 1.11.7 and older clients see the update entry again.
+
+<details>
+<summary>Earlier releases (v1.11.7 and before)</summary>
 
 **v1.11.7**
 
@@ -110,6 +117,8 @@ Start YangGe on computers connected to the same local network and they discover 
 - **Paper plane / ink bomb**: right-click a contact's avatar to send a playful animation. Unlimited, never shakes the window, and can be disabled in Settings.
 - **Agent improvements**: refresh the Windows PATH before scanning, cover more harness install locations, and allow slower ACP cold starts.
 
+</details>
+
 ## Why YangGe
 
 Moving a file or sending a short message inside an office network should be effortless. Existing tools often miss at least one requirement: commercial solutions require licensing fees, Neiwangtong provides only Windows binaries without support for domestic UOS or macOS, and iptux presents a steeper learning curve for regular office users. YangGe aims for an open-source, serverless, zero-configuration experience across Windows 7, domestic UOS deployments, Linux, and macOS.
@@ -119,7 +128,7 @@ Moving a file or sending a short message inside an office network should be effo
 - **Zero-configuration peer discovery** — UDP broadcast discovers online peers on the same subnet automatically. Peers communicate directly without deploying a central server or manually configuring IP addresses.
 - **Cross-subnet communication & LAN self-updates** — Supports manual peer IP addition and CIDR subnet scanning; saved scan ranges are shared among online peers at a low rate; provides a global subnet scan trigger with real-time progress; supports P2P package requests for LAN-based self-updating. Installers self-retain their package (the first upgraded machine becomes the update source), and after pulling a package one click installs silently and restarts.
 - **Messaging & group collaboration** — Direct chats and multi-user discussion groups; text, local images, pasted screenshots, Twemoji SVG graphics, and custom sticker collections; delivery acknowledgments, offline queuing with automatic retry upon reconnection, 2-minute message recall, message forwarding, quote replies with jump-to-source navigation, and @ mentions in groups; synchronized group descriptions (≤200 characters) and announcements (≤1024 characters); window nudge alerts.
-- **Task center** — Organize tasks by project with start and due dates, automatic deadline groups, due-today and overdue reminders, unread badges, and read-only LAN task sharing with offline delivery and revocation.
+- **Task center (entry temporarily hidden in 1.11.10)** — Organize tasks by project with start and due dates, automatic deadline groups, due-today and overdue reminders, unread badges, and read-only LAN task sharing with offline delivery and revocation.
 - **Paper plane / ink bomb** — Right-click a contact avatar to throw a looping paper plane or an indigo ink bomb. Purely visual, unlimited, and respectful of focus and reduced-motion settings.
 - **Two-player duel arena** — Invite a peer from the PK menu; each side has 100 HP and privately picks attack, guard, or a goofy skill in 10-second rounds. Six rounds, KO or remaining-HP scoring, with results saved to chat.
 - **High-speed P2P file transfers** — Direct TCP peer-to-peer transfers maximize LAN physical bandwidth; supports single files, multi-file selections, and full directory trees; resume interrupted transfers and review comprehensive transfer history; 24-hour expiration window closes outdated transfers automatically.
@@ -130,9 +139,15 @@ Moving a file or sending a short message inside an office network should be effo
 - **Built-in screenshot utility** — One-key global shortcut capture; rectangular selection, pencil, arrows, mosaic, and in-place single-line text annotations; includes a magnifier and coordinate/color inspector; compatible with Linux Wayland and X11 environments.
 - **View-only screen assistance** — Request from a private chat; the peer consents and selects a screen each time. An independent viewer provides Auto and 3/5/10 fps modes with immediate stop. Plaintext LAN transport; local loopback and synthetic Electron capture are validated, while physical-screen permissions and target performance remain pending. See [technical boundaries](docs/en/tech-design.md#remote-view).
 - **Local history & full-text search** — Powered by SQLite WAL mode and FTS full-text index; quickly search contacts, groups, and message history globally or filter within a specific chat; supports local backup export and device migration.
-- **Lock screen & what's new** — Optional 6-digit lock screen with a particle veil after launch, switching to another app, minimize, or tray restore; after an update, the first visit summarizes new features and known bug fixes for the current version.
+- **Lock screen & what's new** — Optional 6-digit lock screen with a minimal morning background; a dove follows the active PIN slot and returns to the icon after six digits; the PIN is stored only as a salted hash. After an update, the first visit summarizes new features and known bug fixes for the current version.
 - **Bilingual interface switching** — Native support for Simplified Chinese and English; switch instantly across all active windows via Settings → General → Language; fresh installations initialize automatically based on system locale.
 - **LAN security boundary** — Globally appends `--no-proxy-server` at startup to bypass any system or environment proxies; zero external network requests, zero telemetry, and zero remote CDN dependencies; context isolation and Chromium sandboxing enabled in renderers; strict network packet allowlist validation; destination path traversal sanitization; inline chat images bounded to ≤8192px and ≤32 megapixels; strict log sanitization keeping message bodies and file contents out of logs.
+
+## Game center
+
+- The gamepad entry in the left rail opens a center for Guandan and Mahjong.
+- **Guandan**: four-player partnership play over the LAN; the host keeps the leaderboard.
+- **Mahjong**: four-player Chinese Mahjong against three local AI opponents, with chi/peng/gang/hu, fan scoring, and a four-wind match. All assets ship with the app; no Internet access.
 
 ## Fork content (what YangGe changes upstream)
 
@@ -193,6 +208,8 @@ Packages are built from this repository via `npm run dist:win` and placed under 
 6. Allow the application through the operating-system firewall when prompted. Default ports are UDP `17878` and TCP `17879`.
 
 ## Local agent coding collaboration
+
+> The Agent entry is temporarily hidden in 1.11.10; scanning, sessions, and team-task implementation remain in the codebase.
 
 The Agent page scans the local PATH and common installation directories, and can also register a manually selected ACP executable. The first time it opens with no stored scan result, it scans automatically. On Windows every scan re-reads the user and machine PATH from the registry, so a CLI installed or upgraded after YangGe started is found without restarting the app; handshakes run with a fixed concurrency cap (two at a time) so slower machines are not misreported as failing when every candidate cold-starts at once. Base CLIs and connectable ACP agents are shown separately: when Codex CLI, Claude Code, Pi, OpenCode, Gemini CLI, GitHub Copilot, or another local CLI is installed without its ACP adapter, YangGe shows the required command instead of treating the plain CLI as connectable. Only implementations that complete the ACP handshake can create sessions. A failed probe reports the executable name and error; CLIs installed in a custom directory can still be added with “Add ACP executable…”. YangGe never installs, signs in to, or downloads an agent automatically.
 
