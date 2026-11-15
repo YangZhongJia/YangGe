@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>自动麻将桌 3D</title>
+<style>
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: #241a10;
+  font-family: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', system-ui, sans-serif;
+  overflow: hidden;
+  -webkit-user-select: none; user-select: none;
+}
+#c3d { position: fixed; inset: 0; display: block; cursor: default; }
+#c3d.walk { cursor: none; }
+
+/* ============ HUD ============ */
+#hud { position: fixed; inset: 0; z-index: 10; pointer-events: none; font-size: 15px; }
+#hud > * { pointer-events: auto; }
+
+.plate {
+  position: absolute; display: flex; align-items: center; gap: 9px;
+  background: rgba(24,18,10,.78); color: #f0e6d2;
+  border: 1px solid rgba(220,180,110,.35); border-radius: 12px;
+  padding: 7px 12px; backdrop-filter: blur(3px);
+  transition: box-shadow .3s, border-color .3s;
+}
+.plate.active { border-color: rgba(120,255,160,.8); box-shadow: 0 0 14px rgba(90,235,140,.5); }
+.plate .pname { font-weight: 600; letter-spacing: .5px; }
+.plate .pwind {
+  font-family: 'Kaiti SC','STKaiti','KaiTi',serif; font-weight: 700;
+  width: 26px; height: 26px; border-radius: 6px; display: grid; place-items: center;
+  background: #274a2e; color: #ffe9b0; font-size: 17px;
+}
+.plate .pwind.dealer { background: #8e2418; box-shadow: 0 0 8px rgba(255,90,60,.6); }
+.plate .pscore { font-variant-numeric: tabular-nums; color: #ffd98a; font-weight: 700; }
+#plate0 { left: 24px; bottom: 24px; }
+#plate1 { right: 24px; top: 44%; }
+#plate2 { left: 50%; transform: translateX(-50%); top: 66px; }
+#plate3 { left: 24px; top: 44%; }
+
+#roundLabel {
+  position: absolute; top: 18px; left: 50%; transform: translateX(-50%);
+  color: #fdf4dd; font-family: 'Kaiti SC','STKaiti','KaiTi',serif;
+  font-size: 24px; letter-spacing: 6px;
+  text-shadow: 0 2px 8px rgba(0,0,0,.65);
+}
+
+#msg {
+  position: absolute; left: 50%; top: 24%; transform: translateX(-50%);
+  pointer-events: none;
+  background: rgba(20,14,8,.82); color: #ffe9c0; border-radius: 999px;
+  padding: 9px 22px; font-size: 17px; letter-spacing: 1px;
+  border: 1px solid rgba(230,190,120,.3);
+  opacity: 0; transition: opacity .25s; white-space: nowrap;
+}
+#msg.show { opacity: 1; }
+
+#modeHint {
+  position: absolute; bottom: 24px; right: 24px;
+  color: #d8c8a8; font-size: 13px; letter-spacing: .5px;
+  background: rgba(24,18,10,.6); border-radius: 10px; padding: 8px 14px;
+  border: 1px solid rgba(220,180,110,.22);
+}
+#modeHint b { color: #ffd98a; font-weight: 700; }
+
+#crosshair {
+  position: absolute; left: 50%; top: 50%; width: 14px; height: 14px;
+  transform: translate(-50%, -50%); display: none; pointer-events: none;
+}
+#crosshair::before, #crosshair::after {
+  content: ''; position: absolute; background: rgba(255,240,210,.9);
+  box-shadow: 0 0 4px rgba(0,0,0,.8);
+}
+#crosshair::before { left: 6px; top: 0; width: 2px; height: 14px; }
+#crosshair::after { left: 0; top: 6px; width: 14px; height: 2px; }
+body.walkmode #crosshair { display: block; }
+
+.shout {
+  position: absolute; z-index: 30; pointer-events: none;
+  font-family: 'Kaiti SC','STKaiti','KaiTi',serif; font-weight: 700;
+  font-size: 58px; color: #fff2d0;
+  text-shadow: 0 0 6px #a3341f, 0 0 18px #c8502c, 0 3px 10px rgba(0,0,0,.6);
+  animation: shoutPop 1.1s cubic-bezier(.2,1.6,.4,1) forwards;
+}
+@keyframes shoutPop {
+  0% { transform: scale(.2); opacity: 0; }
+  18% { transform: scale(1.25); opacity: 1; }
+  30% { transform: scale(1); }
+  75% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(1.05) translateY(-14px); opacity: 0; }
+}
+
+#actions {
+  position: absolute; left: 50%; transform: translateX(-50%); bottom: 190px;
+  display: flex; gap: 14px; align-items: center;
+}
+.abtn {
+  min-width: 74px; height: 74px; border-radius: 50%; border: none; cursor: pointer;
+  font-family: 'Kaiti SC','STKaiti','KaiTi',serif; font-size: 30px; font-weight: 700;
+  color: #fff6dd; position: relative;
+  background: radial-gradient(circle at 36% 28%, #d8683c, #a5321c 60%, #77200f);
+  box-shadow: 0 5px 14px rgba(0,0,0,.55), inset 0 2px 3px rgba(255,255,255,.4), inset 0 -4px 8px rgba(0,0,0,.35);
+  transition: transform .12s;
+}
+.abtn:hover { transform: translateY(-3px) scale(1.05); }
+.abtn:active { transform: scale(.95); }
+.abtn small { display: block; font-family: system-ui, sans-serif; font-size: 10px; font-weight: 600; letter-spacing: 1px; margin-top: -2px; opacity: .85; }
+.abtn.hu { background: radial-gradient(circle at 36% 28%, #ffd166, #d9930f 60%, #9a6206); color: #5c2c00; }
+.abtn.pass { background: radial-gradient(circle at 36% 28%, #6b7570, #3d4642 60%, #262c29); font-size: 24px; }
+
+#chiPick {
+  position: absolute; left: 50%; transform: translateX(-50%); bottom: 286px;
+  display: flex; gap: 12px;
+}
+.chiOpt {
+  display: flex; gap: 3px; padding: 8px; border-radius: 10px; cursor: pointer;
+  background: rgba(24,18,10,.85); border: 2px solid rgba(230,190,120,.45);
+  transition: border-color .15s, transform .15s;
+}
+.chiOpt:hover { border-color: #ffd98a; transform: translateY(-3px); }
+
+.chip {
+  width: 40px; height: 56px; border-radius: 5px; flex: none;
+  background: linear-gradient(160deg, #fdf9ee, #ecdfc0);
+  box-shadow: inset 0 -3px 0 #96ad83, inset 0 0 3px rgba(120,90,40,.3), 0 2px 4px rgba(0,0,0,.4);
+  padding: 3px 4px 6px;
+}
+.chip svg { width: 100%; height: 100%; display: block; }
+.chip.win { outline: 3px solid #ffd166; outline-offset: 1px; }
+.chip.small { width: 30px; height: 42px; }
+
+#corner { position: absolute; top: 16px; right: 18px; display: flex; gap: 10px; }
+.cbtn {
+  height: 40px; min-width: 40px; padding: 0 12px; border-radius: 10px;
+  border: 1px solid rgba(230,190,110,.35);
+  background: rgba(24,18,10,.7); color: #f0e6d2; cursor: pointer; font-size: 15px;
+  display: grid; place-items: center;
+}
+.cbtn:hover { background: rgba(50,38,20,.85); }
+
+/* overlays */
+.overlay {
+  position: fixed; inset: 0; z-index: 40; display: grid; place-items: center;
+  background: rgba(18,12,6,.55); backdrop-filter: blur(4px);
+  opacity: 0; pointer-events: none; transition: opacity .35s;
+}
+.overlay.show { opacity: 1; pointer-events: auto; }
+.card {
+  background: linear-gradient(170deg, #2b2015 0%, #1c1409 100%);
+  border: 1px solid rgba(220,180,110,.4); border-radius: 20px;
+  color: #f0e6d2; padding: 34px 44px; max-width: 860px; max-height: 86vh;
+  overflow-y: auto; box-shadow: 0 24px 80px rgba(0,0,0,.7);
+}
+.card h1 {
+  font-family: 'Kaiti SC','STKaiti','KaiTi',serif; margin: 0 0 6px;
+  font-size: 44px; letter-spacing: 10px; color: #ffe9b0; text-wrap: balance;
+}
+.card h2 { font-family: 'Kaiti SC','STKaiti','KaiTi',serif; font-size: 30px; margin: 0 0 12px; color: #ffe9b0; letter-spacing: 4px; }
+.card .sub, .card p { color: #cfc0a0; line-height: 1.65; max-width: 62ch; }
+.bigbtn {
+  margin-top: 22px; padding: 14px 44px; border-radius: 999px; border: none; cursor: pointer;
+  font-family: 'Kaiti SC','STKaiti','KaiTi',serif; font-size: 24px; letter-spacing: 6px; font-weight: 700;
+  color: #fff6dd; background: radial-gradient(circle at 36% 28%, #d8683c, #a5321c 65%, #77200f);
+  box-shadow: 0 6px 18px rgba(0,0,0,.5), inset 0 2px 3px rgba(255,255,255,.4);
+}
+.bigbtn:hover { filter: brightness(1.1); }
+.bigbtn[disabled] { filter: grayscale(.6) brightness(.7); cursor: wait; }
+.ruleGrid { display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; margin: 14px 0; font-size: 15px; }
+.ruleGrid b { font-family: 'Kaiti SC','STKaiti','KaiTi',serif; font-size: 19px; color: #ffd98a; font-weight: 700; }
+.winRow { display: flex; gap: 4px; flex-wrap: wrap; margin: 14px 0 8px; align-items: flex-end; }
+.winRow .gap { width: 14px; }
+.fanTable { width: 100%; border-collapse: collapse; margin-top: 12px; }
+.fanTable td { padding: 5px 10px; border-bottom: 1px solid rgba(220,180,110,.16); }
+.fanTable td:first-child { font-family: 'Kaiti SC','STKaiti','KaiTi',serif; font-size: 17px; color: #ffd98a; }
+.fanTable td:nth-child(2) { color: #b0a184; font-size: 13px; }
+.fanTable td:last-child { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
+.fanTotal { font-size: 22px; margin-top: 14px; color: #ffe9b0; }
+.fanTotal b { font-size: 30px; color: #ffd166; }
+.scoreRow { display: flex; gap: 22px; margin-top: 16px; flex-wrap: wrap; }
+.scoreRow .sc { text-align: center; }
+.scoreRow .sc .nm { font-size: 13px; color: #b0a184; }
+.scoreRow .sc .vl { font-size: 22px; font-weight: 700; color: #ffd98a; font-variant-numeric: tabular-nums; }
+.scoreRow .dl { font-size: 13px; font-weight: 700; }
+.scoreRow .dl.up { color: #ff8a70; } .scoreRow .dl.down { color: #8fd6a0; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01s !important; transition-duration: .01s !important; }
+}
+#actions small { display: none !important; }
+</style>
+</head>
+<body>
+<canvas id="c3d"></canvas>
+<div id="hud">
+  <div id="roundLabel">東風局 · 第一局</div>
+  <div class="plate" id="plate0"><span class="pwind" id="wind0">東</span><span class="pname">你</span><span class="pscore" id="score0">0</span></div>
+  <div class="plate" id="plate1"><span class="pwind" id="wind1">南</span><span class="pname">老王</span><span class="pscore" id="score1">0</span></div>
+  <div class="plate" id="plate2"><span class="pwind" id="wind2">西</span><span class="pname">張姨</span><span class="pscore" id="score2">0</span></div>
+  <div class="plate" id="plate3"><span class="pwind" id="wind3">北</span><span class="pname">小陳</span><span class="pscore" id="score3">0</span></div>
+  <div id="msg"></div>
+  <div id="actions"></div>
+  <div id="chiPick" style="display:none"></div>
+  <div id="corner">
+    <button class="cbtn" id="btnStand" title="起身 / 坐下（V）">起身 走动</button>
+    <button class="cbtn" id="btnSound" title="音效">♪</button>
+    <button class="cbtn" id="btnHelp" title="玩法">?</button>
+  </div>
+  <div id="modeHint"><b>拖动</b> 转头 · <b>R</b> 回正 · <b>V</b> 起身走动 · 点击麻将两次打出</div>
+  <div id="crosshair"></div>
+</div>
+
+<div class="overlay show" id="intro">
+  <div class="card" style="text-align:center">
+    <h1>自动麻将桌</h1>
+    <p class="sub" style="margin:0 auto">四人中国麻将 · 单机对三位电脑玩家 · 3D</p>
+    <div class="ruleGrid" style="text-align:left; margin:26px auto 6px; max-width:560px">
+      <b>摸打</b><span>摸一张、打一张，先凑齐四组牌加一对将者胡牌；点击麻将两次打出。</span>
+      <b>吃 碰 杠</b><span>吃上家的牌组成顺子；碰、杠任意一家打出的牌。</span>
+      <b>胡</b><span>胡别人打出的牌或自摸，花牌算额外番。</span>
+      <b>走动</b><span>按 V（或「起身」）站起来在房间里走动：WASD 移动、鼠标转头，Esc 或 V 坐下。</span>
+    </div>
+    <button class="bigbtn" id="btnStart" disabled>加载中…</button>
+    <p class="sub" style="font-size:13px; margin-top:18px">拖动转头 · 滚轮微调 · V 起身走动 · 点击麻将两次打出</p>
+  </div>
+</div>
+
+<div class="overlay" id="result"><div class="card" id="resultCard"></div></div>
+
+<div class="overlay" id="help">
+  <div class="card">
+    <h2>玩法</h2>
+    <p>四人中国麻将，144 张牌（含花牌，自动补花）。轮到你时摸一张、打一张，凑成四组顺子/刻子加一对将即可胡牌。特殊牌型：七对、十三幺。</p>
+    <div class="ruleGrid">
+      <b>吃</b><span>只能吃上家打出的牌，组成顺子。</span>
+      <b>碰</b><span>碰任意一家打出的牌，组成刻子。</span>
+      <b>杠</b><span>四张相同的牌：可明杠、加杠或暗杠，并从牌墙尾部补一张牌。</span>
+      <b>胡</b><span>胡别人打出的牌，或自摸；自摸由三家共同付分。</span>
+    </div>
+    <p>番数计分：基础 1 番，自摸、门前清、碰碰胡、清一色、七对、花牌等都会加番；每多 1 番，得分翻倍（封顶 2⁸ = 256 分）。</p>
+    <p>按 V 或「起身」可以站起来走动：WASD 移动、鼠标转头，Esc 或 V 坐下。</p>
+    <button class="bigbtn" id="btnCloseHelp">继续</button>
+  </div>
+</div>
+
+<script src="three.min.js"></script>
+<script src="engine.js"></script>
+<script src="scene.js"></script>
+<script src="ui3d.js"></script>
+  <a id="yg-back" data-keep-query href="../center.html" style="position:fixed;top:14px;left:14px;z-index:9999;display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:10px;background:rgba(28,22,14,.82);border:1px solid rgba(220,180,110,.45);color:#f0e6d2;font:600 13px/1.2 'Microsoft YaHei',system-ui,sans-serif;text-decoration:none;backdrop-filter:blur(4px)">← 游戏中心</a>
+  <script src="../nav.js"></script>
+</body>
+</html>

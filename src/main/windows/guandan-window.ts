@@ -4,7 +4,7 @@ import { resolveGuandanAsset } from './guandan-assets'
 
 // 内嵌掼蛋：第三方静态包放在 resources/guandan（开发期 build/guandan），
 // 用独立的自定义协议加载，避免 file:// 下模块 Worker 与相对路径的限制。
-const GAME_URL = 'yangge-game://guandan/index.html'
+const GAME_URL = 'yangge-game://guandan/center.html'
 
 let win: BrowserWindow | null = null
 let registered = false
@@ -46,7 +46,7 @@ export function openGuandanWindow(parent: BrowserWindow | null, context: Guandan
     height,
     minWidth: 1180,
     minHeight: 760,
-    title: '掼蛋',
+    title: '游戏中心',
     backgroundColor: '#0b0c10',
     show: false,
     autoHideMenuBar: true,

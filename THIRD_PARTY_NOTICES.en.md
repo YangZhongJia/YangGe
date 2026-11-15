@@ -39,3 +39,14 @@ The Guandan entry in the left rail opens an embedded single-player game from a t
 - Rooms: upstream `server/index.js` extended with player names, a 1000-point starting score, and leaderboard events, bundled as `guandan-server/server.cjs` and started with the app on LAN port 17890
 - License: Apache License 2.0, full text at [build/guandan/LICENSE](build/guandan/LICENSE)
 - Copyright: upstream authors and contributors
+
+
+## Mahjong (embedded separate game)
+
+The Mahjong entry in the game center loads a separate third-party static page. It is not linked with, or sharing code with, the main YangGe program, and makes no runtime network request.
+
+- Source: <https://github.com/gregoryjayuk/mahjong>
+- Commit: `f04e13e9bb36b8072c62b8f1f0d188c550f7ed79`
+- Use: `classic.html` / `index.html` and their JS runtime copied as-is; only a "back to game center" link added
+- License: GNU General Public License v2, full text at [build/guandan/mahjong/LICENSE](build/guandan/mahjong/LICENSE); `three.min.js` is MIT
+- Copyright: upstream authors and contributors

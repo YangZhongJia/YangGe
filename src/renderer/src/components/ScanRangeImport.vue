@@ -30,7 +30,7 @@ async function importRanges(): Promise<void> {
     emit('updated', result.view)
     if (result.ok) {
       input.value = ''
-      notice.value = tr('已添加 {0} 个网段。可逐段刷新，或在主界面刷新全部网段。', { 0: result.added })
+      notice.value = tr('已添加 {0} 个网段。可在设置中逐段刷新。', { 0: result.added })
     } else notice.value = errorText(result.reason)
   } catch {
     notice.value = tr('保存失败，请重试。')

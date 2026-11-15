@@ -10,7 +10,7 @@
 
 <p>
   <a href="https://github.com/YangZhongJia/YangGe/releases">
-    <img src="https://img.shields.io/badge/version-1.11.8-3D8B6B?style=flat-square" alt="Version 1.11.8" />
+    <img src="https://img.shields.io/badge/version-1.11.10-3D8B6B?style=flat-square" alt="Version 1.11.10" />
   </a>
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/License-GPL--3.0--only-3D8B6B?style=flat-square" alt="GPL-3.0-only" />
@@ -65,6 +65,19 @@
 干脆自己写一个：免费开源、纯内网直连、从 Windows 7 到国产统信 UOS 再到 macOS 全平台覆盖、打开就会用。这就是阳鸽。
 
 ## 最近更新
+
+**v1.11.10**
+
+- **锁屏**：极简晨光背景；白鸽跟随当前输入格，六位输入后回巢；保留「请输入密码」与半透明玻璃底。
+- **麻将**：柔化房间背景、隐藏散落花牌、缩放桌面，手牌与桌沿完整展示。
+- **导航**：暂时隐藏任务与 Agent 入口，实现代码与数据保留。
+- **版本递增**：1.11.9 及更早客户端会重新出现内网更新入口。
+
+**v1.11.9**
+
+- **游戏中心**：左侧导航改为游戏手柄图标，点开是游戏中心，内置「掼蛋」与「麻将」两个入口。
+- **麻将**：新增四人中国麻将（单机对三个 AI），支持吃、碰、杠、胡、番数结算与四圈牌局；内嵌本地静态游戏，不访问外网。
+- **版本递增**：1.11.8 及更早客户端会重新出现内网更新入口。
 
 **v1.11.8**
 

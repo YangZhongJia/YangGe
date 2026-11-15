@@ -10,6 +10,24 @@ export interface ReleaseHighlights {
  * 主窗按 localStorage 中的 lastSeenVersion 判断是否展示，避免每次启动重复弹出。
  */
 export const RELEASE_HIGHLIGHTS: Record<string, ReleaseHighlights> = {
+  '1.11.10': {
+    version: '1.11.10',
+    notes: [
+      '锁屏改为极简晨光背景，白鸽跟随当前输入格，六位后回巢。',
+      '麻将页柔化背景、隐藏散落花牌，桌面缩放后手牌完整可见。',
+      '暂时隐藏任务与 Agent 入口，保留全部实现代码。'
+    ],
+    fixed: true
+  },
+  '1.11.9': {
+    version: '1.11.9',
+    notes: [
+      '左侧导航改为游戏手柄，点开进入游戏中心。',
+      '游戏中心内置掼蛋与麻将；麻将为四人中国麻将，单机对三个 AI。',
+      '版本递增，1.11.8 及更早客户端会重新出现内网更新入口。'
+    ],
+    fixed: true
+  },
   '1.11.8': {
     version: '1.11.8',
     notes: [

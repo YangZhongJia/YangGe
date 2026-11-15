@@ -39,3 +39,14 @@
 - 联机服务：由上游 `server/index.js` 增加玩家昵称、1000 分初始积分与排行榜事件后打包为 `guandan-server/server.cjs`，随应用启动并监听内网 17890 端口
 - 许可：Apache License 2.0，全文见 [build/guandan/LICENSE](build/guandan/LICENSE)
 - 版权：上游作者及贡献者
+
+
+## 麻将（内嵌独立游戏）
+
+游戏中心「麻将」入口加载的是独立的第三方静态页面，未与阳鸽主程序链接或共享代码，运行时不访问外网。
+
+- 来源：<https://github.com/gregoryjayuk/mahjong>
+- 提交：`f04e13e9bb36b8072c62b8f1f0d188c550f7ed79`
+- 使用方式：原样复制 `classic.html` / `index.html` 及其 JS 运行时到本地游戏目录，仅增加「返回游戏中心」入口
+- 许可：GNU General Public License v2，全文见 [build/guandan/mahjong/LICENSE](build/guandan/mahjong/LICENSE)；`three.min.js` 为 MIT
+- 版权：上游作者及贡献者

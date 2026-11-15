@@ -7,7 +7,6 @@ import type {
   AppInfo,
   CaptureFailureNotice,
   MainWindowShownEvent,
-  ScanProgressView,
   SettingsView,
   WorkTaskBadgeEvent
 } from '../../shared/ipc'
@@ -51,6 +50,9 @@ import { accentPalette, normalizeAccent } from './utils/accents'
 import { releaseHighlightsFor, VERSION_SEEN_KEY } from './data/release-highlights'
 
 type Tab = 'chat' | 'contacts' | 'cabinet' | 'agent' | 'tasks'
+
+// 暂时隐藏协作任务与 Agent 入口；保留页面、store 与 IPC，打开此开关即可恢复。
+const SHOW_TASK_AGENT_ENTRIES = false
 
 const tab = ref<Tab>('chat')
 // Agent 面板较重（权限弹窗/转录样式）；首次切到 Agent 页签时再加载，
@@ -290,68 +292,16 @@ watch(
   () => maybeShowVersionHighlights(),
   { flush: 'post' }
 )
-let stopScanProgress: (() => void) | null = null
 let stopCaptureFailed: (() => void) | null = null
 let stopTransferBlocked: (() => void) | null = null
 let stopNetState: (() => void) | null = null
 const blockedTransferPort = ref<number | null>(null)
-let scanProgressHideTimer: ReturnType<typeof setTimeout> | null = null
 let captureNoticeTimer: ReturnType<typeof setTimeout> | null = null
 let railHintTimer: ReturnType<typeof setTimeout> | null = null
 let railFocusReleaseTimer: ReturnType<typeof setTimeout> | null = null
 let pendingRailHint: string | null = null
 
-const scanProgress = ref<ScanProgressView>({
-  scanId: 0,
-  status: 'idle',
-  running: false,
-  done: 0,
-  total: 0,
-  rangeCount: 0,
-  startedAt: 0,
-  finishedAt: 0
-})
-const scanProgressVisible = ref(false)
 const captureNotice = ref<CaptureFailureNotice | null>(null)
-// 环形进度显示值：刷新前归零（环隐藏时瞬间）、扫描中随 scanPercent 平滑增长（决议 #163）
-const scanRingPct = ref(0)
-const hasScanRanges = computed(() => (settings.value?.scanRanges.length ?? 0) > 0)
-const canScanAllRanges = computed(() => hasScanRanges.value && !scanProgress.value.running)
-const scanPercent = computed(() => {
-  const total = scanProgress.value.total
-  if (total <= 0) return 0
-  return Math.max(0, Math.min(100, Math.round((scanProgress.value.done / total) * 100)))
-})
-const scanButtonTitle = computed(() => {
-  if (scanProgress.value.running) {
-    return tr('扫描中 {0}/{1}', { 0: scanProgress.value.done, 1: scanProgress.value.total })
-  }
-  if (!hasScanRanges.value) return tr('没有已保存扫描网段')
-  return tr('刷新全局用户')
-})
-const scanProgressTitle = computed(() => tr('扫描进度 {0}%', { 0: scanPercent.value }))
-
-// 全量刷新二次确认（决议 #197）：只展示 CIDR 摘要，最多 4 条，超出折叠；不堆说明文案
-const SCAN_CONFIRM_PREVIEW_LIMIT = 4
-const showScanConfirm = ref(false)
-
-const scanConfirmCidrs = computed(() => {
-  const items = settings.value?.scanRangeItems
-  if (items && items.length > 0) return items.map((item) => item.cidr)
-  return settings.value?.scanRanges ?? []
-})
-const scanConfirmTotal = computed(() => scanConfirmCidrs.value.length)
-const scanConfirmPreview = computed(() =>
-  scanConfirmCidrs.value.slice(0, SCAN_CONFIRM_PREVIEW_LIMIT)
-)
-const scanConfirmExtra = computed(() =>
-  Math.max(0, scanConfirmTotal.value - SCAN_CONFIRM_PREVIEW_LIMIT)
-)
-const scanConfirmSub = computed(() => {
-  const n = scanConfirmTotal.value
-  if (n <= 0) return ''
-  return n === 1 ? tr('将探测 1 个网段') : tr('将探测 {0} 个网段', { 0: n })
-})
 const selfName = computed(() => settings.value?.nick.trim() || tr('未设置昵称'))
 const selfOrgPath = computed(() => {
   const parts = [settings.value?.company, settings.value?.dept, settings.value?.team]
@@ -373,11 +323,6 @@ function applyWindowTitle(next: SettingsView | null): void {
 
 function onVisibilityChange(): void {
   if (document.visibilityState === 'hidden') chatStore.forgetConversationScrolls()
-}
-
-function clearScanProgressHideTimer(): void {
-  if (scanProgressHideTimer) clearTimeout(scanProgressHideTimer)
-  scanProgressHideTimer = null
 }
 
 function showCaptureFailure(notice: CaptureFailureNotice): void {
@@ -442,51 +387,10 @@ function releaseInitialRailFocus(): void {
   })
 }
 
-function applyScanProgress(next: ScanProgressView): void {
-  scanProgress.value = next
-  scanRingPct.value = scanPercent.value
-  clearScanProgressHideTimer()
-  if (next.running) {
-    scanProgressVisible.value = true
-    return
-  }
-  if (next.status === 'done' && next.total > 0) {
-    scanProgressVisible.value = true
-    scanProgressHideTimer = setTimeout(() => {
-      scanProgressVisible.value = false
-      scanProgressHideTimer = null
-    }, 2200)
-    return
-  }
-  scanProgressVisible.value = false
-}
-
 function activateTab(next: Tab, event: Event): void {
   tab.value = next
   hideRailHint()
   releaseRailFocus(event)
-}
-
-/** 点击刷新：先弹二次确认（决议 #197），确认后才扫 */
-function askRefreshAllUsers(event?: Event): void {
-  releaseRailFocus(event)
-  hideRailHint()
-  if (!canScanAllRanges.value) return
-  showScanConfirm.value = true
-}
-
-function cancelScanConfirm(): void {
-  showScanConfirm.value = false
-}
-
-async function confirmRefreshAllUsers(): Promise<void> {
-  if (!canScanAllRanges.value) {
-    showScanConfirm.value = false
-    return
-  }
-  showScanConfirm.value = false
-  scanRingPct.value = 0 // 新扫描前归零（此刻环隐藏、无过渡），避免从上次满环倒退
-  applyScanProgress(await window.pantry.scanAllRanges())
 }
 
 let composing = false
@@ -496,11 +400,6 @@ function onCompositionEnd(): void { composing = false }
 function onMainKeydown(event: KeyboardEvent): void {
   if (appLocked.value) return
   if (!isPlainEscape(event, composing) || showWizard.value || settingsWindowOpen.value) return
-  if (showScanConfirm.value) {
-    event.preventDefault()
-    cancelScanConfirm()
-    return
-  }
   // document / 控件先消费按键；window 上的弹窗处理器可能后注册，因此先保留弹窗优先权。
   const hasPopup = [...document.querySelectorAll<HTMLElement>(
     'dialog[open], [role="dialog"]:not(.update-pop), [role="menu"], .n-base-select-menu'
@@ -516,7 +415,7 @@ onMounted(async () => {
     taskBadge.value = badge
   })
   stopOpenTasks = window.pantry.onOpenTasks(() => {
-    tab.value = 'tasks'
+    if (SHOW_TASK_AGENT_ENTRIES) tab.value = 'tasks'
   })
   void window.pantry.getWorkTaskBadge().then((badge) => {
     taskBadge.value = badge
@@ -568,7 +467,6 @@ onMounted(async () => {
     applyAppearance(next)
     applyWindowTitle(next)
   })
-  stopScanProgress = window.pantry.onScanProgress(applyScanProgress)
   stopCaptureFailed = window.pantry.onCaptureFailed(showCaptureFailure)
   window.addEventListener('keydown', onMainKeydown)
   document.addEventListener('compositionstart', onCompositionStart)
@@ -589,7 +487,6 @@ onUnmounted(() => {
   stopWindowShown?.()
   stopLockRequested?.()
   stopLockRequested = null
-  stopScanProgress?.()
   stopCaptureFailed?.()
   stopTransferBlocked?.()
   stopNetState?.()
@@ -599,7 +496,6 @@ onUnmounted(() => {
   stopOpenTasks = null
   duelStore.dispose()
   dismissCaptureFailure()
-  clearScanProgressHideTimer()
   hideRailHint()
   clearRailFocusReleaseTimer()
 })
@@ -700,6 +596,7 @@ onUnmounted(() => {
         <RailNavIcon name="contacts" />
       </button>
       <button
+        v-if="SHOW_TASK_AGENT_ENTRIES"
         type="button"
         class="rail-btn rail-hint"
         :class="{ active: tab === 'tasks', 'show-hint': activeRailHint === 'tasks' }"
@@ -715,6 +612,7 @@ onUnmounted(() => {
         }}</span>
       </button>
       <button
+        v-if="SHOW_TASK_AGENT_ENTRIES"
         type="button"
         class="rail-btn rail-hint"
         :class="{ active: tab === 'agent', 'show-hint': activeRailHint === 'agent' }"
@@ -730,37 +628,21 @@ onUnmounted(() => {
         type="button"
         class="rail-btn rail-hint rail-game"
         :class="{ 'show-hint': activeRailHint === 'game' }"
-        :data-label="tr('掼蛋')"
-        :aria-label="tr('掼蛋')"
+        :data-label="tr('游戏中心')"
+        :aria-label="tr('游戏中心')"
         @pointermove="scheduleRailHint('game')"
         @pointerleave="hideRailHint('game')"
         @click="openGuandan($event)"
       >
-        <svg width="21" height="21" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <rect
-            x="5.4"
-            y="4.2"
-            width="9.2"
-            height="13.4"
-            rx="2.2"
-            transform="rotate(-12 10 10.9)"
-            stroke="currentColor"
-            stroke-width="1.7"
-          />
-          <rect
-            x="9.6"
-            y="6.4"
-            width="9.2"
-            height="13.4"
-            rx="2.2"
-            transform="rotate(9 14.2 13.1)"
-            stroke="currentColor"
-            stroke-width="1.7"
-          />
+        <svg width="29" height="29" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path
-            d="M14.3 11.1c.7.5 1.3 1.1 1.3 1.8 0 .7-.6 1.2-1.3 1.2s-1.3-.5-1.3-1.2c0-.7.6-1.3 1.3-1.8Z"
-            fill="currentColor"
+            d="M7.4 8.2h9.2a4.4 4.4 0 0 1 4.3 5.4l-.7 3.1a2.2 2.2 0 0 1-3.9 1l-1.2-1.7H8.9l-1.2 1.7a2.2 2.2 0 0 1-3.9-1l-.7-3.1a4.4 4.4 0 0 1 4.3-5.4Z"
+            stroke="currentColor"
+            stroke-width="1.7"
           />
+          <path d="M7 11.2v3M5.5 12.7h3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+          <circle cx="16.1" cy="11.7" r="0.95" fill="currentColor" />
+          <circle cx="18.2" cy="13.8" r="0.95" fill="currentColor" />
         </svg>
       </button>
       <div class="spacer"></div>
@@ -795,29 +677,6 @@ onUnmounted(() => {
         @click="openCabinet($event)"
       >
         <RailNavIcon name="cabinet" />
-      </button>
-      <button
-        type="button"
-        class="rail-btn rail-hint"
-        :class="{
-          scanning: scanProgress.running,
-          'is-disabled': !canScanAllRanges,
-          'show-hint': activeRailHint === 'scan'
-        }"
-        :aria-disabled="!canScanAllRanges"
-        :data-label="scanButtonTitle"
-        :aria-label="scanProgress.running ? scanProgressTitle : scanButtonTitle"
-        @pointermove="scheduleRailHint('scan')"
-        @pointerleave="hideRailHint('scan')"
-        @click="askRefreshAllUsers($event)"
-      >
-        <span
-          class="scan-ring"
-          :class="{ visible: scanProgressVisible }"
-          :style="{ '--scan-p': scanRingPct }"
-          aria-hidden="true"
-        ></span>
-        <RailNavIcon name="refresh" />
       </button>
       <button
         type="button"
@@ -938,37 +797,6 @@ onUnmounted(() => {
         </div>
       </div>
     </main>
-  </div>
-
-  <!-- 全量刷新二次确认（决议 #197）：标题 + 一句摘要 + CIDR 列表，确认后才扫 -->
-  <div
-    v-if="showScanConfirm"
-    class="scan-confirm-mask"
-    @click.self="cancelScanConfirm"
-  >
-    <div
-      class="scan-confirm-card"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="scan-confirm-title"
-      aria-describedby="scan-confirm-sub"
-    >
-      <div class="scan-confirm-mark" aria-hidden="true">
-        <PantryIcon name="warning" :size="22" />
-      </div>
-      <h3 id="scan-confirm-title">{{ tr('刷新全局用户') }}</h3>
-      <p id="scan-confirm-sub" class="scan-confirm-sub">{{ scanConfirmSub }}</p>
-      <ul class="scan-confirm-list" :aria-label="tr('将扫描的网段')">
-        <li v-for="cidr in scanConfirmPreview" :key="cidr">
-          <code>{{ cidr }}</code>
-        </li>
-        <li v-if="scanConfirmExtra > 0" class="scan-confirm-more">{{ tr('另 {0} 个', { 0: scanConfirmExtra }) }}</li>
-      </ul>
-      <div class="scan-confirm-actions">
-        <NButton size="small" secondary @click="cancelScanConfirm">{{ tr('取消') }}</NButton>
-        <NButton type="primary" size="small" @click="confirmRefreshAllUsers">{{ tr('开始扫描') }}</NButton>
-      </div>
-    </div>
   </div>
 
   <!-- 移除聊天后的 10 秒撤回提示（决议 #125）：倒计时结束才真正删除聊天记录 -->
@@ -1329,24 +1157,9 @@ onUnmounted(() => {
   border-radius: 2px;
   background: var(--primary);
 }
-.rail-btn:active:not(.is-disabled) {
+.rail-btn:active {
   transform: scale(0.96);
   background: var(--rail-active);
-}
-.rail-btn.is-disabled:not(.scanning) {
-  cursor: default;
-  opacity: 0.45;
-}
-.rail-btn.is-disabled:not(.scanning):hover {
-  background: transparent;
-  color: var(--rail-text);
-}
-.rail-btn.scanning,
-.rail-btn.scanning:hover {
-  /* 扫描态不再用方块底/图标旋转，进度改由图标外圈环形表达（决议 #162） */
-  background: transparent;
-  color: var(--rail-focus);
-  opacity: 1;
 }
 /* 局域网自更新提示入口（决议 #166 第一步） */
 .rail-update {
@@ -1479,29 +1292,6 @@ onUnmounted(() => {
   margin-top: 8px;
 }
 
-/* 进度数值注册为可过渡的 typed 属性，让环形进度平滑增长而非跳变（决议 #163） */
-@property --scan-p {
-  syntax: '<number>';
-  inherits: false;
-  initial-value: 0;
-}
-.scan-ring {
-  position: absolute;
-  inset: 2px;
-  border-radius: 50%;
-  background: conic-gradient(var(--primary) calc(var(--scan-p, 0) * 1%), var(--line) 0);
-  -webkit-mask: radial-gradient(closest-side, transparent 72%, #000 76%);
-  mask: radial-gradient(closest-side, transparent 72%, #000 76%);
-  opacity: 0;
-  transition: opacity 180ms ease; /* 非扫描态：进度值瞬间归零、不倒退 */
-  pointer-events: none;
-}
-.scan-ring.visible {
-  opacity: 1;
-  transition:
-    opacity 180ms ease,
-    --scan-p 0.4s linear; /* 扫描中：进度平滑增长 */
-}
 .rail-badge {
   position: absolute;
   top: -2px;
@@ -1526,12 +1316,10 @@ onUnmounted(() => {
   .rail-hint::after,
   .rail-btn,
   .self-card,
-  .scan-ring,
-  .scan-ring.visible,
   .new-group {
     transition: none;
   }
-  .rail-btn:active:not(.is-disabled) {
+  .rail-btn:active {
     transform: none;
   }
 }
@@ -1678,168 +1466,6 @@ onUnmounted(() => {
 .quote-author {
   font-size: 12px;
   color: var(--text-3);
-}
-
-/* 全量刷新二次确认（决议 #197）：暖色警示标 + 精简文案（非删除红，提醒「留意代价」） */
-.scan-confirm-mask {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  background: rgba(22, 34, 52, 0.26);
-
-  animation: scan-confirm-fade 0.14s ease;
-}
-.scan-confirm-card {
-  width: min(300px, 100%);
-  padding: 20px 18px 14px;
-  border: 1px solid var(--line);
-  border-radius: 8%;
-  background: var(--material-strong);
-  box-shadow: var(--highlight-edge), var(--shadow-float);
-  text-align: center;
-  animation: scan-confirm-rise 0.16s cubic-bezier(0.16, 1, 0.3, 1);
-}
-.scan-confirm-mark {
-  width: 48px;
-  height: 48px;
-  margin: 0 auto 12px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  color: #c48a12;
-  background:
-    radial-gradient(circle at 50% 42%, rgba(255, 214, 120, 0.35), transparent 62%),
-    rgba(196, 138, 18, 0.12);
-  box-shadow: inset 0 0 0 1px rgba(196, 138, 18, 0.18);
-}
-.scan-confirm-card h3 {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text-1);
-  line-height: 1.3;
-}
-.scan-confirm-sub {
-  margin: 6px 0 0;
-  font-size: 13px;
-  line-height: 1.45;
-  color: var(--text-2);
-}
-.scan-confirm-list {
-  margin: 12px 0 0;
-  padding: 0;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  max-height: 132px;
-  overflow-y: auto;
-  text-align: left;
-}
-.scan-confirm-list li {
-  display: flex;
-  align-items: center;
-  min-height: 28px;
-  padding: 0 10px;
-  border-radius: var(--radius-panel);
-  background: var(--bg-list);
-}
-.scan-confirm-list code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-1);
-  letter-spacing: 0.01em;
-  background: transparent;
-  padding: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.scan-confirm-more {
-  justify-content: center;
-  background: transparent !important;
-  color: var(--text-3);
-  font-size: 12px;
-  min-height: 22px !important;
-  padding: 0 !important;
-}
-.scan-confirm-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 16px;
-  padding-top: 14px;
-  border-top: 1px solid var(--line);
-}
-.scan-confirm-actions button {
-  height: 32px;
-  padding: 0 14px;
-  border-radius: var(--radius-panel);
-  font-size: 13px;
-  cursor: pointer;
-  transition:
-    background 0.12s ease,
-    border-color 0.12s ease,
-    color 0.12s ease,
-    filter 0.12s ease,
-    transform 0.1s ease;
-}
-.scan-confirm-cancel {
-  border: 1px solid var(--line);
-  background: transparent;
-  color: var(--text-2);
-}
-.scan-confirm-cancel:hover {
-  border-color: var(--primary);
-  color: var(--primary);
-}
-.scan-confirm-cancel:active,
-.scan-confirm-go:active {
-  transform: scale(0.98);
-}
-.scan-confirm-go {
-  border: none;
-  background: var(--primary);
-  color: var(--on-primary);
-  font-weight: 600;
-}
-.scan-confirm-go:hover {
-  filter: brightness(0.96);
-}
-@keyframes scan-confirm-fade {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-@keyframes scan-confirm-rise {
-  from {
-    opacity: 0;
-    transform: translateY(6px) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .scan-confirm-mask,
-  .scan-confirm-card {
-    animation: none;
-  }
-  .scan-confirm-actions button {
-    transition: none;
-  }
-  .scan-confirm-cancel:active,
-  .scan-confirm-go:active {
-    transform: none;
-  }
 }
 
 /* 移除聊天撤回提示（决议 #125）：底部居中浮条，蓝色撤回按钮，尊重 reduced-motion */

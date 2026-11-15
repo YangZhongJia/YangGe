@@ -48,7 +48,20 @@
 
 Start YangGe on computers connected to the same local network and they discover each other automatically. Open a peer to chat, transfer files, manage tasks, or challenge them to a quick duel. No cloud account, central server, telemetry, or Internet access is involved. YangGe is designed for corporate intranets, isolated networks, and laboratories where external connectivity is limited or prohibited.
 
-## Recent updates (v1.11.8)
+## Recent updates (v1.11.10)
+
+- **Lock screen**: minimal morning background, a dove that follows the active PIN slot and returns to the icon, a single "Enter password" label, and a translucent glass panel.
+- **Mahjong**: softened room background, loose flower tiles hidden, and a smaller table so the hand fits fully.
+- **Navigation**: Task and Agent entries are temporarily hidden; implementation and data remain.
+- **Version bump**: 1.11.9 and older clients see the LAN update entry again.
+
+**v1.11.9**
+
+- **Game center**: the left-rail entry is now a gamepad that opens a center with Guandan and Mahjong.
+- **Mahjong**: four-player Chinese Mahjong against three AI opponents, with chi/peng/gang/hu, fan scoring, and a four-wind game; bundled locally with no network access.
+- **Version bump**: 1.11.8 and older clients see the LAN update entry again.
+
+**v1.11.8**
 
 - **Guandan fixes**: bundled background artwork restored, black suits visible again, and tutorial contrast fixed.
 - **LAN table**: seats show each colleague's YangGe avatar and nickname; tighter top bar and seat layout.
