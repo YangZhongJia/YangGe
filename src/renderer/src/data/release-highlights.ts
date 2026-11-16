@@ -10,6 +10,14 @@ export interface ReleaseHighlights {
  * 主窗按 localStorage 中的 lastSeenVersion 判断是否展示，避免每次启动重复弹出。
  */
 export const RELEASE_HIGHLIGHTS: Record<string, ReleaseHighlights> = {
+  '1.11.11': {
+    version: '1.11.11',
+    notes: [
+      '锁屏跟随浅色/深色/跟随系统，并适配五种主题色；深色版保留晨光与白鸽布局。',
+      '输入区获得焦点时显示整排主色描边与当前格光标，失焦自动隐藏。'
+    ],
+    fixed: true
+  },
   '1.11.10': {
     version: '1.11.10',
     notes: [

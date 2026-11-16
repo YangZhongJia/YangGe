@@ -430,7 +430,7 @@ onBeforeUnmount(() => {
   font-family: 'Microsoft YaHei', system-ui, sans-serif;
   background:
     radial-gradient(ellipse 72% 62% at 6% 90%, rgba(0,190,215,.28), transparent 64%),
-    radial-gradient(ellipse 64% 60% at 94% 6%, rgba(132,100,252,.3), transparent 64%),
+    radial-gradient(ellipse 64% 60% at 94% 6%, rgba(var(--primary-rgb, 88, 80, 236), .26), transparent 64%),
     linear-gradient(125deg, #e0f7fb 0%, #ecefff 48%, #f5e7ff 100%);
   -webkit-app-region: no-drag;
   user-select: none;
@@ -523,7 +523,7 @@ onBeforeUnmount(() => {
   transition: background-color 140ms ease, color 140ms ease;
 }
 .lock-close:hover { background: #e3ebff; color: #344fa5; }
-.lock-close:focus-visible { outline: 2px solid #536ce4; outline-offset: 2px; }
+.lock-close:focus-visible { outline: 2px solid var(--primary, #536ce4); outline-offset: 2px; }
 .lock-brand {
   position: relative;
   width: 62px;
@@ -567,6 +567,21 @@ onBeforeUnmount(() => {
   letter-spacing: .01em;
 }
 .pin-shell { position: relative; display: flex; justify-content: center; margin: 72px auto 0; }
+.pin-shell::after {
+  content: '';
+  position: absolute;
+  inset: -9px -12px;
+  border: 1px solid transparent;
+  border-radius: 21px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+.pin-shell:focus-within::after {
+  opacity: 1;
+  border-color: rgba(var(--primary-rgb, 88, 80, 236), .58);
+  box-shadow: 0 0 0 5px rgba(var(--primary-rgb, 88, 80, 236), .10);
+}
 .pin-shell::before {
   content: '';
   position: absolute;
@@ -580,6 +595,7 @@ onBeforeUnmount(() => {
 
 .pin-slots { display: flex; gap: 10px; }
 .pin-slot {
+  position: relative;
   box-sizing: border-box;
   width: 44px;
   height: 54px;
@@ -591,9 +607,21 @@ onBeforeUnmount(() => {
   box-shadow: inset 0 1px 0 #fff, 0 3px 10px rgba(90,119,185,.05);
   transition: border-color 160ms ease, background-color 160ms ease;
 }
-.pin-slot.filled { border-color: #8c9ff1; background: #e9eeff; }
-.pin-slot.active { border-color: #596fe0; box-shadow: 0 0 0 4px rgba(89,111,224,.12), inset 0 1px 0 #fff; }
-.pin-slot i { width: 9px; height: 9px; border-radius: 50%; background: #5363db; box-shadow: 0 1px 3px rgba(63,76,170,.2); }
+.pin-slot.filled { border-color: var(--primary-border, #c8cdf8); background: rgba(var(--primary-rgb, 88, 80, 236), .12); }
+.pin-slot.active { border-color: var(--primary, #5850ec); box-shadow: 0 0 0 4px rgba(var(--primary-rgb, 88, 80, 236), .14), inset 0 1px 0 #fff; }
+.pin-shell:focus-within .pin-slot.active::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 2px;
+  height: 22px;
+  transform: translate(-50%, -50%);
+  border-radius: 1px;
+  background: var(--primary, #5850ec);
+  animation: lock-caret 1.1s steps(1, end) infinite;
+}
+.pin-slot i { width: 9px; height: 9px; border-radius: 50%; background: var(--primary, #5850ec); box-shadow: 0 1px 3px rgba(63,76,170,.2); }
 .pin-input {
   position: absolute;
   inset: 0;
@@ -651,6 +679,93 @@ onBeforeUnmount(() => {
 }
 .lock-dove.is-perched .dove-shadow { opacity: 1; }
 .lock-dove.is-flying .dove-glyph { animation: dove-flap 170ms ease-in-out infinite alternate; }
+html[data-theme='dark'] .lock-screen {
+  color: #e8edff;
+  background:
+    radial-gradient(ellipse 72% 62% at 6% 90%, rgba(var(--primary-rgb, 123, 118, 240), .24), transparent 64%),
+    radial-gradient(ellipse 64% 60% at 94% 6%, rgba(100, 142, 230, .14), transparent 64%),
+    linear-gradient(125deg, #0a1020 0%, #111832 48%, #0b1226 100%);
+}
+html[data-theme='dark'] .lock-screen::before {
+  background: radial-gradient(circle at 50% 50%, rgba(255, 219, 170, .4) 0 36%, rgba(255, 202, 146, .17) 58%, rgba(255, 202, 146, 0) 74%);
+  filter: blur(14px) saturate(1.2);
+}
+html[data-theme='dark'] .lock-beam {
+  background: linear-gradient(90deg, rgba(255,255,255,0), rgba(190,205,255,.12) 34%, rgba(190,205,255,.04) 58%, rgba(255,255,255,0) 76%);
+  opacity: .8;
+}
+html[data-theme='dark'] .lock-horizon {
+  background: radial-gradient(ellipse at center, rgba(0,0,0,.3), rgba(0,0,0,.08) 45%, transparent 72%);
+  opacity: .9;
+}
+html[data-theme='dark'] .lock-screen::after {
+  opacity: .06;
+  mix-blend-mode: screen;
+}
+html[data-theme='dark'] .lock-card {
+  border-color: rgba(160, 182, 255, .22);
+  background: linear-gradient(155deg, rgba(32, 42, 72, .7), rgba(10, 16, 32, .64));
+  box-shadow:
+    0 24px 68px rgba(0, 0, 0, .5),
+    inset 0 1px 0 rgba(255, 255, 255, .12);
+}
+html[data-theme='dark'] .lock-close {
+  color: #aab6d8;
+}
+html[data-theme='dark'] .lock-close:hover {
+  background: rgba(255,255,255,.1);
+  color: #f2f5ff;
+}
+html[data-theme='dark'] .lock-brand {
+  background: linear-gradient(145deg, rgba(255,255,255,.10), rgba(255,255,255,.03));
+  box-shadow: 0 10px 26px rgba(0,0,0,.32), inset 0 1px 0 rgba(255,255,255,.14);
+}
+html[data-theme='dark'] .lock-brand.is-empty {
+  background: rgba(255,255,255,.05);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.08);
+}
+html[data-theme='dark'] .brand-empty {
+  border-color: rgba(180,195,255,.35);
+}
+html[data-theme='dark'] .lock-entry-label {
+  color: #c6d1ef;
+}
+html[data-theme='dark'] .pin-shell::before {
+  background: linear-gradient(90deg, transparent, rgba(160,180,255,.22) 14%, rgba(160,180,255,.22) 86%, transparent);
+}
+html[data-theme='dark'] .pin-slot {
+  border-color: rgba(160,182,255,.28);
+  background: rgba(10,16,34,.52);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 3px 10px rgba(0,0,0,.18);
+}
+html[data-theme='dark'] .pin-slot.filled {
+  border-color: rgba(var(--primary-rgb, 123, 118, 240), .7);
+  background: rgba(var(--primary-rgb, 123, 118, 240), .18);
+}
+html[data-theme='dark'] .pin-slot.active {
+  border-color: var(--primary, #7b76f0);
+  box-shadow: 0 0 0 4px rgba(var(--primary-rgb, 123, 118, 240), .18), inset 0 1px 0 rgba(255,255,255,.08);
+}
+html[data-theme='dark'] .pin-shell:focus-within::after {
+  border-color: rgba(var(--primary-rgb, 123, 118, 240), .72);
+  box-shadow: 0 0 0 5px rgba(var(--primary-rgb, 123, 118, 240), .16);
+}
+html[data-theme='dark'] .pin-slot i {
+  background: #dbe4ff;
+  box-shadow: 0 1px 3px rgba(0,0,0,.35);
+}
+html[data-theme='dark'] .lock-error {
+  color: #ff9aa8;
+}
+html[data-theme='dark'] .dove-glow {
+  background: radial-gradient(circle, rgba(255,255,255,.26) 0 26%, rgba(160,180,255,.12) 52%, transparent 74%);
+}
+html[data-theme='dark'] .dove-glyph {
+  filter: brightness(0) invert(1) drop-shadow(0 0 1px rgba(180,205,255,.9)) drop-shadow(0 6px 10px rgba(0,0,0,.6));
+}
+html[data-theme='dark'] .dove-shadow {
+  background: radial-gradient(ellipse, rgba(0,0,0,.4), transparent 72%);
+}
 @media (max-width: 380px) {
   .lock-card { padding-inline: 18px; }
   .pin-slot { width: 36px; height: 48px; }
@@ -659,6 +774,10 @@ onBeforeUnmount(() => {
 @keyframes lock-card-in {
   from { opacity: 0; transform: translateY(12px) scale(.985); }
   to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes lock-caret {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
 }
 @keyframes lock-shake {
   10%, 90% { transform: translateX(-2px); }
@@ -680,7 +799,8 @@ onBeforeUnmount(() => {
     animation: none;
   }
   .lock-dove.is-perched .dove-body,
-  .lock-dove.is-flying .dove-glyph {
+  .lock-dove.is-flying .dove-glyph,
+  .pin-shell:focus-within .pin-slot.active::after {
     animation: none;
   }
   .lock-brand,
