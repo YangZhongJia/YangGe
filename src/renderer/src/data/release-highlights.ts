@@ -10,6 +10,11 @@ export interface ReleaseHighlights {
  * 主窗按 localStorage 中的 lastSeenVersion 判断是否展示，避免每次启动重复弹出。
  */
 export const RELEASE_HIGHLIGHTS: Record<string, ReleaseHighlights> = {
+  '1.11.12': {
+    version: '1.11.12',
+    notes: ['锁屏输入区去掉整排外框高亮，只保留当前格光标与焦点描边。', '深色锁屏增加深靛蓝夜空、冷月光与低密度星光。'],
+    fixed: true
+  },
   '1.11.11': {
     version: '1.11.11',
     notes: [

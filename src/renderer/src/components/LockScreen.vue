@@ -364,6 +364,9 @@ onBeforeUnmount(() => {
 <template>
   <div class="lock-screen" role="dialog" aria-modal="true" :aria-label="tr('阳鸽已锁定')">
     <div class="lock-beam" aria-hidden="true"></div>
+    <div class="lock-stars" aria-hidden="true">
+      <span class="stars stars-a"></span>
+    </div>
     <div class="lock-horizon" aria-hidden="true"></div>
     <section class="lock-card">
       <button
@@ -462,6 +465,39 @@ onBeforeUnmount(() => {
   opacity: .62;
   pointer-events: none;
   z-index: 0;
+}
+.lock-stars {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: none;
+  pointer-events: none;
+}
+html[data-theme='dark'] .lock-stars { display: block; }
+.lock-stars .stars {
+  position: absolute;
+  inset: 0;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  background-image:
+    radial-gradient(circle at 33.1% 16.5%, rgba(188, 212, 255, 0.42) 0 0.7px, transparent 1.4px),
+    radial-gradient(circle at 53.4% 37.1%, rgba(238, 243, 255, 0.91) 0 0.7px, transparent 1.4px),
+    radial-gradient(circle at 22.6% 10.3%, rgba(238, 243, 255, 0.42) 0 1.4px, transparent 2.1px),
+    radial-gradient(circle at 10.7% 42.8%, rgba(238, 243, 255, 0.93) 0 0.7px, transparent 1.4px),
+    radial-gradient(circle at 62.5% 58.0%, rgba(188, 212, 255, 0.71) 0 0.7px, transparent 1.4px),
+    radial-gradient(circle at 40.1% 95.7%, rgba(238, 243, 255, 0.7) 0 0.7px, transparent 1.4px),
+    radial-gradient(circle at 14.8% 42.2%, rgba(238, 243, 255, 0.71) 0 0.7px, transparent 1.4px),
+    radial-gradient(circle at 55.8% 67.5%, rgba(238, 243, 255, 0.72) 0 0.7px, transparent 1.4px),
+    radial-gradient(circle at 63.3% 37.8%, rgba(188, 212, 255, 0.71) 0 0.7px, transparent 1.4px),
+    radial-gradient(circle at 61.4% 49.7%, rgba(238, 243, 255, 0.83) 0 1.4px, transparent 2.1px),
+    radial-gradient(circle at 46.7% 90.7%, rgba(238, 243, 255, 0.55) 0 1.1px, transparent 1.8px),
+    radial-gradient(circle at 78.3% 69.1%, rgba(238, 243, 255, 0.43) 0 0.9px, transparent 1.6px),
+    radial-gradient(circle at 30.8% 49.5%, rgba(188, 212, 255, 0.8) 0 1.1px, transparent 1.8px),
+    radial-gradient(circle at 29.6% 96.1%, rgba(238, 243, 255, 0.68) 0 0.7px, transparent 1.4px),
+    radial-gradient(circle at 17.8% 34.8%, rgba(238, 243, 255, 0.62) 0 1.4px, transparent 2.1px),
+    radial-gradient(circle at 94.4% 9.5%, rgba(238, 243, 255, 0.58) 0 1.1px, transparent 1.8px);
+  opacity: .7;
+  animation: lock-stars-a 6.4s ease-in-out infinite alternate;
 }
 .lock-horizon {
   position: absolute;
@@ -567,21 +603,6 @@ onBeforeUnmount(() => {
   letter-spacing: .01em;
 }
 .pin-shell { position: relative; display: flex; justify-content: center; margin: 72px auto 0; }
-.pin-shell::after {
-  content: '';
-  position: absolute;
-  inset: -9px -12px;
-  border: 1px solid transparent;
-  border-radius: 21px;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
-}
-.pin-shell:focus-within::after {
-  opacity: 1;
-  border-color: rgba(var(--primary-rgb, 88, 80, 236), .58);
-  box-shadow: 0 0 0 5px rgba(var(--primary-rgb, 88, 80, 236), .10);
-}
 .pin-shell::before {
   content: '';
   position: absolute;
@@ -682,13 +703,13 @@ onBeforeUnmount(() => {
 html[data-theme='dark'] .lock-screen {
   color: #e8edff;
   background:
-    radial-gradient(ellipse 72% 62% at 6% 90%, rgba(var(--primary-rgb, 123, 118, 240), .24), transparent 64%),
-    radial-gradient(ellipse 64% 60% at 94% 6%, rgba(100, 142, 230, .14), transparent 64%),
-    linear-gradient(125deg, #0a1020 0%, #111832 48%, #0b1226 100%);
+    radial-gradient(ellipse 76% 60% at 8% 88%, rgba(var(--primary-rgb, 123, 118, 240), .3), transparent 66%),
+    radial-gradient(ellipse 64% 60% at 92% 8%, rgba(74, 130, 225, .26), transparent 64%),
+    linear-gradient(125deg, #0e1832 0%, #19264e 48%, #0d1730 100%);
 }
 html[data-theme='dark'] .lock-screen::before {
-  background: radial-gradient(circle at 50% 50%, rgba(255, 219, 170, .4) 0 36%, rgba(255, 202, 146, .17) 58%, rgba(255, 202, 146, 0) 74%);
-  filter: blur(14px) saturate(1.2);
+  background: radial-gradient(circle at 50% 50%, rgba(226, 236, 255, .56) 0 32%, rgba(148, 168, 255, .18) 55%, rgba(148, 168, 255, 0) 74%);
+  filter: blur(12px);
 }
 html[data-theme='dark'] .lock-beam {
   background: linear-gradient(90deg, rgba(255,255,255,0), rgba(190,205,255,.12) 34%, rgba(190,205,255,.04) 58%, rgba(255,255,255,0) 76%);
@@ -746,10 +767,6 @@ html[data-theme='dark'] .pin-slot.active {
   border-color: var(--primary, #7b76f0);
   box-shadow: 0 0 0 4px rgba(var(--primary-rgb, 123, 118, 240), .18), inset 0 1px 0 rgba(255,255,255,.08);
 }
-html[data-theme='dark'] .pin-shell:focus-within::after {
-  border-color: rgba(var(--primary-rgb, 123, 118, 240), .72);
-  box-shadow: 0 0 0 5px rgba(var(--primary-rgb, 123, 118, 240), .16);
-}
 html[data-theme='dark'] .pin-slot i {
   background: #dbe4ff;
   box-shadow: 0 1px 3px rgba(0,0,0,.35);
@@ -774,6 +791,10 @@ html[data-theme='dark'] .dove-shadow {
 @keyframes lock-card-in {
   from { opacity: 0; transform: translateY(12px) scale(.985); }
   to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes lock-stars-a {
+  from { opacity: .28; }
+  to { opacity: .82; }
 }
 @keyframes lock-caret {
   0%, 49% { opacity: 1; }
@@ -800,6 +821,7 @@ html[data-theme='dark'] .dove-shadow {
   }
   .lock-dove.is-perched .dove-body,
   .lock-dove.is-flying .dove-glyph,
+  .lock-stars .stars,
   .pin-shell:focus-within .pin-slot.active::after {
     animation: none;
   }

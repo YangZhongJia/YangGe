@@ -13,7 +13,7 @@
 
 <p>
   <a href="https://github.com/YangZhongJia/YangGe/releases">
-    <img src="https://img.shields.io/badge/version-1.11.11-3D8B6B?style=flat-square" alt="Version 1.11.11" />
+    <img src="https://img.shields.io/badge/version-1.11.12-3D8B6B?style=flat-square" alt="Version 1.11.12" />
   </a>
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/License-GPL--3.0--only-3D8B6B?style=flat-square" alt="GPL-3.0-only" />
@@ -50,9 +50,13 @@
 
 Start YangGe on computers connected to the same local network and they discover each other automatically. Open a peer to chat, transfer files, browse shared folders, or challenge them to a quick duel. No cloud account, central server, telemetry, or Internet access is involved. YangGe is designed for corporate intranets, isolated networks, and laboratories where external connectivity is limited or prohibited.
 
-> **1.11.11 status**: The Task center and local Agent entries are temporarily hidden; their implementation and data remain. The lock screen is now a minimal morning design, and the game center includes local Mahjong.
+> **1.11.12 status**: The Task center and local Agent entries are temporarily hidden; their implementation and data remain. The lock screen is now a minimal morning design, and the game center includes local Mahjong.
 
-## Recent updates (v1.11.11)
+## Recent updates (v1.11.12)
+
+- **Lock-screen focus**: removed the outer highlight around the whole PIN row; only the active slot border and blinking caret remain.
+
+**v1.11.11**
 
 - **Theme-aware lock screen**: follows light / dark / system and the five accent palettes; the dark version keeps the same morning-light composition, glass panel, dove, and PIN row.
 - **Focus state**: the whole PIN row gets an accent outline and the current empty slot shows a blinking caret while the hidden input is focused.
