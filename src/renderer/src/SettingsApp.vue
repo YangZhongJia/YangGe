@@ -2875,7 +2875,7 @@ async function confirmRemove(cidr: string): Promise<void> {
 }
 
 .empty-state {
-  border: 1px dashed var(--line);
+  border: 0;
   border-radius: 8px;
   background: var(--bg-list);
   padding: 14px;

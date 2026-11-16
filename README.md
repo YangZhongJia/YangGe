@@ -10,7 +10,7 @@
 
 <p>
   <a href="https://github.com/YangZhongJia/YangGe/releases">
-    <img src="https://img.shields.io/badge/version-1.11.12-3D8B6B?style=flat-square" alt="Version 1.11.12" />
+    <img src="https://img.shields.io/badge/version-1.11.13-3D8B6B?style=flat-square" alt="Version 1.11.13" />
   </a>
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/License-GPL--3.0--only-3D8B6B?style=flat-square" alt="GPL-3.0-only" />
@@ -52,7 +52,7 @@
 
 > **二开说明**：阳鸽是开源项目 [Teahouse（茶话间）](https://github.com/skyjt/teahouse) 的二次开发版本（GPL-3.0-only），仓库为 [YangZhongJia/YangGe](https://github.com/YangZhongJia/YangGe)。相对上游重做了品牌与界面，并新增 AI 分身 / 剪贴板 / 输入中提示 / AI 群总结 / 任务中心 / 双人角斗场 / ACP Agent 协作等能力。
 
-> **1.11.12 当前状态**：任务中心与 Agent 入口暂时隐藏，相关代码与数据保留；锁屏改为极简晨光版；游戏中心新增本地麻将。
+> **1.11.13 当前状态**：任务中心与 Agent 入口暂时隐藏，相关代码与数据保留；锁屏改为极简晨光版；游戏中心新增本地麻将。
 
 ## 为什么做这个
 
@@ -65,6 +65,10 @@
 干脆自己写一个：免费开源、纯内网直连、从 Windows 7 到国产统信 UOS 再到 macOS 全平台覆盖、打开就会用。这就是阳鸽。
 
 ## 最近更新
+
+**v1.11.13**
+
+- **设置页**：去掉空状态（暂无传输记录 / 尚未添加手动节点 / 尚未保存扫描网段）的虚线外框，避免进入设置时出现多余虚框。
 
 **v1.11.12**
 
