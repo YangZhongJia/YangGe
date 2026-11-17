@@ -3,7 +3,7 @@ import type { ScanRangeImportOutcome } from './cidr'
 // IPC 契约：main 与 renderer 之间唯一的对话词汇表（tech-design §4）。
 // 通道名、请求/响应类型、preload 暴露的 API 形状都只在这里定义。
 
-import type { NudgeStyle, Platform, ShareDenyReason, ShareEntry, ShareMode, TransferFailureReason } from './protocol'
+import type { NudgeStyle, Platform, PresenceStatus, ShareDenyReason, ShareEntry, ShareMode, TransferFailureReason } from './protocol'
 import type { WorkTaskAssignmentState, WorkTaskDeliveryState, WorkTaskStatus } from './work-task'
 import type { PkGame, PkRefView } from './pk'
 import type { DuelAction, DuelCommandResult, DuelStateEvent, DuelView } from './duel'
@@ -340,6 +340,8 @@ export interface PeerView {
   online: boolean
   /** 离开状态（锁屏 / 闲置，决议 #323）；仅 online 时有意义 */
   away?: boolean
+  /** 手动状态；仅 online 且非 online 时存在 */
+  status?: PresenceStatus
   lastSeen: number
   /** 应用版本（决议 #166，自更新版本比对依据） */
   ver: string
@@ -1151,6 +1153,8 @@ export interface SettingsView {
   avatar: number
   avatarHash: string
   setupDone: boolean
+  /** 手动状态；锁屏/闲置的自动离开不覆盖它 */
+  presenceStatus: PresenceStatus
   /** 用户自选的文件保存目录；空 = 跟随默认 */
   fileDir: string
   /** 系统默认下载目录（向导第三步展示用） */
@@ -1330,6 +1334,7 @@ export type ScanRangeImportResult = ScanRangeImportOutcome & { view: SettingsVie
 
 export interface AppSettingsPatch {
   notifications?: boolean
+  presenceStatus?: PresenceStatus
   manualPeers?: string[]
   scanRanges?: string[]
   udpPort?: number

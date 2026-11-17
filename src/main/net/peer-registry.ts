@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events'
 import { isDeepStrictEqual } from 'node:util'
-import type { Profile } from '../../shared/protocol'
+import type { PresenceStatus, Profile } from '../../shared/protocol'
 
 const zhCollator = new Intl.Collator('zh-Hans-CN')
 
@@ -12,6 +12,8 @@ export interface PeerRecord {
   online: boolean
   /** 离开状态（锁屏 / 闲置，决议 #323）；仅在线时有意义，不入持久化 */
   away?: boolean
+  /** 手动状态；仅在线时有意义，不入持久化 */
+  status?: PresenceStatus
 }
 
 /**
@@ -112,6 +114,7 @@ export class PeerRegistry extends EventEmitter {
     if (record && record.online) {
       record.online = false
       record.away = false
+      record.status = undefined
       this.emit('updated')
     }
   }
@@ -134,6 +137,16 @@ export class PeerRegistry extends EventEmitter {
     this.emit('updated')
   }
 
+  /** 手动状态（presence 心跳携带）：在线才接受，online 归一化为空。 */
+  setStatus(nodeId: string, status: PresenceStatus): void {
+    const record = this.peers.get(nodeId)
+    if (!record || !record.online) return
+    const next = status === 'online' ? undefined : status
+    if (record.status === next) return
+    record.status = next
+    this.emit('updated')
+  }
+
   /** 心跳超时离线判定（protocol §6.2），由 Discovery 周期调用 */
   sweep(offlineAfterMs: number): void {
     const now = Date.now()
@@ -141,6 +154,7 @@ export class PeerRegistry extends EventEmitter {
     for (const record of this.peers.values()) {
       if (record.online && now - record.lastSeen > offlineAfterMs) {
         record.online = false
+        record.status = undefined
         changed = true
       }
     }

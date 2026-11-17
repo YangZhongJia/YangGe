@@ -223,12 +223,36 @@ export interface ProfilePayload {
   probeId?: string
 }
 
+/** 手动状态；与自动离开（away）独立，缺省 = 在线。 */
+export type PresenceStatus =
+  | 'online'
+  | 'focus'
+  | 'meeting'
+  | 'lunch'
+  | 'slacking'
+  | 'offWork'
+
+const PRESENCE_STATUSES: readonly PresenceStatus[] = [
+  'online',
+  'focus',
+  'meeting',
+  'lunch',
+  'slacking',
+  'offWork'
+]
+
+export function isPresenceStatus(value: unknown): value is PresenceStatus {
+  return typeof value === 'string' && (PRESENCE_STATUSES as readonly string[]).includes(value)
+}
+
 /** presence 心跳载荷（§6.2） */
 export interface PresencePayload {
   seq: number
   profileRev: number
   /** 离开状态（锁屏 / 闲置）：true=离开；缺省=在线。旧端忽略（决议 #323） */
   away?: boolean
+  /** 手动状态；缺省 / online = 在线。旧端忽略。 */
+  status?: PresenceStatus
 }
 
 /** exit 载荷（空对象） */

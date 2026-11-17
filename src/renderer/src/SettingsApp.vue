@@ -26,7 +26,9 @@ import {
   type TransferView
 } from '../../shared/ipc'
 import { LANGUAGE_OPTIONS } from '../../shared/i18n'
-import { DEFAULT_TCP_PORT, DEFAULT_UDP_PORT } from '../../shared/protocol'
+import { DEFAULT_TCP_PORT, DEFAULT_UDP_PORT, type PresenceStatus } from '../../shared/protocol'
+import { PRESENCE_STATUS_OPTIONS } from './utils/presence-status'
+import PresenceIcon from './components/PresenceIcon.vue'
 import { applyAppearance } from './utils/appearance'
 import { accentPalette, normalizeAccent } from './utils/accents'
 import { formatBytes } from './utils/format'
@@ -515,6 +517,10 @@ async function saveApp(patch: AppSettingsPatch, tip = tr('已保存')): Promise<
   syncForm(next)
   applyAppearance(next) // 设置窗口自身的配色/背景即时生效（主窗口由 onSettingsUpdated 驱动）
   flashSaved(tip)
+}
+
+function choosePresenceStatus(status: PresenceStatus): void {
+  void saveApp({ presenceStatus: status }, tr('状态已更新'))
 }
 
 function profileDirty(): boolean {
@@ -1159,6 +1165,31 @@ async function confirmRemove(cidr: string): Promise<void> {
               </div>
               <div v-else class="avatar-pick avatar-picture-actions">
                 <button type="button" :disabled="avatarSaving" @click="pickCustomAvatar">{{ tr('上传图片') }}</button>
+              </div>
+            </div>
+            <div class="presence-status-block">
+              <div class="presence-status-copy">
+                <span>{{ tr('当前状态') }}</span>
+                <p>{{ tr('状态会展示给局域网内的同事；锁屏或闲置的自动离开不会覆盖它。') }}</p>
+              </div>
+              <div class="presence-status-options" role="radiogroup" :aria-label="tr('当前状态')">
+                <button
+                  v-for="option in PRESENCE_STATUS_OPTIONS"
+                  :key="option.value"
+                  type="button"
+                  role="radio"
+                  :class="{ on: settings.presenceStatus === option.value }"
+                  :aria-checked="settings.presenceStatus === option.value"
+                  @click="choosePresenceStatus(option.value)"
+                >
+                  <PresenceIcon
+                    class="presence-choice-icon"
+                    :class="`is-${option.value}`"
+                    :status="option.value"
+                    :size="14"
+                  />
+                  {{ tr(option.label) }}
+                </button>
               </div>
             </div>
             <div class="field-grid">
@@ -2578,6 +2609,84 @@ async function confirmRemove(cidr: string): Promise<void> {
 
 .avatar-mode::before {
   display: none;
+}
+
+.presence-status-block {
+  display: grid;
+  gap: 10px;
+  margin: 4px 0 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--bg-list);
+}
+.presence-status-copy {
+  display: grid;
+  gap: 3px;
+}
+.presence-status-copy > span {
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+.presence-status-copy p {
+  margin: 0;
+  color: var(--text-3);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.presence-status-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.presence-status-options button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--bg-window);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.presence-status-options button:hover {
+  border-color: var(--primary-border);
+  background: var(--surface-hover);
+}
+.presence-status-options button.on {
+  border-color: var(--primary-border);
+  background: var(--primary-weak);
+  color: var(--text-1);
+}
+.presence-status-options button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+.presence-choice-icon {
+  color: var(--text-3);
+}
+.presence-choice-icon.is-online {
+  color: var(--online);
+}
+.presence-choice-icon.is-focus {
+  color: var(--primary);
+}
+.presence-choice-icon.is-meeting {
+  color: #8b5cf6;
+}
+.presence-choice-icon.is-lunch {
+  color: var(--away, #e8a13c);
+}
+.presence-choice-icon.is-slacking {
+  color: #14b8a6;
+}
+.presence-choice-icon.is-offWork {
+  color: #94a3b8;
 }
 
 .avatar-mode button.on {

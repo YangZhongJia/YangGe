@@ -12,6 +12,12 @@ import { DirectoryTaskWorkspace } from './services/agent/directory-workspace'
 import { GitTaskWorkspace } from './services/agent/git-worktree'
 import { AgentRepo } from './store/agent-repo'
 import { AgentTaskRepo } from './store/agent-task-repo'
+  isPresenceStatus,
+      status: record.online ? record.status : undefined,
+      discovery.setStatus(state.config.presenceStatus)
+      presenceStatus: isPresenceStatus(c?.presenceStatus) ? c.presenceStatus : 'online',
+      if (isPresenceStatus(p.presenceStatus)) clean.presenceStatus = p.presenceStatus
+      if (clean.presenceStatus !== undefined) discovery?.setStatus(clean.presenceStatus)
 
 /** AI 分身的间接挂载点：chat/groups 先建、AiReplier 后挂（避免循环依赖） */
 const aiPortRef: {

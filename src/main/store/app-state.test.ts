@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -67,6 +67,25 @@ describe('锁屏配置', () => {
     const reloaded = loadAppState(directories[0], '0.0.0-test')
     expect(reloaded.config.lockEnabled).toBe(true)
     expect(reloaded.config.lockPinHash).toBe(hash)
+  })
+})
+
+describe('手动状态持久化', () => {
+  it('保存后重启恢复；非法值忽略并回退在线', () => {
+    const state = makeState()
+    expect(state.config.presenceStatus).toBe('online')
+
+    saveAppSettings(state, { presenceStatus: 'slacking' })
+    expect(state.config.presenceStatus).toBe('slacking')
+    expect(loadAppState(directories[0], '0.0.0-test').config.presenceStatus).toBe('slacking')
+
+    saveAppSettings(state, { presenceStatus: 'busy' as never })
+    expect(state.config.presenceStatus).toBe('slacking')
+
+    const raw = JSON.parse(readFileSync(state.configPath, 'utf8')) as Record<string, unknown>
+    raw.presenceStatus = 'busy'
+    writeFileSync(state.configPath, JSON.stringify(raw), 'utf8')
+    expect(loadAppState(directories[0], '0.0.0-test').config.presenceStatus).toBe('online')
   })
 })
 

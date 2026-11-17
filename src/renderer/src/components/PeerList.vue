@@ -5,6 +5,8 @@ import type { PeerCleanupCandidate, PeerView } from '../../../shared/ipc'
 import { usePeersStore } from '../stores/peers'
 import { NButton } from 'naive-ui'
 import AvatarMark from './AvatarMark.vue'
+import StatusBadge from './StatusBadge.vue'
+import { presenceStatusLabel } from '../utils/presence-status'
 
 // 通讯录三级折叠树（F-DISC-4 / ui-design §4）：公司 ▸ 部门 ▸ 团队 ▸ 成员。
 // 字段空缺逐级跳过，全空归"未分组"；组内在线优先（registry 已排序）。
@@ -144,6 +146,12 @@ function displayName(peer: PeerView): string {
   return peer.remark || peer.nick
 }
 
+function peerPresenceLabel(peer: PeerView): string {
+  if (!peer.online) return tr('离线')
+  if (peer.status && peer.status !== 'online') return presenceStatusLabel(peer.status)
+  return peer.away ? tr('离开') : tr('在线')
+}
+
 </script>
 
 <template>
@@ -164,7 +172,7 @@ function displayName(peer: PeerView): string {
           @click="onRowClick(row)"
           @dblclick="onRowDoubleClick(row)"
           :aria-expanded="row.kind === 'group' ? !collapsed.has(row.key) : undefined"
-          :aria-label="row.peer ? `${displayName(row.peer)}，${row.peer.online ? (row.peer.away ? tr('离开') : tr('在线')) : tr('离线')}，${row.peer.ip}` : undefined"
+          :aria-label="row.peer ? `${displayName(row.peer)}，${peerPresenceLabel(row.peer)}，${row.peer.ip}` : undefined"
         >
           <template v-if="row.kind === 'group'">
             <span class="arrow" aria-hidden="true">{{ collapsed.has(row.key) ? '▸' : '▾' }}</span>
@@ -185,7 +193,14 @@ function displayName(peer: PeerView): string {
               <span class="peer-name" :class="{ dim: !row.peer!.online }">
                 {{ displayName(row.peer!) }}
               </span>
-              <span class="peer-sub">{{ row.peer!.ip }}</span>
+              <span class="peer-sub">
+                <StatusBadge
+                  v-if="row.peer!.online && (row.peer!.status || row.peer!.away)"
+                  :status="row.peer!.status"
+                  :away="row.peer!.away"
+                />
+                <span class="peer-ip">{{ row.peer!.ip }}</span>
+              </span>
             </span>
             <span class="dot" :class="row.peer!.online ? 'on' : 'off'"></span>
           </template>
@@ -435,8 +450,18 @@ function displayName(peer: PeerView): string {
   color: var(--text-2);
 }
 .peer-sub {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
   font-size: 12px;
   color: var(--text-2);
+  white-space: nowrap;
+}
+.peer-ip {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .dot {
   width: 8px;

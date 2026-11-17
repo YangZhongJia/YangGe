@@ -29,6 +29,8 @@ import {
   type TablePasteHint
 } from '../utils/table-paste'
 import { listTime } from '../utils/time'
+import { presenceStatusLabel } from '../utils/presence-status'
+import PresenceIcon from './PresenceIcon.vue'
 import {
   canRecallAt,
   formatRecallMenuMeta,
@@ -341,6 +343,17 @@ const peerName = computed(() => {
 const peerIp = computed(() => peer.value?.ip ?? '')
 const peerOnline = computed(() => peer.value?.online ?? false)
 const peerAway = computed(() => peer.value?.online === true && peer.value?.away === true)
+const peerStatus = computed(() => peer.value?.status)
+const peerStatusLabel = computed(() => {
+  if (!peerOnline.value) return tr('离线')
+  if (peerStatus.value && peerStatus.value !== 'online') return presenceStatusLabel(peerStatus.value)
+  return peerAway.value ? tr('离开') : tr('在线')
+})
+const peerStatusTone = computed(() => {
+  if (!peerOnline.value) return 'offline'
+  if (peerStatus.value && peerStatus.value !== 'online') return peerStatus.value
+  return peerAway.value ? 'away' : 'online'
+})
 /** 群：成员才可发；单聊：文本随时可发（离线走补发） */
 const canSend = computed(() => (isGroup.value ? (group.value?.amMember ?? false) : true))
 const onlineGroupRecipientCount = computed(() => {
@@ -2367,9 +2380,13 @@ async function onDrop(event: DragEvent): Promise<void> {
           <span class="title-text">
             <span class="title">{{ peerName }}</span>
             <span class="subtitle">
-              <span class="state-word" :class="{ on: peerOnline, away: peerAway }">{{
-                peerAway ? tr('离开') : peerOnline ? tr('在线') : tr('离线')
-              }}</span>
+              <PresenceIcon
+                class="state-icon"
+                :class="peerStatusTone"
+                :status="peerStatus"
+                :size="13"
+              />
+              <span class="state-word" :class="peerStatusTone">{{ peerStatusLabel }}</span>
               <template v-if="peerIp"> · {{ peerIp }}</template>
             </span>
           </span>
@@ -2394,9 +2411,14 @@ async function onDrop(event: DragEvent): Promise<void> {
             <span class="profile-title">
               <strong>{{ peer.remark || peer.nick }}</strong>
               <small v-if="peer.remark">{{ tr('昵称：{0}', { 0: peer.nick }) }}</small>
-              <span class="profile-status" :class="{ on: peer.online }">
-                <span class="profile-status-dot"></span>
-                {{ peer.online ? tr('在线') : tr('离线') }}
+              <span class="profile-status" :class="peerStatusTone">
+                <PresenceIcon
+                  class="profile-status-icon"
+                  :class="peerStatusTone"
+                  :status="peerStatus"
+                  :size="13"
+                />
+                {{ peerStatusLabel }}
               </span>
             </span>
           </header>
@@ -3942,14 +3964,56 @@ async function onDrop(event: DragEvent): Promise<void> {
   white-space: nowrap;
 }
 /* 顶部在线状态融入副标题（决议 #81）：在线茶绿、离线灰，不再用孤立的「● 在线」标签 */
+.state-icon {
+  display: inline-block;
+  vertical-align: -2px;
+  margin-right: 3px;
+  color: var(--text-3);
+}
+.state-icon.online {
+  color: var(--online);
+}
+.state-icon.away {
+  color: var(--away);
+}
+.state-icon.focus {
+  color: var(--primary);
+}
+.state-icon.meeting {
+  color: #8b5cf6;
+}
+.state-icon.lunch {
+  color: var(--away, #e8a13c);
+}
+.state-icon.slacking {
+  color: #14b8a6;
+}
+.state-icon.offWork {
+  color: #94a3b8;
+}
 .state-word {
   color: var(--text-3);
 }
-.state-word.on {
+.state-word.online {
   color: var(--online);
 }
 .state-word.away {
   color: var(--away);
+}
+.state-word.focus {
+  color: var(--primary);
+}
+.state-word.meeting {
+  color: #8b5cf6;
+}
+.state-word.lunch {
+  color: var(--away, #e8a13c);
+}
+.state-word.slacking {
+  color: #14b8a6;
+}
+.state-word.offWork {
+  color: #94a3b8;
 }
 .peer-profile-popover {
   position: absolute;
@@ -4027,19 +4091,31 @@ async function onDrop(event: DragEvent): Promise<void> {
   font-size: 12px;
   line-height: 1;
 }
-.profile-status.on {
+.profile-status.online {
   color: var(--online);
   background: var(--online-weak);
   border-color: transparent;
 }
-.profile-status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--offline);
+.profile-status.away {
+  color: var(--away);
 }
-.profile-status.on .profile-status-dot {
-  background: var(--online);
+.profile-status.focus {
+  color: var(--primary);
+}
+.profile-status.meeting {
+  color: #8b5cf6;
+}
+.profile-status.lunch {
+  color: var(--away, #e8a13c);
+}
+.profile-status.slacking {
+  color: #14b8a6;
+}
+.profile-status.offWork {
+  color: #94a3b8;
+}
+.profile-status-icon {
+  flex: 0 0 auto;
 }
 .profile-rows {
   padding: 10px 0 8px;

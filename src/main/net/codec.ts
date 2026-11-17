@@ -6,6 +6,7 @@ import {
   SCREEN_REJECT_REASONS,
   SCREEN_END_REASONS,
   isAvatarPresetValue,
+  isPresenceStatus,
   GROUP_IMG_AUTO_ACCEPT,
   GROUP_MAX_MEMBERS,
   LIMITS,
@@ -134,7 +135,13 @@ function validatePayload(type: string, payload: unknown, textLimit = TEXT_UDP_LI
     case MSG_TYPES.presence: {
       if (!isRecord(payload)) return false
       const p = payload as Partial<PresencePayload>
-      return isInt(p.seq) && p.seq >= 0 && isInt(p.profileRev) && p.profileRev >= 0
+      return (
+        isInt(p.seq) &&
+        p.seq >= 0 &&
+        isInt(p.profileRev) &&
+        p.profileRev >= 0 &&
+        (p.status === undefined || isPresenceStatus(p.status))
+      )
     }
     case MSG_TYPES.msg: {
       if (!isRecord(payload)) return false

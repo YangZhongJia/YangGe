@@ -12,8 +12,10 @@ import {
   DEFAULT_UDP_PORT,
   isAvatarHash,
   isAvatarPresetValue,
+  isPresenceStatus,
   isShareMode,
   type Platform,
+  type PresenceStatus,
   type Profile,
   type ShareMode
 } from '../../shared/protocol'
@@ -36,6 +38,8 @@ export interface ConfigFile {
   profileRev: number
   /** 首次启动向导是否已完成（F-SYS-6） */
   setupDone: boolean
+  /** 手动状态；锁屏/闲置的自动离开不覆盖它 */
+  presenceStatus: PresenceStatus
   /** 文件保存目录；空 = 跟随系统下载目录（文件功能 v0.2 使用） */
   fileDir: string
   /** 新消息系统通知开关 */
@@ -245,6 +249,7 @@ export function saveAppSettings(
     Pick<
       ConfigFile,
       | 'notifications'
+      | 'presenceStatus'
       | 'ai'
       | 'clipboardFollow'
       | 'accent'
@@ -277,6 +282,7 @@ export function saveAppSettings(
   if (!state.config.scanRangeSources) state.config.scanRangeSources = {}
   if (!state.config.ignoredScanRanges) state.config.ignoredScanRanges = {}
   if (patch.notifications !== undefined) state.config.notifications = patch.notifications
+  if (isPresenceStatus(patch.presenceStatus)) state.config.presenceStatus = patch.presenceStatus
   if (patch.ai !== undefined) state.config.ai = normalizeAi(patch.ai)
   if (patch.clipboardFollow !== undefined) state.config.clipboardFollow = normalizeClipboardFollow(patch.clipboardFollow)
   if (patch.accent !== undefined && ['indigo', 'teal', 'rose', 'amber', 'forest'].includes(patch.accent)) {
@@ -474,6 +480,7 @@ export function loadAppState(
       avatarHash: '',
       profileRev: 1,
       setupDone: false,
+      presenceStatus: 'online',
       fileDir: '',
       notifications: true,
       ai: { ...DEFAULT_AI_REPLIER },
@@ -511,6 +518,7 @@ export function loadAppState(
   config.avatar = isAvatarPresetValue(config.avatar) ? config.avatar : -1
   config.avatarHash = isAvatarHash(config.avatarHash) ? config.avatarHash : ''
   config.setupDone = config.setupDone === true
+  config.presenceStatus = isPresenceStatus(config.presenceStatus) ? config.presenceStatus : 'online'
   config.fileDir = typeof config.fileDir === 'string' ? config.fileDir : ''
   config.notifications = config.notifications !== false
   config.manualPeers = Array.isArray(config.manualPeers)

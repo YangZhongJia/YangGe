@@ -10,6 +10,15 @@ export interface ReleaseHighlights {
  * 主窗按 localStorage 中的 lastSeenVersion 判断是否展示，避免每次启动重复弹出。
  */
 export const RELEASE_HIGHLIGHTS: Record<string, ReleaseHighlights> = {
+  '1.11.14': {
+    version: '1.11.14',
+    notes: [
+      '新增办公室状态牌：在线 / 专注 / 开会 / 吃饭 / 摸鱼 / 下班，点左下角头像即可切换。',
+      '状态随局域网心跳即时同步到聊天头部、资料卡和通讯录，每个状态配有小图标。',
+      '自动离开不会覆盖手动状态。'
+    ],
+    fixed: true
+  },
   '1.11.13': {
     version: '1.11.13',
     notes: ['设置页空状态去掉虚线外框，进入设置时不再出现多余虚框。'],

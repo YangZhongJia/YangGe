@@ -2,6 +2,29 @@ import { describe, expect, it, vi } from 'vitest'
 import type { Profile } from '../../shared/protocol'
 import { PeerRegistry } from './peer-registry'
 
+describe('手动状态', () => {
+  it('setStatus 只更新在线节点，online 归一化为空，离线自动清除', () => {
+    const registry = new PeerRegistry('node-self')
+    registry.touch('node-bob', '127.0.0.1', 10001, profile('node-bob', 'Bob'))
+    const updates: number[] = []
+    registry.on('updated', () => updates.push(1))
+
+    registry.setStatus('node-bob', 'slacking')
+    expect(registry.get('node-bob')?.status).toBe('slacking')
+    registry.setStatus('node-bob', 'slacking')
+    expect(updates.length).toBe(1) // 同值不重复触发
+
+    registry.setStatus('node-bob', 'online')
+    expect(registry.get('node-bob')?.status).toBeUndefined()
+
+    registry.setStatus('node-bob', 'meeting')
+    registry.markOffline('node-bob')
+    expect(registry.get('node-bob')?.status).toBeUndefined()
+    registry.setStatus('node-bob', 'lunch') // 离线节点不接受状态
+    expect(registry.get('node-bob')?.status).toBeUndefined()
+  })
+})
+
 function profile(nodeId: string, nick: string, profileRev = 1): Profile {
   return {
     nodeId,

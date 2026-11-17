@@ -35,15 +35,19 @@ import DuelInviteToast from './components/DuelInviteToast.vue'
 import startupIconUrl from '../../../build/icons/pantry-logo-icon.png?url'
 import { useGroupsStore } from './stores/groups'
 import type { PeerView } from '../../shared/ipc'
+import type { PresenceStatus } from '../../shared/protocol'
 import { applyAppearance } from './utils/appearance'
 import { applyPerformanceProfile } from './utils/performance-profile'
 import { isPlainEscape } from './utils/escape'
 import AvatarMark from './components/AvatarMark.vue'
+import StatusBadge from './components/StatusBadge.vue'
+import PresenceIcon from './components/PresenceIcon.vue'
 import CabinetList from './components/CabinetList.vue'
 import CabinetPane from './components/CabinetPane.vue'
 import WorkTasksPane from './components/WorkTasksPane.vue'
 import { useCabinetStore } from './stores/cabinet'
 import { randomQuote } from './utils/quotes'
+import { PRESENCE_STATUS_OPTIONS } from './utils/presence-status'
 import doveMarkUrl from './assets/brand/yangge-mark.svg?url'
 import { teahouseDarkThemeOverrides, teahouseLightThemeOverrides } from './ui/naive-theme'
 import { accentPalette, normalizeAccent } from './utils/accents'
@@ -302,6 +306,10 @@ let railFocusReleaseTimer: ReturnType<typeof setTimeout> | null = null
 let pendingRailHint: string | null = null
 
 const captureNotice = ref<CaptureFailureNotice | null>(null)
+const statusMenuOpen = ref(false)
+const currentPresenceStatus = computed<PresenceStatus>(
+  () => settings.value?.presenceStatus ?? 'online'
+)
 const selfName = computed(() => settings.value?.nick.trim() || tr('未设置昵称'))
 const selfOrgPath = computed(() => {
   const parts = [settings.value?.company, settings.value?.dept, settings.value?.team]
@@ -313,6 +321,19 @@ const selfIpText = computed(() => info.value?.localIp || tr('正在获取'))
 const selfHostText = computed(() => settings.value?.host.trim() || tr('主机名未加载'))
 const selfNodeShort = computed(() => info.value?.nodeId.slice(0, 8) ?? tr('加载中'))
 const activeRailHint = ref<string | null>(null)
+
+function closeStatusMenu(): void {
+  statusMenuOpen.value = false
+}
+
+function toggleStatusMenu(): void {
+  statusMenuOpen.value = !statusMenuOpen.value
+}
+
+async function choosePresenceStatus(status: PresenceStatus): Promise<void> {
+  statusMenuOpen.value = false
+  settings.value = await window.pantry.saveAppSettings({ presenceStatus: status })
+}
 
 watch(language, () => applyWindowTitle(settings.value))
 
@@ -399,6 +420,11 @@ function onCompositionEnd(): void { composing = false }
 
 function onMainKeydown(event: KeyboardEvent): void {
   if (appLocked.value) return
+  if (statusMenuOpen.value && isPlainEscape(event, composing)) {
+    event.preventDefault()
+    closeStatusMenu()
+    return
+  }
   if (!isPlainEscape(event, composing) || showWizard.value || settingsWindowOpen.value) return
   // document / 控件先消费按键；window 上的弹窗处理器可能后注册，因此先保留弹窗优先权。
   const hasPopup = [...document.querySelectorAll<HTMLElement>(
@@ -451,6 +477,7 @@ onMounted(async () => {
   void groupsStore.init()
   void updateStore.init()
   document.addEventListener('visibilitychange', onVisibilityChange)
+  document.addEventListener('click', closeStatusMenu)
   info.value = await window.pantry.getAppInfo()
   applyPerformanceProfile(info.value)
   settings.value = await window.pantry.getSettings()
@@ -477,6 +504,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   document.removeEventListener('visibilitychange', onVisibilityChange)
+  document.removeEventListener('click', closeStatusMenu)
   window.removeEventListener('keydown', onMainKeydown)
   document.removeEventListener('compositionstart', onCompositionStart)
   document.removeEventListener('compositionend', onCompositionEnd)
@@ -526,13 +554,22 @@ onUnmounted(() => {
   </Transition>
   <div class="shell" :class="{ 'shell--booting': !settings }" :inert="appLocked" :aria-hidden="appLocked ? 'true' : undefined">
     <nav class="rail">
-      <div class="avatar-wrap" :aria-label="tr('我的信息')">
-        <AvatarMark
-          class="avatar"
-          :avatar="settings?.avatar ?? -1"
-          :avatar-hash="settings?.avatarHash"
-          :name="settings?.nick ?? tr('茶')"
-        />
+      <div class="avatar-wrap" :class="{ 'menu-open': statusMenuOpen }">
+        <button
+          type="button"
+          class="avatar-trigger"
+          :aria-label="tr('切换状态')"
+          aria-haspopup="menu"
+          :aria-expanded="statusMenuOpen"
+          @click.stop="toggleStatusMenu"
+        >
+          <AvatarMark
+            class="avatar"
+            :avatar="settings?.avatar ?? -1"
+            :avatar-hash="settings?.avatarHash"
+            :name="settings?.nick ?? tr('茶')"
+          />
+        </button>
         <div class="self-card" aria-hidden="true">
           <div class="self-card-head">
             <AvatarMark
@@ -544,6 +581,9 @@ onUnmounted(() => {
             <div class="self-card-title">
               <div class="self-card-name">{{ selfName }}</div>
               <div class="self-card-subtitle">{{ tr('本机账户') }}</div>
+              <div class="self-card-status-line">
+                <StatusBadge :status="currentPresenceStatus" />
+              </div>
             </div>
           </div>
           <div class="self-card-body">
@@ -566,6 +606,33 @@ onUnmounted(() => {
               <strong>{{ selfNodeShort }}</strong>
             </div>
           </div>
+        </div>
+        <div
+          v-if="statusMenuOpen"
+          class="status-menu"
+          role="menu"
+          :aria-label="tr('选择状态')"
+          @click.stop
+        >
+          <div class="status-menu-head">{{ tr('当前状态') }}</div>
+          <button
+            v-for="option in PRESENCE_STATUS_OPTIONS"
+            :key="option.value"
+            type="button"
+            role="menuitemradio"
+            :aria-checked="currentPresenceStatus === option.value"
+            :class="{ on: currentPresenceStatus === option.value }"
+            @click="choosePresenceStatus(option.value)"
+          >
+            <PresenceIcon
+              class="status-menu-icon"
+              :class="`is-${option.value}`"
+              :status="option.value"
+              :size="14"
+            />
+            <span>{{ tr(option.label) }}</span>
+            <span v-if="currentPresenceStatus === option.value" class="status-menu-check" aria-hidden="true">✓</span>
+          </button>
         </div>
       </div>
       <button
@@ -904,6 +971,22 @@ onUnmounted(() => {
 .avatar-wrap:hover::after {
   pointer-events: auto;
 }
+.avatar-trigger {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.avatar-trigger:focus-visible {
+  outline: 2px solid var(--rail-focus);
+  outline-offset: 2px;
+}
 .avatar {
   width: 38px;
   height: 38px;
@@ -912,6 +995,84 @@ onUnmounted(() => {
   place-items: center;
   font-weight: 600;
   font-size: 18px;
+}
+.self-card-status-line {
+  margin-top: 5px;
+  color: var(--text-3);
+  font-size: 11px;
+}
+.avatar-wrap.menu-open .self-card,
+.avatar-wrap.menu-open:hover .self-card {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateX(-6px) scale(0.985);
+  transition-delay: 0s;
+}
+.status-menu {
+  position: absolute;
+  left: 52px;
+  top: 0;
+  z-index: 40;
+  width: 188px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--material-strong);
+  box-shadow: var(--highlight-edge), var(--shadow-float);
+  color: var(--text-1);
+}
+.status-menu-head {
+  padding: 5px 8px 6px;
+  color: var(--text-3);
+  font-size: 11px;
+}
+.status-menu button {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) 14px;
+  gap: 8px;
+  align-items: center;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.status-menu button:hover,
+.status-menu button.on {
+  background: var(--surface-hover);
+  color: var(--text-1);
+}
+.status-menu-icon {
+  color: var(--text-3);
+}
+.status-menu-icon.is-online {
+  color: var(--online);
+}
+.status-menu-icon.is-focus {
+  color: var(--primary);
+}
+.status-menu-icon.is-meeting {
+  color: #8b5cf6;
+}
+.status-menu-icon.is-lunch {
+  color: var(--away, #e8a13c);
+}
+.status-menu-icon.is-slacking {
+  color: #14b8a6;
+}
+.status-menu-icon.is-offWork {
+  color: #94a3b8;
+}
+.status-menu-check {
+  color: var(--primary);
+  font-size: 12px;
+  text-align: center;
 }
 .self-card {
   position: absolute;

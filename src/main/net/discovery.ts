@@ -18,6 +18,17 @@ import { makeEnvelope } from './codec'
 import type { PeerClock } from './peer-clock'
 import type { UdpChannel } from './udp'
 import type { PeerRegistry } from './peer-registry'
+  type PresenceStatus,
+  private status: PresenceStatus = 'online'
+  /** 手动状态：变更后立即广播一次，后续心跳继续携带。 */
+  setStatus(value: PresenceStatus): void {
+    if (this.status === value) return
+    this.status = value
+    this.sendPresence()
+  }
+
+    if (this.status !== 'online') payload.status = this.status
+        this.registry.setStatus(env.from, presence.status ?? 'online')
 
 export interface ManualPeer {
   host: string

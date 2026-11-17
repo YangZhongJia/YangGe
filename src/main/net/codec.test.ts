@@ -214,6 +214,24 @@ describe('codec', () => {
     expect(result).toEqual({ ok: false, reason: 'bad-payload:presence' })
   })
 
+  it('presence 状态只接受六种枚举值', () => {
+    const ok = makeEnvelope(MSG_TYPES.presence, 'node-aaaa', {
+      seq: 1,
+      profileRev: 1,
+      status: 'slacking'
+    })
+    expect(decode(encode(ok))).toMatchObject({
+      ok: true,
+      known: true,
+      env: { payload: { status: 'slacking' } }
+    })
+
+    for (const status of ['busy', '', 'online ', 1]) {
+      const bad = makeEnvelope(MSG_TYPES.presence, 'node-aaaa', { seq: 1, profileRev: 1, status })
+      expect(decode(encode(bad))).toEqual({ ok: false, reason: 'bad-payload:presence' })
+    }
+  })
+
   it('group-text mentions 白名单校验', () => {
     const ok = makeEnvelope<MsgPayload>(MSG_TYPES.msg, 'node-aaaa', {
       kind: 'group-text',
