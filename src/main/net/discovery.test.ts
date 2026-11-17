@@ -13,20 +13,6 @@ import { UdpChannel } from './udp'
 import { PeerRegistry } from './peer-registry'
 import { Discovery, type ManualPeer } from './discovery'
 import { RangeSync } from './range-sync'
-  it('手动状态随 presence 广播，改回在线即清空', async () => {
-    const a = await makeStack('alice')
-    const b = await makeStack('bob', [{ host: '127.0.0.1', port: a.port }])
-    a.discovery.start()
-    b.discovery.start()
-    await waitFor(() => a.registry.get(b.profile.nodeId)?.online === true)
-
-    b.discovery.setStatus('slacking')
-    await waitFor(() => a.registry.get(b.profile.nodeId)?.status === 'slacking')
-
-    b.discovery.setStatus('online')
-    await waitFor(() => a.registry.get(b.profile.nodeId)?.status === undefined)
-  })
-
 
 // 回环集成测试：两套完整网络栈在 127.0.0.1 对发。
 // broadcastTargets 置空 —— 测试永不向真实局域网发包。
@@ -257,6 +243,20 @@ describe('discovery 回环集成', () => {
     // A 在下个心跳发现 rev 失配 → 发 entry → B 回 alive 带新资料
     await waitFor(() => a.registry.get(b.profile.nodeId)?.profile.nick === 'bob-换了个人', 3000)
     expect(a.registry.get(b.profile.nodeId)?.profile.profileRev).toBe(2)
+  })
+
+  it('手动状态随 presence 广播，改回在线即清空', async () => {
+    const a = await makeStack('alice')
+    const b = await makeStack('bob', [{ host: '127.0.0.1', port: a.port }])
+    a.discovery.start()
+    b.discovery.start()
+    await waitFor(() => a.registry.get(b.profile.nodeId)?.online === true)
+
+    b.discovery.setStatus('slacking')
+    await waitFor(() => a.registry.get(b.profile.nodeId)?.status === 'slacking')
+
+    b.discovery.setStatus('online')
+    await waitFor(() => a.registry.get(b.profile.nodeId)?.status === undefined)
   })
 
   it('已在线节点不接受不同 UDP 源地址的伪造重绑定', async () => {

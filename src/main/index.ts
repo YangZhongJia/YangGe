@@ -12,12 +12,6 @@ import { DirectoryTaskWorkspace } from './services/agent/directory-workspace'
 import { GitTaskWorkspace } from './services/agent/git-worktree'
 import { AgentRepo } from './store/agent-repo'
 import { AgentTaskRepo } from './store/agent-task-repo'
-  isPresenceStatus,
-      status: record.online ? record.status : undefined,
-      discovery.setStatus(state.config.presenceStatus)
-      presenceStatus: isPresenceStatus(c?.presenceStatus) ? c.presenceStatus : 'online',
-      if (isPresenceStatus(p.presenceStatus)) clean.presenceStatus = p.presenceStatus
-      if (clean.presenceStatus !== undefined) discovery?.setStatus(clean.presenceStatus)
 
 /** AI 分身的间接挂载点：chat/groups 先建、AiReplier 后挂（避免循环依赖） */
 const aiPortRef: {
@@ -129,6 +123,7 @@ import {
   SHARE_REQ_TIMEOUT,
   CLIPBOARD_TEXT_LIMIT,
   isAvatarPresetValue,
+  isPresenceStatus,
   isShareMode,
   normalizeNudgeStyle,
   type ClipboardPayload,
@@ -920,6 +915,7 @@ if (!gotLock) {
       ip: record.ip,
       online: record.online,
       away: record.online ? record.away === true : undefined,
+      status: record.online ? record.status : undefined,
       lastSeen: record.lastSeen,
       ver: record.profile.ver,
       caps: Array.isArray(record.profile.caps) ? record.profile.caps : []
@@ -1822,6 +1818,7 @@ if (!gotLock) {
       await udp.start()
       remoteView.setNetworkReady(tcpReady)
       discovery.start()
+      discovery.setStatus(state.config.presenceStatus)
       rangeSync?.start()
       rangeScanner = new RangeScanScheduler({
         discovery, getState: () => appState, onlineCount: () => registry?.onlineCount() ?? 0,
@@ -2828,6 +2825,7 @@ if (!gotLock) {
       avatar: c?.avatar ?? -1,
       avatarHash: c?.avatarHash ?? '',
       setupDone: c?.setupDone ?? true,
+      presenceStatus: isPresenceStatus(c?.presenceStatus) ? c.presenceStatus : 'online',
       fileDir: c?.fileDir ?? '',
       defaultFileDir: defaultFileDir(),
       ai: normalizeAi(c?.ai),
@@ -3521,6 +3519,7 @@ if (!gotLock) {
       const clean: AppSettingsPatch = {}
       const previousScanRanges = new Set(appState.config.scanRanges)
       if (typeof p.notifications === 'boolean') clean.notifications = p.notifications
+      if (isPresenceStatus(p.presenceStatus)) clean.presenceStatus = p.presenceStatus
       if (p.ai && typeof p.ai === 'object') clean.ai = normalizeAi(p.ai)
     if (p.clipboardFollow && typeof p.clipboardFollow === 'object') {
       clean.clipboardFollow = normalizeClipboardFollow(p.clipboardFollow)
@@ -3597,6 +3596,7 @@ if (!gotLock) {
       if (clean.captureShortcut !== undefined || clean.showHideShortcut !== undefined) {
         registerGlobalShortcuts()
       }
+      if (clean.presenceStatus !== undefined) discovery?.setStatus(clean.presenceStatus)
       return broadcastSettings()
     }
     return settingsView()

@@ -10,6 +10,7 @@ import {
   type PeersPayload,
   type PeerSummary,
   type PresencePayload,
+  type PresenceStatus,
   type Profile,
   type ProfilePayload,
   type Timings
@@ -18,17 +19,6 @@ import { makeEnvelope } from './codec'
 import type { PeerClock } from './peer-clock'
 import type { UdpChannel } from './udp'
 import type { PeerRegistry } from './peer-registry'
-  type PresenceStatus,
-  private status: PresenceStatus = 'online'
-  /** 手动状态：变更后立即广播一次，后续心跳继续携带。 */
-  setStatus(value: PresenceStatus): void {
-    if (this.status === value) return
-    this.status = value
-    this.sendPresence()
-  }
-
-    if (this.status !== 'online') payload.status = this.status
-        this.registry.setStatus(env.from, presence.status ?? 'online')
 
 export interface ManualPeer {
   host: string
@@ -352,6 +342,7 @@ export class Discovery {
   }
 
   private away = false
+  private status: PresenceStatus = 'online'
 
   /** 离开状态（决议 #323）：变更后立即广播一次，后续心跳继续携带 */
   setAway(value: boolean): void {
@@ -360,10 +351,18 @@ export class Discovery {
     this.sendPresence()
   }
 
+  /** 手动状态：变更后立即广播一次，后续心跳继续携带。 */
+  setStatus(value: PresenceStatus): void {
+    if (this.status === value) return
+    this.status = value
+    this.sendPresence()
+  }
+
   private sendPresence(): void {
     this.presenceSeq += 1
     const payload: PresencePayload = { seq: this.presenceSeq, profileRev: this.profile.profileRev }
     if (this.away) payload.away = true
+    if (this.status !== 'online') payload.status = this.status
     const env = makeEnvelope(MSG_TYPES.presence, this.selfId, payload)
     this.udp.broadcast(env)
     // 跨网段在线节点单播心跳（protocol §6.2）；同网段节点会重复收到，靠去重无害
@@ -407,6 +406,7 @@ export class Discovery {
         const knownRev = this.registry.profileRevOf(env.from)
         const touched = this.registry.touch(env.from, rinfo.address, rinfo.port)
         this.registry.setAway(env.from, presence.away === true)
+        this.registry.setStatus(env.from, presence.status ?? 'online')
         if (touched) this.peerClock?.observe(env.from, env.ts, Date.now())
         const peer = this.registry.get(env.from)
         if ((touched && presence.profileRev !== knownRev) || !peer || (!peer.online && !touched)) {
