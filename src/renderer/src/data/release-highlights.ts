@@ -10,6 +10,15 @@ export interface ReleaseHighlights {
  * 主窗按 localStorage 中的 lastSeenVersion 判断是否展示，避免每次启动重复弹出。
  */
 export const RELEASE_HIGHLIGHTS: Record<string, ReleaseHighlights> = {
+  '1.11.19': {
+    version: '1.11.19',
+    notes: [
+      '移除右下角传输浮层，进行中的传输改为输入框上方行内条，显示文件名、百分比和实时速度。',
+      '私聊普通文件和高速文件继续免确认接收，启动后自动续接未完成的私聊文件。',
+      '本机当前有线网卡为 100 Mbps，10 MB/s 左右已接近物理上限。'
+    ],
+    fixed: true
+  },
   '1.11.18': {
     version: '1.11.18',
     notes: [

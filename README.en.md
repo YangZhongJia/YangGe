@@ -13,7 +13,7 @@
 
 <p>
   <a href="https://github.com/YangZhongJia/YangGe/releases">
-    <img src="https://img.shields.io/badge/version-1.11.18-3D8B6B?style=flat-square" alt="Version 1.11.18" />
+    <img src="https://img.shields.io/badge/version-1.11.19-3D8B6B?style=flat-square" alt="Version 1.11.19" />
   </a>
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/License-GPL--3.0--only-3D8B6B?style=flat-square" alt="GPL-3.0-only" />
@@ -50,9 +50,16 @@
 
 Start YangGe on computers connected to the same local network and they discover each other automatically. Open a peer to chat, transfer files, browse shared folders, or challenge them to a quick duel. No cloud account, central server, telemetry, or Internet access is involved. YangGe is designed for corporate intranets, isolated networks, and laboratories where external connectivity is limited or prohibited.
 
-> **1.11.18 status**: The Task center and local Agent entries are temporarily hidden; their implementation and data remain. 1:1 files are accepted without a receiver prompt, and transfer progress for both paths is shown in one dock. Status badges and the minimal morning lock screen are retained.
+> **1.11.19 status**: The Task center and local Agent entries are temporarily hidden; their implementation and data remain. The right-side transfer overlay is gone; progress now appears as a slim inline strip above the composer. 1:1 files are accepted without a prompt.
 
-## Recent updates (v1.11.18)
+## Recent updates (v1.11.19)
+
+- **Right-side overlay removed**: no more floating transfer history panel. Active transfers show as a slim strip above the composer with filename, percentage, and live speed.
+- **No receive prompt retained**: 1:1 normal and fast files are still accepted automatically; pending offers within the claim window resume after launch.
+- **Speed note**: this machine's active wired adapter is 100 Mbps (about 11.8 MB/s theoretical), so 10 MB/s is the link limit, not an app throttle.
+- **Version bump**: 1.11.18 and older clients see the LAN update entry again.
+
+**v1.11.18**
 
 - **No receive prompt**: 1:1 normal and fast files are accepted automatically; disable "allow colleagues to send files directly" in Settings to restore the prompt.
 - **Unified progress**: the bottom-right dock now shows normal and fast transfers, including waiting, sending, receiving, and completion.

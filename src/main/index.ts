@@ -1735,45 +1735,9 @@ if (!gotLock) {
         alias: state.profile?.nick ?? '阳鸽',
         emitTransfer: (view) => broadcastEvent(IpcEvents.transferUpdated, view),
         emitPeers: () => broadcastEvent(IpcEvents.peersUpdated, peerViews()),
-        confirmOffer: async (offer) => {
-          // 用户明确要求私聊文件免确认：默认直接接收。关闭该设置时保留
-          // 原来的确认弹窗作为逃生口。
-          if (appState?.config.allowDirectFileSend !== false) return true
-          const decided = new Promise<boolean>((resolve) => {
-            pendingFastOffers.set(offer.transferId, (accepted) => {
-              pendingFastOffers.delete(offer.transferId)
-              clearTimeout(timer)
-              resolve(accepted)
-            })
-            // 无人应答时按拒绝处理，避免发送方无限等待；20s 足够看完确认框。
-            const timer = setTimeout(() => {
-              if (!pendingFastOffers.has(offer.transferId)) return
-              pendingFastOffers.delete(offer.transferId)
-              resolve(false)
-            }, 20_000)
-          })
-          broadcastEvent(IpcEvents.transferUpdated, {
-            transferId: offer.transferId,
-            msgId: '',
-            convId: '',
-            peerId: offer.from.nodeId,
-            peerName: offer.from.alias,
-            direction: 'in',
-            status: 'offering',
-            bytesDone: 0,
-            totalSize: offer.totalBytes,
-            fileCount: offer.files.length,
-            name:
-              offer.files.length === 1
-                ? (offer.files[0]?.name ?? '')
-                : `${offer.files[0]?.name ?? ''} 等 ${offer.files.length} 个文件`,
-            expiresAt: 0,
-            savedPath: '',
-            direct: true,
-            transport: 'fast'
-          })
-          return decided
-        },
+        // 私聊高速文件默认免确认直接接收；关闭“允许同事直接发送文件”时
+        // 拒绝高速报价，让发送方回退到需要接收方确认的普通通道。
+        confirmOffer: async () => appState?.config.allowDirectFileSend !== false,
         onError: (scope, err) => {
           diagnostics.record('transfer.error', { transport: 'fast', scope }, err)
           console.error(`[fast-transfer:${scope}]`, err)

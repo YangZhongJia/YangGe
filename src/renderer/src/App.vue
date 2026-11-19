@@ -32,7 +32,6 @@ import LockScreen from './components/LockScreen.vue'
 import NoodleBowlEffect from './components/NoodleBowlEffect.vue'
 import VersionHighlights from './components/VersionHighlights.vue'
 import DuelInviteToast from './components/DuelInviteToast.vue'
-import FastTransferDock from './components/FastTransferDock.vue'
 import startupIconUrl from '../../../build/icons/pantry-logo-icon.png?url'
 import { useGroupsStore } from './stores/groups'
 import type { PeerView } from '../../shared/ipc'
@@ -900,7 +899,6 @@ onUnmounted(() => {
     :icon-url="startupIconUrl"
     @close="dismissVersionHighlights"
   />
-  <FastTransferDock v-if="!appLocked" />
   </NConfigProvider>
 </template>
 

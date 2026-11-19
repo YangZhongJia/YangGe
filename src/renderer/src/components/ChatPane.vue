@@ -29,6 +29,7 @@ import {
   type TablePasteHint
 } from '../utils/table-paste'
 import { listTime } from '../utils/time'
+import { formatBytes } from '../utils/format'
 import { presenceStatusLabel } from '../utils/presence-status'
 import PresenceIcon from './PresenceIcon.vue'
 import {
@@ -85,6 +86,23 @@ const groupsStore = useGroupsStore()
 const transfersStore = useTransfersStore()
 const duelStore = useDuelStore()
 transfersStore.init()
+
+/** 只在输入区上方显示进行中的传输，不再用右侧浮动大面板。 */
+const inlineTransfers = computed(() =>
+  Object.values(transfersStore.byId).filter(
+    (view) => view.status === 'accepted' || (view.status === 'offering' && view.direction === 'out')
+  )
+)
+
+function transferPercent(bytesDone: number, totalSize: number): number {
+  if (!Number.isFinite(totalSize) || totalSize <= 0) return 0
+  return Math.max(0, Math.min(100, Math.round((bytesDone / totalSize) * 100)))
+}
+
+function cancelInlineTransfer(transferId: string, transport: string | undefined): void {
+  if (transport === 'fast') void window.pantry.fastCancel(transferId)
+  else transfersStore.cancel(transferId)
+}
 
 const draft = ref('')
 const attachments = usePendingAttachments()
@@ -2978,6 +2996,27 @@ async function onDrop(event: DragEvent): Promise<void> {
           </span>
         </span>
       </div>
+      <div v-if="inlineTransfers.length" class="inline-transfers" role="status" aria-live="polite">
+        <div v-for="view in inlineTransfers" :key="view.transferId" class="inline-transfer">
+          <PantryIcon :name="view.transport === 'fast' ? 'zap' : 'upload'" :size="13" />
+          <span class="inline-transfer-name" :title="view.name">{{ view.name }}</span>
+          <span class="inline-transfer-pct">
+            {{ view.status === 'offering' ? tr('等待接收') : `${transferPercent(view.bytesDone, view.totalSize)}%` }}
+          </span>
+          <span v-if="transfersStore.speed[view.transferId] > 0" class="inline-transfer-speed">
+            {{ formatBytes(transfersStore.speed[view.transferId]) }}/s
+          </span>
+          <button
+            type="button"
+            class="inline-transfer-cancel"
+            :aria-label="tr('取消传输')"
+            :title="tr('取消传输')"
+            @click="cancelInlineTransfer(view.transferId, view.transport)"
+          >
+            <PantryIcon name="x" :size="11" />
+          </button>
+        </div>
+      </div>
       <div
         v-if="showMentionPicker"
         ref="mentionPickerEl"
@@ -4684,6 +4723,52 @@ async function onDrop(event: DragEvent): Promise<void> {
   border-top: 1px solid var(--line);
   color: var(--text-3);
   font-size: 11px;
+}
+.inline-transfers {
+  display: grid;
+  gap: 4px;
+  margin: 0 0 8px;
+}
+.inline-transfer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: var(--surface-hover);
+  color: var(--text-2);
+  font-size: 11px;
+}
+.inline-transfer-name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.inline-transfer-pct,
+.inline-transfer-speed {
+  flex: none;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.inline-transfer-cancel {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+}
+.inline-transfer-cancel:hover {
+  background: var(--line);
+  color: var(--text-1);
 }
 .input-area {
   flex: 0 0 auto;
