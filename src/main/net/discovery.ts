@@ -343,6 +343,7 @@ export class Discovery {
 
   private away = false
   private status: PresenceStatus = 'online'
+  private fastPort = 0
 
   /** 离开状态（决议 #323）：变更后立即广播一次，后续心跳继续携带 */
   setAway(value: boolean): void {
@@ -358,11 +359,20 @@ export class Discovery {
     this.sendPresence()
   }
 
+  /** 高速传输端口：启动/关闭时广播，后续心跳继续携带。 */
+  setFastPort(port: number): void {
+    const next = Number.isInteger(port) && port > 0 && port <= 65535 ? port : 0
+    if (this.fastPort === next) return
+    this.fastPort = next
+    this.sendPresence()
+  }
+
   private sendPresence(): void {
     this.presenceSeq += 1
     const payload: PresencePayload = { seq: this.presenceSeq, profileRev: this.profile.profileRev }
     if (this.away) payload.away = true
     if (this.status !== 'online') payload.status = this.status
+    if (this.fastPort > 0) payload.fastPort = this.fastPort
     const env = makeEnvelope(MSG_TYPES.presence, this.selfId, payload)
     this.udp.broadcast(env)
     // 跨网段在线节点单播心跳（protocol §6.2）；同网段节点会重复收到，靠去重无害
@@ -407,6 +417,7 @@ export class Discovery {
         const touched = this.registry.touch(env.from, rinfo.address, rinfo.port)
         this.registry.setAway(env.from, presence.away === true)
         this.registry.setStatus(env.from, presence.status ?? 'online')
+        this.registry.setFastPort(env.from, presence.fastPort)
         if (touched) this.peerClock?.observe(env.from, env.ts, Date.now())
         const peer = this.registry.get(env.from)
         if ((touched && presence.profileRev !== knownRev) || !peer || (!peer.online && !touched)) {

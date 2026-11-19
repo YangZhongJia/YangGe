@@ -73,6 +73,16 @@ export const IpcChannels = {
   fileReveal: 'file:reveal',
   transferGet: 'transfer:get',
   transferList: 'transfer:list',
+  /** 高速传输（lansend）：与旧栈并存，按对端能力/探测结果选择 */
+  fastState: 'fast:state',
+  fastPeers: 'fast:peers',
+  fastProbe: 'fast:probe',
+  fastSend: 'fast:send',
+  fastAccept: 'fast:accept',
+  fastDecline: 'fast:decline',
+  fastCancel: 'fast:cancel',
+  fastList: 'fast:list',
+  fastGet: 'fast:get',
   dataExport: 'data:export',
   dataImport: 'data:import',
   imgPick: 'img:pick',
@@ -342,6 +352,8 @@ export interface PeerView {
   away?: boolean
   /** 手动状态；仅 online 且非 online 时存在 */
   status?: PresenceStatus
+  /** 对端高速传输端口；未启用时缺省 */
+  fastPort?: number
   lastSeen: number
   /** 应用版本（决议 #166，自更新版本比对依据） */
   ver: string
@@ -901,6 +913,15 @@ export interface ReplyMeta {
   text: string
 }
 
+/** 高速传输通道状态（lansend 栈）；未启用时 enabled=false，UI 回退到旧栈。 */
+export interface FastTransferState {
+  enabled: boolean
+  /** TCP 端口；0 = 未启动 */
+  port: number
+  /** 浏览器/手机可访问的 HTTP 端口；0 = 未启用 */
+  httpPort: number
+}
+
 /** 传输状态视图（文件卡片的数据源） */
 export interface TransferView {
   transferId: string
@@ -908,6 +929,8 @@ export interface TransferView {
   convId: string
   /** 对端节点 id：出站=接收人，入站=发送人（群聊文件接收名单用，决议 #75） */
   peerId: string
+  /** 对端显示名；高速通道的独立身份无法从旧栈 PeerView 反查时使用。 */
+  peerName?: string
   direction: 'in' | 'out'
   status: 'offering' | 'accepted' | 'done' | 'declined' | 'canceled' | 'failed' | 'expired'
   bytesDone: number
@@ -922,6 +945,8 @@ export interface TransferView {
   savedPath: string
   /** 是否为直接发送传输；群文件不会为 true。 */
   direct: boolean
+  /** 传输通道；缺省=旧栈，fast=lansend 高速通道。 */
+  transport?: 'legacy' | 'fast'
   /** 入站传输在发送端并发预算内排队中（决议 #211）：进度行显示「排队等待发送方」 */
   queued?: boolean
   /** 入站失败/取消后能否继续或重新下载（决议 #211）：本会话传输上下文仍在且对端语义支持 */
@@ -1530,6 +1555,16 @@ export interface PantryApi {
   revealTransfer(transferId: string): Promise<void>
   getTransfer(transferId: string): Promise<TransferView | null>
   listTransfers(limit?: number): Promise<TransferView[]>
+  /** 高速传输通道：先探测当前会话对端，再走 lansend；不可用时由渲染层回退。 */
+  fastState(): Promise<FastTransferState>
+  fastPeers(): Promise<PeerView[]>
+  fastProbe(host: string, port: number): Promise<PeerView | null>
+  fastSend(peerId: string, paths: string[]): Promise<string | null>
+  fastAccept(transferId: string): Promise<boolean>
+  fastDecline(transferId: string): Promise<boolean>
+  fastCancel(transferId: string): Promise<boolean>
+  fastList(): Promise<TransferView[]>
+  fastGet(transferId: string): Promise<TransferView | null>
   exportData(format: ExportFormat, options?: DataExportOptions): Promise<string | null>
   importData(): Promise<DataImportResult | null>
   /** 粘贴的图片字节 → 落本机图片缓存 → 以 purpose:image 发起传输 */

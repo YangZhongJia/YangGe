@@ -218,16 +218,21 @@ describe('codec', () => {
     const ok = makeEnvelope(MSG_TYPES.presence, 'node-aaaa', {
       seq: 1,
       profileRev: 1,
-      status: 'slacking'
+      status: 'slacking',
+      fastPort: 53318
     })
     expect(decode(encode(ok))).toMatchObject({
       ok: true,
       known: true,
-      env: { payload: { status: 'slacking' } }
+      env: { payload: { status: 'slacking', fastPort: 53318 } }
     })
 
     for (const status of ['busy', '', 'online ', 1]) {
       const bad = makeEnvelope(MSG_TYPES.presence, 'node-aaaa', { seq: 1, profileRev: 1, status })
+      expect(decode(encode(bad))).toEqual({ ok: false, reason: 'bad-payload:presence' })
+    }
+    for (const fastPort of [0, 65536, '53318']) {
+      const bad = makeEnvelope(MSG_TYPES.presence, 'node-aaaa', { seq: 1, profileRev: 1, fastPort })
       expect(decode(encode(bad))).toEqual({ ok: false, reason: 'bad-payload:presence' })
     }
   })

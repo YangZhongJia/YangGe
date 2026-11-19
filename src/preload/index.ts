@@ -37,6 +37,7 @@ import {
   type DataImportResult,
   type DesktopNudgeEvent,
   type ExportFormat,
+  type FastTransferState,
   type ForwardResult,
   type ForwardTarget,
   type GroupPatch,
@@ -257,6 +258,21 @@ const api: PantryApi = {
     ipcRenderer.invoke(IpcChannels.transferGet, transferId),
   listTransfers: (limit?: number): Promise<TransferView[]> =>
     ipcRenderer.invoke(IpcChannels.transferList, limit),
+  fastState: (): Promise<FastTransferState> => ipcRenderer.invoke(IpcChannels.fastState),
+  fastPeers: (): Promise<PeerView[]> => ipcRenderer.invoke(IpcChannels.fastPeers),
+  fastProbe: (host: string, port: number): Promise<PeerView | null> =>
+    ipcRenderer.invoke(IpcChannels.fastProbe, host, port),
+  fastSend: (peerId: string, paths: string[]): Promise<string | null> =>
+    ipcRenderer.invoke(IpcChannels.fastSend, peerId, paths),
+  fastAccept: (transferId: string): Promise<boolean> =>
+    ipcRenderer.invoke(IpcChannels.fastAccept, transferId),
+  fastDecline: (transferId: string): Promise<boolean> =>
+    ipcRenderer.invoke(IpcChannels.fastDecline, transferId),
+  fastCancel: (transferId: string): Promise<boolean> =>
+    ipcRenderer.invoke(IpcChannels.fastCancel, transferId),
+  fastList: (): Promise<TransferView[]> => ipcRenderer.invoke(IpcChannels.fastList),
+  fastGet: (transferId: string): Promise<TransferView | null> =>
+    ipcRenderer.invoke(IpcChannels.fastGet, transferId),
   exportData: (format: ExportFormat, options?: DataExportOptions): Promise<string | null> =>
     ipcRenderer.invoke(IpcChannels.dataExport, format, options),
   importData: (): Promise<DataImportResult | null> => ipcRenderer.invoke(IpcChannels.dataImport),

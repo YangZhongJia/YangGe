@@ -253,6 +253,8 @@ export interface PresencePayload {
   away?: boolean
   /** 手动状态；缺省 / online = 在线。旧端忽略。 */
   status?: PresenceStatus
+  /** 本机高速传输 TCP 端口；缺省 = 未启用。旧端忽略。 */
+  fastPort?: number
 }
 
 /** exit 载荷（空对象） */

@@ -10,6 +10,16 @@ export interface ReleaseHighlights {
  * 主窗按 localStorage 中的 lastSeenVersion 判断是否展示，避免每次启动重复弹出。
  */
 export const RELEASE_HIGHLIGHTS: Record<string, ReleaseHighlights> = {
+  '1.11.15': {
+    version: '1.11.15',
+    notes: [
+      '聊天输入区的图片 / 文件 / 文件夹按钮合并为一个闪电入口，仍可发送多种文件类型。',
+      '1 对 1 自动使用内网高速通道：多连接、分片与断点续传；群聊和旧版本自动回退普通传输。',
+      '新增高速传输接收确认、实时进度、取消和完成提示。',
+      '修复搜索聊天记录左侧筛选栏在矮窗口下无法滚动的问题。'
+    ],
+    fixed: true
+  },
   '1.11.14': {
     version: '1.11.14',
     notes: [

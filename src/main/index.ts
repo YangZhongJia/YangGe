@@ -1,4 +1,5 @@
 import { AiReplier, buildPolishMessages, callChatCompletion, isPolishMode } from './services/ai-replier'
+import { createFastTransfer, type FastTransfer } from './services/fast-transfer'
 import { normalizeAi, normalizeClipboardFollow } from './store/app-state'
 import { AcpAgentService } from './services/agent/agent-service'
 import { AgentCoordinator } from './services/agent/agent-coordinator'
@@ -71,6 +72,7 @@ import {
   type DataImportResult,
   type ExportFormat,
   type ForwardTarget,
+  type FastTransferState,
   type GroupPatch,
   type ImageOcrResult,
   type ImageOcrSource,
@@ -352,6 +354,10 @@ if (!gotLock) {
   let chat: ChatService | null = null
   let duel: DuelService | null = null
   let files: FilesService | null = null
+  /** 高速通道与旧栈并存；启动失败时保持 null，聊天附件仍走旧栈。 */
+  let fast: FastTransfer | null = null
+  /** 入站高速报价：transferId → 渲染层确认结果。超时按拒绝处理。 */
+  const pendingFastOffers = new Map<string, (accepted: boolean) => void>()
   let groups: GroupsService | null = null
   let groupRepo: GroupRepo | null = null
   let avatars: AvatarService | null = null
@@ -916,6 +922,7 @@ if (!gotLock) {
       online: record.online,
       away: record.online ? record.away === true : undefined,
       status: record.online ? record.status : undefined,
+      fastPort: record.online ? record.fastPort : undefined,
       lastSeen: record.lastSeen,
       ver: record.profile.ver,
       caps: Array.isArray(record.profile.caps) ? record.profile.caps : []
@@ -1718,6 +1725,67 @@ if (!gotLock) {
         tcpStatus = 'failed'
         diagnostics.record('network.listen', { kind: 'tcp', port: tcpPort, status: 'failed' }, err)
         console.error('[files] TCP 端口监听失败，已禁止发送附件，文字消息仍可用：', err)
+      }
+
+      // 高速通道独立于旧栈：端口 53318 与旧栈 17878/17879 不冲突，失败只记录。
+      fast = createFastTransfer({
+        userDataDir: app.getPath('userData'),
+        downloadDir: appState?.config.fileDir || defaultFileDir(),
+        alias: state.profile?.nick ?? '阳鸽',
+        emitTransfer: (view) => broadcastEvent(IpcEvents.transferUpdated, view),
+        emitPeers: () => broadcastEvent(IpcEvents.peersUpdated, peerViews()),
+        confirmOffer: async (offer) => {
+          const decided = new Promise<boolean>((resolve) => {
+            pendingFastOffers.set(offer.transferId, (accepted) => {
+              pendingFastOffers.delete(offer.transferId)
+              clearTimeout(timer)
+              resolve(accepted)
+            })
+            // 无人应答时按拒绝处理，避免发送方无限等待。
+            const timer = setTimeout(() => {
+              if (!pendingFastOffers.has(offer.transferId)) return
+              pendingFastOffers.delete(offer.transferId)
+              resolve(false)
+            }, 30_000)
+          })
+          broadcastEvent(IpcEvents.transferUpdated, {
+            transferId: offer.transferId,
+            msgId: '',
+            convId: '',
+            peerId: offer.from.nodeId,
+            peerName: offer.from.alias,
+            direction: 'in',
+            status: 'offering',
+            bytesDone: 0,
+            totalSize: offer.totalBytes,
+            fileCount: offer.files.length,
+            name:
+              offer.files.length === 1
+                ? (offer.files[0]?.name ?? '')
+                : `${offer.files[0]?.name ?? ''} 等 ${offer.files.length} 个文件`,
+            expiresAt: 0,
+            savedPath: '',
+            direct: true,
+            transport: 'fast'
+          })
+          return decided
+        },
+        onError: (scope, err) => {
+          diagnostics.record('transfer.error', { transport: 'fast', scope }, err)
+          console.error(`[fast-transfer:${scope}]`, err)
+        }
+      })
+      try {
+        await fast.start()
+        if (fast.enabled) discovery?.setFastPort(fast.port)
+        diagnostics.record('transfer.state', {
+          transport: 'fast',
+          status: fast.enabled ? 'ready' : 'disabled',
+          port: fast.port
+        })
+      } catch (err) {
+        diagnostics.record('transfer.state', { transport: 'fast', status: 'failed' }, err)
+        console.error('[fast-transfer] 启动失败，继续使用旧栈：', err)
       }
 
       groups = new GroupsService({
@@ -3414,6 +3482,67 @@ if (!gotLock) {
     return files?.listTransfers(lim) ?? []
   })
 
+  // ---- 高速传输通道（lansend）-------------------------------------------
+  ipcMain.handle(IpcChannels.fastState, (): FastTransferState => ({
+    enabled: fast?.enabled === true,
+    port: fast?.port ?? 0,
+    httpPort: fast?.httpPort ?? 0
+  }))
+
+  ipcMain.handle(IpcChannels.fastPeers, (): PeerView[] => fast?.peers() ?? [])
+
+  ipcMain.handle(IpcChannels.fastProbe, async (_event, host: unknown, port: unknown): Promise<PeerView | null> => {
+    if (typeof host !== 'string' || host.length === 0 || host.length > 64) return null
+    if (typeof port !== 'number' || !Number.isInteger(port) || port < 1 || port > 65535) return null
+    if (fast?.enabled !== true) return null
+    return (await fast.probe(host, port)) ?? null
+  })
+
+  ipcMain.handle(
+    IpcChannels.fastSend,
+    async (event, peerId: unknown, paths: unknown): Promise<string | null> => {
+      if (typeof peerId !== 'string' || peerId.length === 0 || peerId.length > 64) return null
+      if (!Array.isArray(paths) || paths.length === 0 || paths.length > 100) return null
+      if (!paths.every((p) => typeof p === 'string' && p.length > 0 && p.length < 2048)) return null
+      const cleanPaths = paths as string[]
+      if (!rendererPathGrants.has(event.sender.id, cleanPaths)) return null
+      const transferId = (await fast?.send(peerId, cleanPaths)) ?? null
+      // Only consume on a real fast transfer. If the probe/start fails, the
+      // legacy fallback still needs the same grant.
+      if (transferId !== null) rendererPathGrants.consume(event.sender.id, cleanPaths)
+      return transferId
+    }
+  )
+
+  const resolveFastOffer = (transferId: string, accepted: boolean): boolean => {
+    const decide = pendingFastOffers.get(transferId)
+    if (!decide) return false
+    decide(accepted)
+    return true
+  }
+
+  ipcMain.handle(IpcChannels.fastAccept, (_event, transferId: unknown): boolean => {
+    if (typeof transferId !== 'string' || transferId.length === 0 || transferId.length > 64) return false
+    return resolveFastOffer(transferId, true)
+  })
+
+  ipcMain.handle(IpcChannels.fastDecline, (_event, transferId: unknown): boolean => {
+    if (typeof transferId !== 'string' || transferId.length === 0 || transferId.length > 64) return false
+    return resolveFastOffer(transferId, false)
+  })
+
+  ipcMain.handle(IpcChannels.fastCancel, (_event, transferId: unknown): boolean => {
+    if (typeof transferId !== 'string' || transferId.length === 0 || transferId.length > 64) return false
+    return fast?.cancel(transferId) ?? false
+  })
+
+  ipcMain.handle(IpcChannels.fastList, (): TransferView[] => fast?.list() ?? [])
+
+  ipcMain.handle(IpcChannels.fastGet, (_event, transferId: unknown): TransferView | null => {
+    if (typeof transferId !== 'string' || transferId.length === 0 || transferId.length > 64) return null
+    return fast?.summary(transferId) ?? null
+  })
+
   ipcMain.handle(
     IpcChannels.dataExport,
     async (_event, format: unknown, options: unknown): Promise<string | null> => {
@@ -4351,6 +4480,8 @@ if (!gotLock) {
     agentService?.dispose()
     agentService = null
     void files?.stop()
+    void fast?.stop()
+    fast = null
     try {
       if (registry && peersRepo) peersRepo.upsertMany(registry.values()) // 离场前最后一次落库
       db?.close()

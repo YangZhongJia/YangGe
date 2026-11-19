@@ -257,6 +257,11 @@ describe('discovery 回环集成', () => {
 
     b.discovery.setStatus('online')
     await waitFor(() => a.registry.get(b.profile.nodeId)?.status === undefined)
+
+    b.discovery.setFastPort(53318)
+    await waitFor(() => a.registry.get(b.profile.nodeId)?.fastPort === 53318)
+    b.discovery.setFastPort(0)
+    await waitFor(() => a.registry.get(b.profile.nodeId)?.fastPort === undefined)
   })
 
   it('已在线节点不接受不同 UDP 源地址的伪造重绑定', async () => {

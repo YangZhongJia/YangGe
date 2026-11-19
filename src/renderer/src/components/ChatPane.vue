@@ -199,6 +199,8 @@ const win7EditorEl = ref<InstanceType<typeof Win7ChatEditor> | null>(null)
 const inputComposing = ref(false)
 const emojiScope = ref<HTMLElement | null>(null)
 const pkScope = ref<HTMLElement | null>(null)
+const attachScope = ref<HTMLElement | null>(null)
+const attachMenuOpen = ref(false)
 const peerProfileScope = ref<HTMLElement | null>(null)
 const historySearchInput = ref<HTMLInputElement | null>(null)
 const inputScrollTop = ref(0)
@@ -526,6 +528,7 @@ function onDocumentPointerDown(event: MouseEvent): void {
   if (!(target instanceof Node)) return
   if (showEmoji.value && !emojiScope.value?.contains(target)) showEmoji.value = false
   if (showPk.value && !pkScope.value?.contains(target)) showPk.value = false
+  if (attachMenuOpen.value && !attachScope.value?.contains(target)) attachMenuOpen.value = false
   if (showPeerProfile.value && !peerProfileScope.value?.contains(target)) closePeerProfile()
 }
 
@@ -535,6 +538,7 @@ function onEscape(event: KeyboardEvent): void {
   else if (showMentionPicker.value) closeMentionPicker()
   else if (showEmoji.value) showEmoji.value = false
   else if (showPk.value) showPk.value = false
+  else if (attachMenuOpen.value) closeAttachMenu()
   else if (showPeerProfile.value) closePeerProfile()
   else if (pendingAttachments.value.length && !attachmentsSending.value) cancelAttachments()
   else return
@@ -858,6 +862,7 @@ async function openGroupMemberChat(peerId: string): Promise<void> {
 
 function onChatClick(): void {
   msgMenu.value = null
+  closeAttachMenu()
   if (chatStore.unreadPrompt) chatStore.acknowledgeUnreadPrompt()
 }
 
@@ -1968,12 +1973,6 @@ async function grantLocalFilePaths(paths: string[]): Promise<string[]> {
   return window.pantry.grantFilePaths(unique)
 }
 
-async function sendFiles(directory: boolean): Promise<void> {
-  if (!canSendMedia.value) return
-  const paths = await window.pantry.pickFiles(directory)
-  if (paths) await chatStore.sendFilePaths(paths)
-}
-
 async function sendImage(): Promise<void> {
   if (!canSendMedia.value) return
   const paths = await window.pantry.pickImages()
@@ -1984,6 +1983,58 @@ async function sendImage(): Promise<void> {
 interface ClipboardImagePayload {
   bytes: ArrayBuffer
   ext: string
+}
+
+// 闪电入口：1:1 优先走 LAN 直传，失败 / 离线 / 群聊回退既有消息通道
+const FAST_PROBE_TIMEOUT_MS = 2000
+
+function toggleAttachMenu(): void {
+  if (!canSendMedia.value) return
+  attachMenuOpen.value = !attachMenuOpen.value
+}
+
+function closeAttachMenu(): void {
+  attachMenuOpen.value = false
+}
+
+function onAttachImage(): void {
+  closeAttachMenu()
+  void sendImage()
+}
+
+async function sendViaLightning(directory: boolean): Promise<void> {
+  closeAttachMenu()
+  if (!canSendMedia.value) return
+  const paths = await window.pantry.pickFiles(directory)
+  if (!paths || paths.length === 0) return
+  const target = isGroup.value ? null : peer.value
+  if (target && target.online && target.ip) {
+    try {
+      const state = await window.pantry.fastState()
+      const targetPort = target.fastPort ?? state.port
+      if (state.enabled && targetPort > 0) {
+        let timer: ReturnType<typeof setTimeout> | undefined
+        const fastPeer = await Promise.race([
+          window.pantry.fastProbe(target.ip, targetPort).catch(() => null),
+          new Promise<null>((resolve) => {
+            timer = setTimeout(() => resolve(null), FAST_PROBE_TIMEOUT_MS)
+          })
+        ])
+        if (timer) clearTimeout(timer)
+        if (fastPeer) {
+          const granted = await grantLocalFilePaths(paths)
+          if (granted.length > 0) {
+            const transferId = await window.pantry.fastSend(fastPeer.nodeId, granted)
+            // 直传已接管（传输卡片由 dock 消费 transferUpdated 事件），不再发传统消息
+            if (transferId) return
+          }
+        }
+      }
+    } catch {
+      // 探测 / 接收端不可用：静默回退，保证文件仍能发出
+    }
+  }
+  await chatStore.sendFilePaths(paths)
 }
 
 function imageExtFromMime(type: string): string {
@@ -2774,38 +2825,25 @@ async function onDrop(event: DragEvent): Promise<void> {
             <PantryIcon name="scissors" :size="26" />
           </button>
         </span>
-        <span class="tool-wrap" :data-tip="tr('发送图片')">
-          <button
-            class="tool"
-            type="button"
-            :aria-label="tr('发送图片')"
-            :disabled="!canSendMedia"
-            @click="sendImage"
-          >
-            <PantryIcon name="image" :size="26" />
-          </button>
-        </span>
-        <span class="tool-wrap" :data-tip="tr('发送文件')">
-          <button
-            class="tool"
-            type="button"
-            :aria-label="tr('发送文件')"
-            :disabled="!canSendMedia"
-            @click="sendFiles(false)"
-          >
-            <PantryIcon name="file" :size="26" />
-          </button>
-        </span>
-        <span class="tool-wrap" :data-tip="tr('发送文件夹')">
-          <button
-            class="tool"
-            type="button"
-            :aria-label="tr('发送文件夹')"
-            :disabled="!canSendMedia"
-            @click="sendFiles(true)"
-          >
-            <PantryIcon name="folder" :size="26" />
-          </button>
+        <span ref="attachScope" class="attach-scope">
+          <div v-if="attachMenuOpen" class="attach-menu" role="menu" :aria-label="tr('发送文件')">
+            <button type="button" role="menuitem" :disabled="!canSendMedia" @click="onAttachImage">{{ tr('发送图片') }}</button>
+            <button type="button" role="menuitem" :disabled="!canSendMedia" @click="sendViaLightning(false)">{{ tr('发送文件') }}</button>
+            <button type="button" role="menuitem" :disabled="!canSendMedia" @click="sendViaLightning(true)">{{ tr('发送文件夹') }}</button>
+          </div>
+          <span class="tool-wrap" :data-tip="tr('发送文件（高速）')">
+            <button
+              class="tool"
+              type="button"
+              :aria-label="tr('发送文件（高速）')"
+              aria-haspopup="menu"
+              :aria-expanded="attachMenuOpen ? 'true' : 'false'"
+              :disabled="!canSendMedia"
+              @click.stop="toggleAttachMenu"
+            >
+              <PantryIcon name="zap" :size="26" />
+            </button>
+          </span>
         </span>
         <span v-if="isGroup && canSend && onlineGroupRecipientCount === 0" class="tool-hint">{{ tr('群成员离线，无法发送图片/文件') }}</span>
         <span v-else-if="isGroup" class="tool-hint">{{ tr('仅在线群成员可接收图片/文件') }}</span>
@@ -3103,6 +3141,39 @@ async function onDrop(event: DragEvent): Promise<void> {
   display: inline-grid;
   place-items: center;
 }
+/* ---------- 闪电发送菜单 ---------- */
+.attach-scope {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+}
+.attach-menu {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  min-width: 132px;
+  box-sizing: border-box;
+  padding: 5px;
+  background: var(--material-strong);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--highlight-edge), var(--shadow-float);
+  z-index: 32;
+}
+.attach-menu button {
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  font-size: var(--font-sm);
+  color: var(--text-1);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.attach-menu button:hover:not(:disabled) { background: var(--surface-hover); }
+.attach-menu button:disabled { opacity: 0.5; cursor: default; }
 .pk-popover {
   position: absolute;
   /* 左对齐按钮向右展开：PK 按钮太靠近聊天面板左缘，居中弹出会让浮层左侧溢出 .chat 的 overflow:hidden 被裁切（决议 #144） */
@@ -3559,6 +3630,9 @@ async function onDrop(event: DragEvent): Promise<void> {
 }
 .history-sidebar {
   min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
   gap: 14px;

@@ -34,6 +34,12 @@ export class PathGrantStore {
     return true
   }
 
+  /** Check without consuming, so a failed fast-path attempt can fall back. */
+  has(ownerId: number, paths: string[]): boolean {
+    this.prune()
+    return paths.every((path) => this.grants.has(this.key(ownerId, path)))
+  }
+
   private prune(): void {
     const now = this.now()
     for (const [key, expiresAt] of this.grants) {

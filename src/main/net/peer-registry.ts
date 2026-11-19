@@ -14,6 +14,8 @@ export interface PeerRecord {
   away?: boolean
   /** 手动状态；仅在线时有意义，不入持久化 */
   status?: PresenceStatus
+  /** 对端高速传输端口；仅在线时有意义，不入持久化 */
+  fastPort?: number
 }
 
 /**
@@ -115,6 +117,7 @@ export class PeerRegistry extends EventEmitter {
       record.online = false
       record.away = false
       record.status = undefined
+      record.fastPort = undefined
       this.emit('updated')
     }
   }
@@ -147,6 +150,16 @@ export class PeerRegistry extends EventEmitter {
     this.emit('updated')
   }
 
+  /** 高速传输端口（presence 心跳携带）：在线才接受，0/缺省归一化为空。 */
+  setFastPort(nodeId: string, port: number | undefined): void {
+    const record = this.peers.get(nodeId)
+    if (!record || !record.online) return
+    const next = port !== undefined && port > 0 ? port : undefined
+    if (record.fastPort === next) return
+    record.fastPort = next
+    this.emit('updated')
+  }
+
   /** 心跳超时离线判定（protocol §6.2），由 Discovery 周期调用 */
   sweep(offlineAfterMs: number): void {
     const now = Date.now()
@@ -155,6 +168,7 @@ export class PeerRegistry extends EventEmitter {
       if (record.online && now - record.lastSeen > offlineAfterMs) {
         record.online = false
         record.status = undefined
+        record.fastPort = undefined
         changed = true
       }
     }

@@ -13,7 +13,7 @@
 
 <p>
   <a href="https://github.com/YangZhongJia/YangGe/releases">
-    <img src="https://img.shields.io/badge/version-1.11.14-3D8B6B?style=flat-square" alt="Version 1.11.14" />
+    <img src="https://img.shields.io/badge/version-1.11.15-3D8B6B?style=flat-square" alt="Version 1.11.15" />
   </a>
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/License-GPL--3.0--only-3D8B6B?style=flat-square" alt="GPL-3.0-only" />
@@ -50,9 +50,17 @@
 
 Start YangGe on computers connected to the same local network and they discover each other automatically. Open a peer to chat, transfer files, browse shared folders, or challenge them to a quick duel. No cloud account, central server, telemetry, or Internet access is involved. YangGe is designed for corporate intranets, isolated networks, and laboratories where external connectivity is limited or prohibited.
 
-> **1.11.14 status**: The Task center and local Agent entries are temporarily hidden; their implementation and data remain. This release adds broadcast office status badges; the lock screen keeps the minimal morning design, and the game center includes local Mahjong.
+> **1.11.15 status**: The Task center and local Agent entries are temporarily hidden; their implementation and data remain. Chat attachments now share one lightning entry with a multi-connection fast path. Status badges and the minimal morning lock screen are retained.
 
-## Recent updates (v1.11.14)
+## Recent updates (v1.11.15)
+
+- **Lightning send**: the separate image/file/folder buttons are now one lightning menu, with all three send modes still available.
+- **Fast LAN transfer**: 1:1 chats probe the peer's fast channel and use multi-connection, ranged, resumable transfer. Groups, offline peers, and older clients fall back to the normal path.
+- **Receive and progress**: fast offers get an accept/decline dialog plus live progress, cancel, and completion feedback; files land in the local save folder.
+- **History search**: the left filter column in the history dialog now scrolls in short windows.
+- **Version bump**: 1.11.14 and older clients see the LAN update entry again.
+
+**v1.11.14**
 
 - **Status badges**: click your avatar in the left rail to switch between Online, Focus, In a meeting, Lunch, Slacking off, and Off work. Status is broadcast over the LAN immediately and appears in the chat header, peer profile, and contacts.
 - **Status icons**: each state has its own small icon and color in both the settings picker and avatar menu. Automatic away while locked or idle never overwrites the manually selected state.

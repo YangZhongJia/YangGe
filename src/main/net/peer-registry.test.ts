@@ -258,4 +258,20 @@ describe('手动状态', () => {
     registry.setStatus('node-bob', 'lunch') // 离线节点不接受状态
     expect(registry.get('node-bob')?.status).toBeUndefined()
   })
+
+  it('高速端口只记录在线节点，离线自动清除', () => {
+    const registry = new PeerRegistry('node-self')
+    registry.touch('node-bob', '127.0.0.1', 10001, profile('node-bob', 'Bob'))
+
+    registry.setFastPort('node-bob', 53318)
+    expect(registry.get('node-bob')?.fastPort).toBe(53318)
+    registry.setFastPort('node-bob', 0)
+    expect(registry.get('node-bob')?.fastPort).toBeUndefined()
+
+    registry.setFastPort('node-bob', 53319)
+    registry.markOffline('node-bob')
+    expect(registry.get('node-bob')?.fastPort).toBeUndefined()
+    registry.setFastPort('node-bob', 53320)
+    expect(registry.get('node-bob')?.fastPort).toBeUndefined()
+  })
 })

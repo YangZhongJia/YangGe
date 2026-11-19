@@ -10,14 +10,14 @@
 
 <p>
   <a href="https://github.com/YangZhongJia/YangGe/releases">
-    <img src="https://img.shields.io/badge/version-1.11.14-3D8B6B?style=flat-square" alt="Version 1.11.14" />
+    <img src="https://img.shields.io/badge/version-1.11.15-3D8B6B?style=flat-square" alt="Version 1.11.15" />
   </a>
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/License-GPL--3.0--only-3D8B6B?style=flat-square" alt="GPL-3.0-only" />
   </a>
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-0366d6?style=flat-square" alt="平台" />
   <img src="https://img.shields.io/badge/Electron-22-47848F?style=flat-square&logo=electron&logoColor=white" alt="Electron 22" />
-  <img src="https://img.shields.io/badge/tests-1282%20passing-2EA043?style=flat-square" alt="1282 tests passing" />
+  <img src="https://img.shields.io/badge/tests-1284%20passing-2EA043?style=flat-square" alt="1284 tests passing" />
 </p>
 
 <p>
@@ -52,7 +52,7 @@
 
 > **二开说明**：阳鸽是开源项目 [Teahouse（茶话间）](https://github.com/skyjt/teahouse) 的二次开发版本（GPL-3.0-only），仓库为 [YangZhongJia/YangGe](https://github.com/YangZhongJia/YangGe)。相对上游重做了品牌与界面，并新增 AI 分身 / 剪贴板 / 输入中提示 / AI 群总结 / 任务中心 / 双人角斗场 / ACP Agent 协作等能力。
 
-> **1.11.14 当前状态**：任务中心与 Agent 入口暂时隐藏，相关代码与数据保留；新增可广播的办公室状态牌；锁屏为极简晨光版；游戏中心包含本地麻将。
+> **1.11.15 当前状态**：任务中心与 Agent 入口暂时隐藏，相关代码与数据保留；聊天附件合并为闪电入口，并加入多连接高速传输；状态牌和极简晨光锁屏保留。
 
 ## 为什么做这个
 
@@ -65,6 +65,14 @@
 干脆自己写一个：免费开源、纯内网直连、从 Windows 7 到国产统信 UOS 再到 macOS 全平台覆盖、打开就会用。这就是阳鸽。
 
 ## 最近更新
+
+**v1.11.15**
+
+- **闪电发送**：聊天输入区把图片、文件、文件夹三个按钮合并为一个闪电入口，菜单里仍可选择三种发送方式。
+- **内网高速传输**：1 对 1 自动探测对端高速通道，使用多连接、分片和断点续传；对方未启用、旧版本或群聊时自动回退普通传输。
+- **接收与进度**：新增高速传输接收确认、实时进度、取消和完成提示；文件落在本地保存目录。
+- **历史搜索**：修复搜索聊天记录左侧筛选栏在矮窗口下无法滚动的问题。
+- **版本递增**：1.11.14 及更早客户端会重新出现内网更新入口。
 
 **v1.11.14**
 
