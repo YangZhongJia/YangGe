@@ -106,7 +106,12 @@ export class Discovery {
     })
     // 结识即交换（§6.3）：首次得知某节点在线 → 把我已知的在线节点摘要告诉它
     this.registry.on('online', (nodeId: string) => {
-      if (this.stopped || this.gossiped.has(nodeId)) return
+      if (this.stopped) return
+      // 新节点刚完成握手时，若本机有高速端口，立即把 presence 发给它，
+      // 避免高速端口要等到 30s 后的下一次心跳才可见。没有高速端口时不
+      // 额外发包，保持原有心跳节奏。
+      if (this.fastPort > 0) this.sendPresence()
+      if (this.gossiped.has(nodeId)) return
       this.gossiped.add(nodeId)
       this.sendPeersTo(nodeId)
     })

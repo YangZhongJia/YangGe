@@ -696,6 +696,7 @@ const english: Record<string, string> = {
   "发送文件夹": "Send folder",
   "发送文件（高速）": "Send files (fast)",
   "高速传输": "Fast transfer",
+  "文件传输": "File transfer",
   "高速文件传输请求": "Fast file transfer request",
   "{0} 想发送文件给你": "{0} wants to send you files",
   "接收中": "Receiving",

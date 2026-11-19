@@ -1709,6 +1709,7 @@ if (!gotLock) {
           return dir
         },
         allowDirectFileSend: () => appState?.config.allowDirectFileSend !== false,
+        autoAcceptIncomingFiles: () => appState?.config.allowDirectFileSend !== false,
         peerDisplayName: resolvePeerDisplayName
       })
       files.on('message', onMessage)
@@ -1735,6 +1736,9 @@ if (!gotLock) {
         emitTransfer: (view) => broadcastEvent(IpcEvents.transferUpdated, view),
         emitPeers: () => broadcastEvent(IpcEvents.peersUpdated, peerViews()),
         confirmOffer: async (offer) => {
+          // 用户明确要求私聊文件免确认：默认直接接收。关闭该设置时保留
+          // 原来的确认弹窗作为逃生口。
+          if (appState?.config.allowDirectFileSend !== false) return true
           const decided = new Promise<boolean>((resolve) => {
             pendingFastOffers.set(offer.transferId, (accepted) => {
               pendingFastOffers.delete(offer.transferId)

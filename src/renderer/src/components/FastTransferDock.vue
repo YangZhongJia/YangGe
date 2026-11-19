@@ -21,14 +21,15 @@ let offerTimer: number | undefined
 const TERMINAL = new Set<TransferView['status']>(['done', 'failed', 'canceled', 'declined', 'expired'])
 const LINGER_MS = 6000
 
-const fastViews = computed(() =>
-  Object.values(transfersStore.byId).filter((view) => view.transport === 'fast')
-)
+// 进度坞展示所有正在进行的文件传输（旧栈 + 高速），这样从任何会话
+// 发送/接收都能看见；只有高速 offer 需要确认弹窗。
+const transferViews = computed(() => Object.values(transfersStore.byId))
 
 const offer = computed(
   () =>
-    fastViews.value.find(
+    transferViews.value.find(
       (view) =>
+        view.transport === 'fast' &&
         view.direction === 'in' &&
         view.status === 'offering' &&
         !dismissedOffers.has(view.transferId)
@@ -36,13 +37,13 @@ const offer = computed(
 )
 
 const activeRows = computed(() =>
-  fastViews.value.filter(
+  transferViews.value.filter(
     (view) => view.status === 'accepted' || (view.status === 'offering' && view.direction !== 'in')
   )
 )
 
 const dockRows = computed(() => {
-  const done = fastViews.value.filter(
+  const done = transferViews.value.filter(
     (view) => lingering.has(view.transferId) && TERMINAL.has(view.status)
   )
   return [...activeRows.value, ...done]
@@ -87,7 +88,13 @@ async function loadPeers(): Promise<void> {
   if (peersBusy) return
   peersBusy = true
   try {
-    peers.value = await window.pantry.fastPeers()
+    const [legacy, fast] = await Promise.all([
+      window.pantry.getPeers().catch(() => [] as PeerView[]),
+      window.pantry.fastPeers().catch(() => [] as PeerView[])
+    ])
+    const merged = new Map<string, PeerView>()
+    for (const peer of [...legacy, ...fast]) merged.set(peer.nodeId, peer)
+    peers.value = [...merged.values()]
   } catch {
     // 探测失败时退回 peerId 前缀显示。
   } finally {
@@ -143,7 +150,7 @@ function clearLinger(id: string): void {
 }
 
 watch(
-  () => fastViews.value.filter((view) => TERMINAL.has(view.status)).map((view) => view.transferId),
+  () => transferViews.value.filter((view) => TERMINAL.has(view.status)).map((view) => view.transferId),
   (ids) => {
     const seen = new Set(ids)
     for (const id of [...lingerTimers.keys()]) {
@@ -230,7 +237,7 @@ onBeforeUnmount(() => {
   <aside v-if="dockRows.length" class="fast-dock" :aria-label="tr('高速传输')">
     <header class="fast-dock-head">
       <PantryIcon name="zap" :size="14" />
-      <span>{{ tr('高速传输') }}</span>
+      <span>{{ tr('文件传输') }}</span>
     </header>
     <div v-for="view in dockRows" :key="view.transferId" class="fast-row">
       <div class="fast-row-top">

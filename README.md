@@ -10,7 +10,7 @@
 
 <p>
   <a href="https://github.com/YangZhongJia/YangGe/releases">
-    <img src="https://img.shields.io/badge/version-1.11.17-3D8B6B?style=flat-square" alt="Version 1.11.17" />
+    <img src="https://img.shields.io/badge/version-1.11.18-3D8B6B?style=flat-square" alt="Version 1.11.18" />
   </a>
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/License-GPL--3.0--only-3D8B6B?style=flat-square" alt="GPL-3.0-only" />
@@ -52,7 +52,7 @@
 
 > **二开说明**：阳鸽是开源项目 [Teahouse（茶话间）](https://github.com/skyjt/teahouse) 的二次开发版本（GPL-3.0-only），仓库为 [YangZhongJia/YangGe](https://github.com/YangZhongJia/YangGe)。相对上游重做了品牌与界面，并新增 AI 分身 / 剪贴板 / 输入中提示 / AI 群总结 / 任务中心 / 双人角斗场 / ACP Agent 协作等能力。
 
-> **1.11.17 当前状态**：任务中心与 Agent 入口暂时隐藏，相关代码与数据保留；1 对 1 高速传输需双方 1.11.15+，失败自动回退普通传输；状态牌和极简晨光锁屏保留。
+> **1.11.18 当前状态**：任务中心与 Agent 入口暂时隐藏，相关代码与数据保留；私聊文件默认免确认接收，旧栈与高速传输的进度统一显示；状态牌和极简晨光锁屏保留。
 
 ## 为什么做这个
 
@@ -65,6 +65,13 @@
 干脆自己写一个：免费开源、纯内网直连、从 Windows 7 到国产统信 UOS 再到 macOS 全平台覆盖、打开就会用。这就是阳鸽。
 
 ## 最近更新
+
+**v1.11.18**
+
+- **免确认接收**：私聊普通文件和高速文件到达后直接接收，不再显示“接收 / 拒绝”确认；设置里关闭“允许同事直接发送文件”可恢复确认。
+- **统一进度**：右下角传输坞同时显示旧栈和高速传输，发送、接收、等待和完成都能看到，不再只藏在文件卡片里。
+- **启动续接**：上次退出时仍在领取期限内、尚未接收的私聊文件，启动后会自动续接。
+- **版本递增**：1.11.17 及更早客户端会重新出现内网更新入口。
 
 **v1.11.17**
 

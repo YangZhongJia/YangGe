@@ -166,6 +166,8 @@ export interface FilesDeps {
   authorizeShareUpload?: (peerId: string, totalSize: number) => string | null
   /** 是否允许私聊直接发送自动接收；默认允许。 */
   allowDirectFileSend?: () => boolean
+  /** 私聊文件到达时是否直接接收（不弹接收按钮）；默认关闭，由 main 接入设置。 */
+  autoAcceptIncomingFiles?: () => boolean
   /** 展示名：用于默认接收子目录（备注优先可由 main 注入）。 */
   peerDisplayName?: (peerId: string) => string
   bindAddress?: string
@@ -239,8 +241,17 @@ export class FilesService extends EventEmitter {
     this.recoverTransfers()
   }
 
-  start(): Promise<void> {
-    return this.server.start()
+  async start(): Promise<void> {
+    await this.server.start()
+    if (this.deps.autoAcceptIncomingFiles?.() !== true) return
+    // 上次退出时仍在领取期限内、尚未点接收的私聊文件：启动后直接续上。
+    for (const [transferId, incoming] of this.incoming) {
+      const row = this.deps.transferRepo.get(transferId)
+      if (row?.status !== 'offering') continue
+      const msg = this.deps.msgRepo.get(incoming.msgId)
+      if (msg?.conv_id.startsWith('group:')) continue
+      void this.accept(transferId)
+    }
   }
 
   availability(): { available: boolean; port: number } {
@@ -1278,7 +1289,16 @@ export class FilesService extends EventEmitter {
     this.requestGroupMetaIfNeeded(peerId, asm.groupId, asm.groupRev)
 
     // 图片：通过阈值复核后免确认，立即拉进图片缓存（protocol §7.1）
-    if (asImage) void this.accept(offer.transferId, this.deps.getImagesDir())
+    if (asImage) {
+      void this.accept(offer.transferId, this.deps.getImagesDir())
+    } else if (
+      !expired &&
+      !asm.groupId &&
+      this.deps.autoAcceptIncomingFiles?.() === true
+    ) {
+      // 私聊普通文件按本机设置直接接收，不再等待接收人点“接收”。
+      void this.accept(offer.transferId)
+    }
   }
 
   /** 授权通过后的非聊天传输：统一登记并自动接收。 */

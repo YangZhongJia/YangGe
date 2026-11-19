@@ -13,7 +13,7 @@
 
 <p>
   <a href="https://github.com/YangZhongJia/YangGe/releases">
-    <img src="https://img.shields.io/badge/version-1.11.17-3D8B6B?style=flat-square" alt="Version 1.11.17" />
+    <img src="https://img.shields.io/badge/version-1.11.18-3D8B6B?style=flat-square" alt="Version 1.11.18" />
   </a>
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/License-GPL--3.0--only-3D8B6B?style=flat-square" alt="GPL-3.0-only" />
@@ -50,9 +50,16 @@
 
 Start YangGe on computers connected to the same local network and they discover each other automatically. Open a peer to chat, transfer files, browse shared folders, or challenge them to a quick duel. No cloud account, central server, telemetry, or Internet access is involved. YangGe is designed for corporate intranets, isolated networks, and laboratories where external connectivity is limited or prohibited.
 
-> **1.11.17 status**: The Task center and local Agent entries are temporarily hidden; their implementation and data remain. 1:1 fast transfer requires both sides on 1.11.15+ and falls back to the normal path on failure. Status badges and the minimal morning lock screen are retained.
+> **1.11.18 status**: The Task center and local Agent entries are temporarily hidden; their implementation and data remain. 1:1 files are accepted without a receiver prompt, and transfer progress for both paths is shown in one dock. Status badges and the minimal morning lock screen are retained.
 
-## Recent updates (v1.11.17)
+## Recent updates (v1.11.18)
+
+- **No receive prompt**: 1:1 normal and fast files are accepted automatically; disable "allow colleagues to send files directly" in Settings to restore the prompt.
+- **Unified progress**: the bottom-right dock now shows normal and fast transfers, including waiting, sending, receiving, and completion.
+- **Resume on launch**: pending 1:1 offers still within their claim window are accepted and resumed after restart.
+- **Version bump**: 1.11.17 and older clients see the LAN update entry again.
+
+**v1.11.17**
 
 - **Version bump**: 1.11.16 and older clients see the LAN update entry again; fast transfer still requires both sides on 1.11.15+.
 - **Release roll-up**: keeps the 1.11.16 failure fallback, older-peer skip, and default-port probing logic in a newly packaged build.

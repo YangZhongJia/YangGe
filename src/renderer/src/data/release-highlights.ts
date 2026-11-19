@@ -10,6 +10,15 @@ export interface ReleaseHighlights {
  * 主窗按 localStorage 中的 lastSeenVersion 判断是否展示，避免每次启动重复弹出。
  */
 export const RELEASE_HIGHLIGHTS: Record<string, ReleaseHighlights> = {
+  '1.11.18': {
+    version: '1.11.18',
+    notes: [
+      '私聊普通文件和高速文件默认免确认接收；可在设置中关闭“允许同事直接发送文件”恢复确认。',
+      '右下角传输坞统一显示旧栈和高速传输的等待、发送、接收与完成进度。',
+      '启动后会续接仍在领取期限内的未接收私聊文件。'
+    ],
+    fixed: true
+  },
   '1.11.17': {
     version: '1.11.17',
     notes: [
