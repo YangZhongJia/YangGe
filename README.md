@@ -10,7 +10,7 @@
 
 <p>
   <a href="https://github.com/YangZhongJia/YangGe/releases">
-    <img src="https://img.shields.io/badge/version-1.11.15-3D8B6B?style=flat-square" alt="Version 1.11.15" />
+    <img src="https://img.shields.io/badge/version-1.11.16-3D8B6B?style=flat-square" alt="Version 1.11.16" />
   </a>
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/License-GPL--3.0--only-3D8B6B?style=flat-square" alt="GPL-3.0-only" />
@@ -52,7 +52,7 @@
 
 > **二开说明**：阳鸽是开源项目 [Teahouse（茶话间）](https://github.com/skyjt/teahouse) 的二次开发版本（GPL-3.0-only），仓库为 [YangZhongJia/YangGe](https://github.com/YangZhongJia/YangGe)。相对上游重做了品牌与界面，并新增 AI 分身 / 剪贴板 / 输入中提示 / AI 群总结 / 任务中心 / 双人角斗场 / ACP Agent 协作等能力。
 
-> **1.11.15 当前状态**：任务中心与 Agent 入口暂时隐藏，相关代码与数据保留；聊天附件合并为闪电入口，并加入多连接高速传输；状态牌和极简晨光锁屏保留。
+> **1.11.16 当前状态**：任务中心与 Agent 入口暂时隐藏，相关代码与数据保留；闪电入口的高传输失败会自动回退普通传输，旧版本对端直接走普通通道；状态牌和极简晨光锁屏保留。
 
 ## 为什么做这个
 
@@ -65,6 +65,13 @@
 干脆自己写一个：免费开源、纯内网直连、从 Windows 7 到国产统信 UOS 再到 macOS 全平台覆盖、打开就会用。这就是阳鸽。
 
 ## 最近更新
+
+**v1.11.16**
+
+- **失败回退**：高速握手、连接或等待接收失败时，自动再走一次普通传输，避免文件直接失败。
+- **旧端提速判断**：1.11.15 以下对端不探测高速端口，直接走普通通道；状态栏会说明原因。
+- **探测端口**：未收到 `fastPort` 广播的 1.11.15 对端，按默认 53318 探测，不再误用本机端口。
+- **版本递增**：1.11.15 及更早客户端会重新出现内网更新入口。
 
 **v1.11.15**
 

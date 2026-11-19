@@ -170,11 +170,11 @@ watch(
     if (offerTimer !== undefined) window.clearTimeout(offerTimer)
     offerTimer = undefined
     if (!transferId) return
-    // Main resolves an unanswered offer as declined after 30s; do not leave
+    // Main resolves an unanswered offer as declined after 20s; do not leave
     // the dialog on screen forever if the sender silently disappears.
     offerTimer = window.setTimeout(() => {
       if (offer.value?.transferId === transferId) dismissedOffers.add(transferId)
-    }, 31_000)
+    }, 21_000)
   }
 )
 

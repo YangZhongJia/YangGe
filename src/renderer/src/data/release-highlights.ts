@@ -10,6 +10,15 @@ export interface ReleaseHighlights {
  * 主窗按 localStorage 中的 lastSeenVersion 判断是否展示，避免每次启动重复弹出。
  */
 export const RELEASE_HIGHLIGHTS: Record<string, ReleaseHighlights> = {
+  '1.11.16': {
+    version: '1.11.16',
+    notes: [
+      '高速传输握手、连接或接收确认失败时，自动再走一次普通传输，避免文件直接失败。',
+      '旧版本对端不再探测高速端口，直接使用普通通道并提示原因。',
+      '修复未广播 fastPort 时误用本机端口探测的问题。'
+    ],
+    fixed: true
+  },
   '1.11.15': {
     version: '1.11.15',
     notes: [

@@ -1741,12 +1741,12 @@ if (!gotLock) {
               clearTimeout(timer)
               resolve(accepted)
             })
-            // 无人应答时按拒绝处理，避免发送方无限等待。
+            // 无人应答时按拒绝处理，避免发送方无限等待；20s 足够看完确认框。
             const timer = setTimeout(() => {
               if (!pendingFastOffers.has(offer.transferId)) return
               pendingFastOffers.delete(offer.transferId)
               resolve(false)
-            }, 30_000)
+            }, 20_000)
           })
           broadcastEvent(IpcEvents.transferUpdated, {
             transferId: offer.transferId,

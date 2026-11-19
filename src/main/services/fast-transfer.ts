@@ -118,7 +118,7 @@ export function createFastTransfer(options: FastTransferOptions): FastTransfer {
     savedPath: summary.destination ?? '',
     direct: true,
     transport: 'fast',
-    ...(summary.error !== null ? { failureReason: 'connection-error' as const } : {}),
+    ...(summary.error !== null ? { failureReason: 'connection-error' as const, fastError: summary.error } : {}),
   })
 
   const service: FastTransfer = {

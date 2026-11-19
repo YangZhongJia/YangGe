@@ -201,6 +201,11 @@ const emojiScope = ref<HTMLElement | null>(null)
 const pkScope = ref<HTMLElement | null>(null)
 const attachScope = ref<HTMLElement | null>(null)
 const attachMenuOpen = ref(false)
+const attachHint = ref('')
+let attachHintTimer: ReturnType<typeof setTimeout> | null = null
+/** 已启动、尚未回执的高速发送；失败时用来回退一次普通传输。 */
+const fastFallbacks = new Map<string, { peerId: string; paths: string[] }>()
+let stopFastFallback: (() => void) | null = null
 const peerProfileScope = ref<HTMLElement | null>(null)
 const historySearchInput = ref<HTMLInputElement | null>(null)
 const inputScrollTop = ref(0)
@@ -549,6 +554,7 @@ onMounted(async () => {
   void duelStore.init()
   void window.pantry.listMessageFavoriteIds().then((ids) => { favoriteIds.value = new Set(ids) })
   stopScreenState = window.pantry.onScreenState(receiveScreenState)
+  stopFastFallback = window.pantry.onTransferUpdated(onFastTransferUpdate)
   void window.pantry.getScreenState().then(receiveScreenState)
   void refreshScreenAvailability()
   window.addEventListener('focus', refreshScreenAvailability)
@@ -590,6 +596,10 @@ onUnmounted(() => {
   attachments.clear()
   markClipboardPasteHandled()
   stopScreenState?.()
+  stopFastFallback?.()
+  stopFastFallback = null
+  if (attachHintTimer) clearTimeout(attachHintTimer)
+  attachHintTimer = null
   window.removeEventListener('focus', refreshScreenAvailability)
   rememberConversationScroll()
   document.removeEventListener('keydown', onEscape)
@@ -1987,6 +1997,41 @@ interface ClipboardImagePayload {
 
 // 闪电入口：1:1 优先走 LAN 直传，失败 / 离线 / 群聊回退既有消息通道
 const FAST_PROBE_TIMEOUT_MS = 2000
+const FAST_DEFAULT_PORT = 53318
+
+/** 1.11.15 起才有 lansend；更老的节点不必白等探测超时。 */
+function supportsFastVersion(version: string): boolean {
+  const [major = 0, minor = 0, patch = 0] = version.split('.').map((part) => Number(part))
+  return major > 1 || (major === 1 && (minor > 11 || (minor === 11 && patch >= 15)))
+}
+
+function showAttachHint(text: string): void {
+  attachHint.value = text
+  if (attachHintTimer) clearTimeout(attachHintTimer)
+  attachHintTimer = setTimeout(() => {
+    attachHint.value = ''
+    attachHintTimer = null
+  }, 5000)
+}
+
+function onFastTransferUpdate(view: TransferView): void {
+  if (view.transport !== 'fast' || view.direction !== 'out') return
+  const pending = fastFallbacks.get(view.transferId)
+  if (!pending) return
+  if (view.status === 'done' || view.status === 'canceled' || view.status === 'declined' || view.status === 'expired') {
+    fastFallbacks.delete(view.transferId)
+    return
+  }
+  if (view.status !== 'failed') return
+  fastFallbacks.delete(view.transferId)
+  // 对方明确拒绝时不自动改发普通文件；连接/握手类失败则补一次普通传输。
+  if (/declin|cancel/i.test(view.fastError ?? '')) return
+  showAttachHint(tr('高速传输失败，已自动改用普通传输'))
+  void (async () => {
+    const granted = await grantLocalFilePaths(pending.paths)
+    if (granted.length > 0) await window.pantry.offerFiles(pending.peerId, granted)
+  })().catch(() => undefined)
+}
 
 function toggleAttachMenu(): void {
   if (!canSendMedia.value) return
@@ -2011,7 +2056,10 @@ async function sendViaLightning(directory: boolean): Promise<void> {
   if (target && target.online && target.ip) {
     try {
       const state = await window.pantry.fastState()
-      const targetPort = target.fastPort ?? state.port
+      const targetPort = target.fastPort ?? (supportsFastVersion(target.ver) ? FAST_DEFAULT_PORT : 0)
+      if (state.enabled && targetPort === 0) {
+        showAttachHint(tr('对方版本不支持高速传输，已使用普通传输'))
+      }
       if (state.enabled && targetPort > 0) {
         let timer: ReturnType<typeof setTimeout> | undefined
         const fastPeer = await Promise.race([
@@ -2021,12 +2069,17 @@ async function sendViaLightning(directory: boolean): Promise<void> {
           })
         ])
         if (timer) clearTimeout(timer)
-        if (fastPeer) {
+        // 未广播 fastPort 时按默认端口探测，必须确认昵称一致，避免把文件
+        // 发给同一台机器上另一个 lansend 实例。
+        if (fastPeer && (target.fastPort || fastPeer.nick === target.nick)) {
           const granted = await grantLocalFilePaths(paths)
           if (granted.length > 0) {
             const transferId = await window.pantry.fastSend(fastPeer.nodeId, granted)
-            // 直传已接管（传输卡片由 dock 消费 transferUpdated 事件），不再发传统消息
-            if (transferId) return
+            // 直传已接管；若握手/连接失败，监听 transferUpdated 回退一次普通传输。
+            if (transferId) {
+              fastFallbacks.set(transferId, { peerId: target.nodeId, paths: [...paths] })
+              return
+            }
           }
         }
       }
@@ -2848,6 +2901,7 @@ async function onDrop(event: DragEvent): Promise<void> {
         <span v-if="isGroup && canSend && onlineGroupRecipientCount === 0" class="tool-hint">{{ tr('群成员离线，无法发送图片/文件') }}</span>
         <span v-else-if="isGroup" class="tool-hint">{{ tr('仅在线群成员可接收图片/文件') }}</span>
         <span v-else-if="!peerOnline" class="tool-hint">{{ tr('对方离线，无法发送图片/文件') }}</span>
+        <span v-if="attachHint" class="tool-hint">{{ attachHint }}</span>
         <span v-if="!isGroup && peerTyping" class="typing-line" aria-live="polite">
           <span class="typing-dots" aria-hidden="true">
             <i></i><i></i><i></i>

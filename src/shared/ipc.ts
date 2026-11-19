@@ -947,6 +947,8 @@ export interface TransferView {
   direct: boolean
   /** 传输通道；缺省=旧栈，fast=lansend 高速通道。 */
   transport?: 'legacy' | 'fast'
+  /** 高速通道失败原因（仅 fast 且失败时）；用于决定是否回退普通传输。 */
+  fastError?: string
   /** 入站传输在发送端并发预算内排队中（决议 #211）：进度行显示「排队等待发送方」 */
   queued?: boolean
   /** 入站失败/取消后能否继续或重新下载（决议 #211）：本会话传输上下文仍在且对端语义支持 */

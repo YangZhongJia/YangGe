@@ -704,6 +704,8 @@ const english: Record<string, string> = {
   "排队等待发送方": "Waiting for the sender",
   "正在连接高速通道…": "Connecting to the fast channel…",
   "高速通道不可用，已回退普通传输": "Fast channel unavailable; using normal transfer",
+  "高速传输失败，已自动改用普通传输": "Fast transfer failed; switched to normal transfer",
+  "对方版本不支持高速传输，已使用普通传输": "The peer's version does not support fast transfer; using normal transfer",
   "等待对方确认": "Waiting for confirmation",
   "对方正在接收": "The other side is receiving",
   "高速传输已取消": "Fast transfer canceled",
