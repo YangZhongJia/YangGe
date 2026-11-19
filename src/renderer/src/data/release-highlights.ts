@@ -10,6 +10,14 @@ export interface ReleaseHighlights {
  * 主窗按 localStorage 中的 lastSeenVersion 判断是否展示，避免每次启动重复弹出。
  */
 export const RELEASE_HIGHLIGHTS: Record<string, ReleaseHighlights> = {
+  '1.11.17': {
+    version: '1.11.17',
+    notes: [
+      '版本递增，1.11.16 及更早客户端会重新出现内网更新入口。',
+      '1 对 1 高速传输需要双方均为 1.11.15+；失败仍自动回退普通传输。'
+    ],
+    fixed: true
+  },
   '1.11.16': {
     version: '1.11.16',
     notes: [

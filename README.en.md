@@ -13,7 +13,7 @@
 
 <p>
   <a href="https://github.com/YangZhongJia/YangGe/releases">
-    <img src="https://img.shields.io/badge/version-1.11.16-3D8B6B?style=flat-square" alt="Version 1.11.16" />
+    <img src="https://img.shields.io/badge/version-1.11.17-3D8B6B?style=flat-square" alt="Version 1.11.17" />
   </a>
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/License-GPL--3.0--only-3D8B6B?style=flat-square" alt="GPL-3.0-only" />
@@ -50,9 +50,14 @@
 
 Start YangGe on computers connected to the same local network and they discover each other automatically. Open a peer to chat, transfer files, browse shared folders, or challenge them to a quick duel. No cloud account, central server, telemetry, or Internet access is involved. YangGe is designed for corporate intranets, isolated networks, and laboratories where external connectivity is limited or prohibited.
 
-> **1.11.16 status**: The Task center and local Agent entries are temporarily hidden; their implementation and data remain. Failed lightning fast transfers now fall back to the normal path, and older peers use the normal path directly. Status badges and the minimal morning lock screen are retained.
+> **1.11.17 status**: The Task center and local Agent entries are temporarily hidden; their implementation and data remain. 1:1 fast transfer requires both sides on 1.11.15+ and falls back to the normal path on failure. Status badges and the minimal morning lock screen are retained.
 
-## Recent updates (v1.11.16)
+## Recent updates (v1.11.17)
+
+- **Version bump**: 1.11.16 and older clients see the LAN update entry again; fast transfer still requires both sides on 1.11.15+.
+- **Release roll-up**: keeps the 1.11.16 failure fallback, older-peer skip, and default-port probing logic in a newly packaged build.
+
+**v1.11.16**
 
 - **Failure fallback**: if the fast handshake, connection, or receive confirmation fails, the same files are retried once over the normal transfer path.
 - **Older-peer fast skip**: peers older than 1.11.15 go straight to the normal path, with a status hint explaining why.
