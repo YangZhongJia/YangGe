@@ -184,7 +184,6 @@ export class PiService {
     if (!this.child) return false
     try {
       await this.request('abort')
-      this.state && (this.state.running = false)
       return true
     } catch {
       return false
@@ -288,7 +287,10 @@ export class PiService {
     })
     child.once('exit', (code, signal) => {
       const wasCurrent = this.child === child
-      if (wasCurrent) this.child = null
+      if (wasCurrent) {
+        this.child = null
+        if (this.state) this.state.running = false
+      }
       for (const pending of this.pending.values()) {
         clearTimeout(pending.timer)
         pending.reject(new Error(`Pi 已退出（${code ?? signal ?? 'unknown'}）`))
@@ -361,7 +363,7 @@ export class PiService {
       return
     }
     if (type === 'agent_settled') {
-      if (this.state) this.state.running = false
+      // 一次回复结束只表示本轮空闲；Pi 子进程仍然可继续接收模型切换和下一轮提示。
       this.emit({ type: 'settled', aborted: record.aborted === true })
     }
   }

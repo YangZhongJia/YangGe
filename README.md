@@ -10,14 +10,14 @@
 
 <p>
   <a href="https://github.com/YangZhongJia/YangGe/releases">
-    <img src="https://img.shields.io/badge/version-1.12.6-3D8B6B?style=flat-square" alt="Version 1.12.6" />
+    <img src="https://img.shields.io/badge/version-1.12.7-3D8B6B?style=flat-square" alt="Version 1.12.7" />
   </a>
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/License-GPL--3.0--only-3D8B6B?style=flat-square" alt="GPL-3.0-only" />
   </a>
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-0366d6?style=flat-square" alt="平台" />
   <img src="https://img.shields.io/badge/Electron-22-47848F?style=flat-square&logo=electron&logoColor=white" alt="Electron 22" />
-  <img src="https://img.shields.io/badge/tests-1294%20passing-2EA043?style=flat-square" alt="1294 tests passing" />
+  <img src="https://img.shields.io/badge/tests-1295%20passing-2EA043?style=flat-square" alt="1295 tests passing" />
 </p>
 
 <p>
@@ -52,7 +52,7 @@
 
 > **二开说明**：阳鸽是开源项目 [Teahouse（茶话间）](https://github.com/skyjt/teahouse) 的二次开发版本（GPL-3.0-only），仓库为 [YangZhongJia/YangGe](https://github.com/YangZhongJia/YangGe)。相对上游重做了品牌与界面，并新增 AI 分身 / 剪贴板 / 输入中提示 / AI 群总结 / 任务中心 / 双人角斗场 / ACP Agent 协作等能力。
 
-> **1.12.6 当前状态**：Pi 工作区会按项目保存会话，退出阳鸽后重新打开会恢复上次项目和聊天记录；锁屏新增本机人脸解锁（设置中采集），Pi 模型/思考程度在输入框底部，游戏中心位于设置。旧 Agent 入口仍隐藏。
+> **1.12.7 当前状态**：Pi 工作区会按项目保存会话，退出阳鸽后重新打开会恢复上次项目和聊天记录；锁屏新增本机人脸解锁（设置中采集），Pi 模型/思考程度在输入框底部，游戏中心位于设置。旧 Agent 入口仍隐藏。
 
 ## 为什么做这个
 
@@ -65,6 +65,10 @@
 干脆自己写一个：免费开源、纯内网直连、从 Windows 7 到国产统信 UOS 再到 macOS 全平台覆盖、打开就会用。这就是阳鸽。
 
 ## 最近更新
+
+**v1.12.7**
+
+- **修复回复结束后卡住**：Pi 完成一轮回复后仍保持“就绪”，模型选择、思考程度输入和发送都可继续使用。
 
 **v1.12.6**
 
