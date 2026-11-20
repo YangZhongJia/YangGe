@@ -13,7 +13,7 @@
 
 <p>
   <a href="https://github.com/YangZhongJia/YangGe/releases">
-    <img src="https://img.shields.io/badge/version-1.12.3-3D8B6B?style=flat-square" alt="Version 1.12.3" />
+    <img src="https://img.shields.io/badge/version-1.12.4-3D8B6B?style=flat-square" alt="Version 1.12.4" />
   </a>
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/License-GPL--3.0--only-3D8B6B?style=flat-square" alt="GPL-3.0-only" />
@@ -50,9 +50,17 @@
 
 Start YangGe on computers connected to the same local network and they discover each other automatically. Open a peer to chat, transfer files, browse shared folders, or challenge them to a quick duel. No cloud account, central server, telemetry, or Internet access is involved. YangGe is designed for corporate intranets, isolated networks, and laboratories where external connectivity is limited or prohibited.
 
-> **1.12.3 status**: Adds an independent "AI coding" Pi workspace with projects on the left, the conversation on the right, and a bottom composer. Model and thinking controls live under the composer, replies render as styled Markdown, and the game center moved from the rail into Settings. The old Agent entry remains hidden.
+> **1.12.4 status**: The Pi workspace saves a session per project, so quitting and reopening YangGe restores the last project, transcript, and model context. The lock screen also supports local face unlock, enrolled in Settings; model and thinking controls live under the composer, and the game center lives in Settings.
 
-## Recent updates (v1.12.3)
+## Recent updates (v1.12.4)
+
+- **Persistent Pi sessions**: each project has a stable Pi session; transcripts and model context are stored locally and survive restarts.
+- **Return to the last project**: opening AI coding again restores the last project and its messages/tool activity.
+- **Markdown history**: restored assistant replies keep their rendered Markdown formatting.
+- **Face unlock**: enroll in Settings → General → Lock-screen PIN, then click Face recognition on the lock screen. Failures show a prompt and the PIN remains available.
+- **Local only**: only face features are stored, never photos. Face unlock is a convenience; photos/videos can spoof cameras, so keep the PIN as a fallback.
+
+**v1.12.3**
 
 - **Games moved to Settings**: the rail no longer shows the gamepad; use Settings → Games. "Open game" still opens the standalone Guandan window.
 - **Cleaner rail**: only Chat, Contacts, AI coding, File cabinet, and Settings remain.

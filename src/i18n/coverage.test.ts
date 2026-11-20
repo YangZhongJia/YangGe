@@ -6,6 +6,7 @@ import { parse } from '@vue/compiler-sfc'
 import { baseParse } from '@vue/compiler-dom'
 import { expect, it } from 'vitest'
 import english from './en'
+import { FACE_ENGLISH } from '../renderer/src/utils/face-i18n'
 import { TRANSFER_FAILURE_TEXT } from './transfers'
 import { COMPAT_EMOJIS } from '../shared/compat-emoji'
 import { SHARE_FAIL_TEXT, SHARE_ROOT_REJECT_TEXT, SHARE_UPLOAD_FAIL_TEXT } from '../shared/ipc'
@@ -25,8 +26,9 @@ function sourceFiles(dir: string): string[] {
 
 it('所有静态调用与动态应用标签均有英文模板', () => {
   const missing: string[] = []
+  const dictionary = { ...english, ...FACE_ENGLISH }
   const check = (key: string): void => {
-    if (han.test(key) && !Object.prototype.hasOwnProperty.call(english, key)) missing.push(key)
+    if (han.test(key) && !Object.prototype.hasOwnProperty.call(dictionary, key)) missing.push(key)
   }
   const script = (code: string): void => {
     const ast = ts.createSourceFile('text.ts', code, ts.ScriptTarget.Latest, true)

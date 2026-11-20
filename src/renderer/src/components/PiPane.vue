@@ -2,10 +2,17 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import PantryIcon from './PantryIcon.vue'
 import PiMarkdown from './PiMarkdown.vue'
-import type { PiEvent, PiModelView, PiRouterView, PiStateView } from '../../../shared/ipc'
+import type {
+  PiEvent,
+  PiHistoryEntry,
+  PiModelView,
+  PiRouterView,
+  PiStateView
+} from '../../../shared/ipc'
 import { tr } from '../utils/i18n'
 
 const PROJECTS_KEY = 'yangge.pi.projects'
+const ACTIVE_KEY = 'yangge.pi.active'
 const ROUTER_KEY = 'yangge.pi.router'
 const DEFAULT_ROUTER: PiRouterView = {
   mode: 'pi',
@@ -85,6 +92,41 @@ function saveProjects(): void {
   } catch {
     /* localStorage 不可用时只保留内存状态 */
   }
+}
+
+function loadActivePath(): string {
+  try {
+    const saved = localStorage.getItem(ACTIVE_KEY)
+    if (!saved) return ''
+    return projects.value.find((item) => normalizePath(item) === normalizePath(saved)) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+function saveActivePath(path: string): void {
+  try {
+    localStorage.setItem(ACTIVE_KEY, path)
+  } catch {
+    /* localStorage 不可用时只保留内存状态 */
+  }
+}
+
+function historyEntries(history: PiHistoryEntry[]): Entry[] {
+  return history.map((item) => {
+    const id = nextId()
+    if (item.kind === 'tool') {
+      return {
+        kind: 'tool',
+        id,
+        toolCallId: item.toolCallId,
+        toolName: item.toolName,
+        args: item.args,
+        state: item.state
+      }
+    }
+    return { kind: item.kind, id, text: item.text }
+  })
 }
 
 const projects = ref<string[]>(loadProjects())
@@ -273,6 +315,7 @@ function handleEvent(event: PiEvent): void {
 async function startProject(path: string): Promise<void> {
   if (starting.value) return
   activePath.value = path
+  saveActivePath(path)
   starting.value = true
   routerError.value = ''
   try {
@@ -302,9 +345,13 @@ async function startProject(path: string): Promise<void> {
     })
     if (result.ok) {
       state.value = result.state
+      entries.value = historyEntries(result.state.history)
+      currentAssistantId.value = null
       busy.value = false
       headerStatus.value = ''
       headerTone.value = 'info'
+      await nextTick()
+      scrollToBottom()
     } else {
       state.value = null
       showError(result.error || tr('无法启动 Pi'))
@@ -522,8 +569,10 @@ watch(state, (value) => {
 watch(entries, () => void nextTick(scrollToBottom), { deep: true })
 watch(busy, () => void nextTick(scrollToBottom))
 
-onMounted(() => {
+onMounted(async () => {
   unsubscribe = window.pantry.onPiEvent(handleEvent)
+  const saved = loadActivePath()
+  if (saved) await selectProject(saved)
 })
 
 onBeforeUnmount(() => {

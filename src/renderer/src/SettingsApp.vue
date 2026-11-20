@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { tr, language, applyLanguage } from './utils/i18n'
-import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import {
   darkTheme,
   dateZhCN,
@@ -50,6 +50,9 @@ import AvatarMark from './components/AvatarMark.vue'
 import PantryBrandLogo from './components/PantryBrandLogo.vue'
 import PantryIcon from './components/PantryIcon.vue'
 import DiagnosticsPanel from './components/DiagnosticsPanel.vue'
+
+// 人脸采集包含摄像头预览与模型交互，按需加载以免撑大设置页静态样式闭包。
+const FaceEnrollPanel = defineAsyncComponent(() => import('./components/FaceEnrollPanel.vue'))
 import SettingsNavIcon from './components/SettingsNavIcon.vue'
 import ScanRangeImport from './components/ScanRangeImport.vue'
 import WindowControls from './components/WindowControls.vue'
@@ -1323,6 +1326,7 @@ async function confirmRemove(cidr: string): Promise<void> {
               <p v-if="lockPinError" class="lock-error" role="alert">{{ lockPinError }}</p>
               <p v-else-if="lockPinNotice" class="lock-notice" role="status">{{ lockPinNotice }}</p>
             </div>
+            <FaceEnrollPanel :enabled="settings.lockHasPin" />
             <div v-if="settings.lockEnabled" class="panel-actions">
               <NButton secondary @click="lockNow">{{ tr('立即锁定') }}</NButton>
             </div>

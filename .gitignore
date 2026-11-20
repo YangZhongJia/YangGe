@@ -5,6 +5,7 @@ dist/
 release/
 *.tsbuildinfo
 src/renderer/public/ocr/
+src/renderer/public/face-models/
 
 # 日志与本地数据
 logs/

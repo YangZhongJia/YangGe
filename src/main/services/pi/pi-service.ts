@@ -4,8 +4,10 @@ import { delimiter, extname, join } from 'node:path'
 import { get as httpGet } from 'node:http'
 import { get as httpsGet } from 'node:https'
 import type { ChildProcessWithoutNullStreams } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import type {
   PiEvent,
+  PiHistoryEntry,
   PiModelView,
   PiRouterView,
   PiStartInput,
@@ -35,6 +37,7 @@ interface PiState {
   currentModel: PiModelView | null
   thinkingLevel: string
   thinkingLevels: string[]
+  history: PiHistoryEntry[]
   running: boolean
 }
 
@@ -126,8 +129,10 @@ export class PiService {
           currentModel: current ?? wanted ?? null,
           thinkingLevel,
           thinkingLevels,
+          history: [],
           running: true
         }
+        this.state.history = await this.readHistory()
         if (current) this.emit({ type: 'status', message: `已连接 Pi · ${current.name || current.id}` })
         return { ok: true, state: this.view() }
       }
@@ -144,8 +149,10 @@ export class PiService {
         currentModel: current ?? available[0] ?? null,
         thinkingLevel,
         thinkingLevels,
+        history: [],
         running: true
       }
+      this.state.history = await this.readHistory()
       if (current) this.emit({ type: 'status', message: `已连接 Pi · ${current.name || current.id}` })
       return { ok: true, state: this.view() }
     } catch (error) {
@@ -241,9 +248,21 @@ export class PiService {
   }
 
   private spawn(command: string, cwd: string, extraEnv: NodeJS.ProcessEnv): void {
+    // 每个项目固定一个会话 ID：退出阳鸽后再次打开同一项目会继续同一上下文。
+    // 会话目录放在应用 userData 下，避免与用户自己的 Pi CLI 会话混在一起。
+    const sessionDir = join(this.options.userDataDir, 'pi-sessions')
+    mkdirSync(sessionDir, { recursive: true })
     const child = spawnAgentProcess({
       command,
-      args: ['--mode', 'rpc', '--no-session', '--no-approve'],
+      args: [
+        '--mode',
+        'rpc',
+        '--no-approve',
+        '--session-dir',
+        sessionDir,
+        '--session-id',
+        sessionIdFor(cwd)
+      ],
       cwd,
       env: extraEnv
     })
@@ -414,7 +433,101 @@ export class PiService {
       currentModel: state?.currentModel ?? null,
       thinkingLevel: state?.thinkingLevel ?? '',
       thinkingLevels: state?.thinkingLevels ?? [],
+      history: state?.history ?? [],
       running: state?.running === true
+    }
+  }
+
+  private async readHistory(): Promise<PiHistoryEntry[]> {
+    try {
+      const response = (await this.request('get_entries')) as
+        | { entries?: unknown; leafId?: unknown }
+        | null
+      const rawEntries = Array.isArray(response?.entries) ? response.entries : []
+      const entries = rawEntries.filter((entry): entry is Record<string, unknown> => {
+        if (typeof entry !== 'object' || entry === null) return false
+        return typeof (entry as { id?: unknown }).id === 'string'
+      })
+      const byId = new Map(entries.map((entry) => [String(entry.id), entry]))
+      let active = entries
+      const leafId = typeof response?.leafId === 'string' ? response.leafId : ''
+      if (leafId) {
+        const chain: Record<string, unknown>[] = []
+        const seen = new Set<string>()
+        let cursor: string | null = leafId
+        while (cursor && !seen.has(cursor)) {
+          const entry = byId.get(cursor)
+          if (!entry) break
+          seen.add(cursor)
+          chain.push(entry)
+          cursor = typeof entry.parentId === 'string' ? entry.parentId : null
+        }
+        if (chain.length > 0) active = chain.reverse()
+      }
+
+      // 先从 assistant 的 toolCall block 建立参数表，工具结果本身不带参数。
+      const calls = new Map<string, { name: string; args: string }>()
+      for (const entry of active) {
+        const rawMessage = entry.message
+        if (
+          entry.type !== 'message' ||
+          typeof rawMessage !== 'object' ||
+          rawMessage === null
+        ) {
+          continue
+        }
+        const message = rawMessage as Record<string, unknown>
+        if (message.role !== 'assistant' || !Array.isArray(message.content)) continue
+        for (const rawBlock of message.content) {
+          if (typeof rawBlock !== 'object' || rawBlock === null) continue
+          const block = rawBlock as Record<string, unknown>
+          if (block.type !== 'toolCall' || typeof block.id !== 'string') continue
+          calls.set(block.id, {
+            name: typeof block.name === 'string' ? block.name : 'tool',
+            args: argsPreview(block.arguments)
+          })
+        }
+      }
+
+      const history: PiHistoryEntry[] = []
+      for (const entry of active) {
+        const rawMessage = entry.message
+        if (
+          entry.type !== 'message' ||
+          typeof rawMessage !== 'object' ||
+          rawMessage === null
+        ) {
+          continue
+        }
+        const message = rawMessage as Record<string, unknown>
+        const role = message.role
+        if (role === 'user') {
+          const text = messageText(message)
+          if (text.trim()) history.push({ kind: 'user', text })
+          continue
+        }
+        if (role === 'assistant') {
+          const text = messageText(message)
+          if (text.trim()) history.push({ kind: 'assistant', text })
+          continue
+        }
+        if (role !== 'toolResult' && role !== 'tool') continue
+        const toolCallId = typeof message.toolCallId === 'string' ? message.toolCallId : ''
+        const call = toolCallId ? calls.get(toolCallId) : undefined
+        history.push({
+          kind: 'tool',
+          toolCallId,
+          toolName:
+            typeof message.toolName === 'string'
+              ? message.toolName
+              : call?.name ?? 'tool',
+          args: call?.args ?? '',
+          state: message.isError === true ? 'error' : 'done'
+        })
+      }
+      return history
+    } catch {
+      return []
     }
   }
 
@@ -510,6 +623,23 @@ function normalizeModel(value: unknown): PiModelView | null {
 function errorText(error: unknown): string {
   if (error instanceof Error) return error.message.slice(0, MAX_ERROR_CHARS)
   return String(error).slice(0, MAX_ERROR_CHARS)
+}
+
+function argsPreview(value: unknown): string {
+  if (value == null) return ''
+  let text: string
+  try {
+    text = typeof value === 'string' ? value : JSON.stringify(value) ?? ''
+  } catch {
+    text = String(value)
+  }
+  if (!text || text === '{}') return ''
+  return text.length > 100 ? `${text.slice(0, 100)}…` : text
+}
+
+function sessionIdFor(projectPath: string): string {
+  const normalized = projectPath.replace(/[\\/]+$/, '').toLowerCase()
+  return `yangge-${createHash('sha256').update(normalized).digest('hex').slice(0, 24)}`
 }
 
 function messageText(message: Record<string, unknown>): string {

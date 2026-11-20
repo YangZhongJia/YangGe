@@ -29,6 +29,16 @@ The left navigation uses `message-circle`, `users`, `package-2`, `refresh-cw` an
 - Lucide: <https://github.com/lucide-icons/lucide/tree/0.468.0>, ISC License (some artwork originates from Feather / MIT)
 - Full copyright and license notices: [navigation-icons.txt](build/licenses/navigation-icons.txt), bundled as `licenses/navigation-icons.txt`.
 
+## Face recognition models
+
+Lock-screen face unlock uses the Tiny Face Detector, 68-point landmarks, and 128-dimensional face descriptor from @vladmandic/face-api. Model files are bundled locally and served through a read-only local protocol; they never access the network, and no photos are stored.
+
+- Source: <https://github.com/vladmandic/face-api>
+- Version: 1.7.15
+- Use: `tiny_face_detector_model`, `face_landmark_68_model`, and `face_recognition_model` weights
+- License: MIT License
+- Copyright: Copyright (c) Vladimir Mandic and upstream contributors
+
 ## Guandan (embedded game)
 
 The Guandan entry in the left rail opens an embedded single-player game from a third-party open-source project. Its static assets ship with the application and make no runtime network request.

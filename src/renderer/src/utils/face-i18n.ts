@@ -1,0 +1,41 @@
+import { registerEnglishTranslations } from '../../../i18n'
+
+// 人脸模块自己的英文词条不进入公共 en 资源，避免所有渲染入口都被动加载。
+export const FACE_ENGLISH = {
+  "人脸解锁": "Face unlock",
+  "在锁屏点击「人脸识别」，通过后直接进入。": "Click Face recognition on the lock screen to sign in.",
+  "请先设置 6 位数字密码，再录入人脸。": "Set a 6-digit PIN before enrolling your face.",
+  "已录入 · {0} 个样本": "Enrolled · {0} samples",
+  "尚未录入": "Not enrolled",
+  "采集人脸": "Enroll face",
+  "采集中…": "Enrolling…",
+  "重新采集": "Re-enroll",
+  "删除人脸": "Remove face",
+  "只在本机保存人脸特征，不保存或上传照片。": "Only face features stay on this device; no photos are saved or uploaded.",
+  "照片或视频可能欺骗摄像头，人脸识别仅作便捷解锁，请保留密码。": "Photos or videos can spoof a camera. Face unlock is for convenience; keep your PIN.",
+  "正在打开摄像头…": "Opening camera…",
+  "正在加载人脸模型…": "Loading face model…",
+  "请正对摄像头，正在采集 {0}/3": "Face the camera, capturing {0}/3",
+  "没有检测到人脸，请让脸部完整出现在画面中": "No face detected. Keep your whole face in view.",
+  "正在保存人脸特征…": "Saving face features…",
+  "人脸已保存，可以在锁屏使用人脸识别": "Face saved. You can use face unlock on the lock screen.",
+  "删除后只能用密码解锁；重新采集才能恢复人脸解锁。": "After removal only the PIN works. Re-enroll to restore face unlock.",
+  "人脸数据已删除": "Face data removed",
+  "删除失败": "Removal failed",
+  "人脸识别": "Face recognition",
+  "请正对摄像头…": "Face the camera…",
+  "正在识别…": "Recognizing…",
+  "未识别到已录入的人脸，请重试或输入密码": "Face not recognized. Try again or enter your PIN.",
+  "没有检测到人脸，请正对摄像头": "No face detected. Face the camera.",
+  "未获得摄像头权限，请在系统设置中允许阳鸽使用摄像头": "Camera permission denied. Allow YangGe to use the camera in system settings.",
+  "没有找到可用的摄像头": "No camera available",
+  "摄像头正被其他程序占用": "The camera is in use by another app",
+  "摄像头启动失败": "Could not start the camera",
+  "摄像头画面超时": "Camera preview timed out",
+  "锁屏状态下不能录入人脸": "Cannot enroll a face while locked.",
+  "锁屏状态下不能删除人脸": "Cannot remove face data while locked.",
+  "人脸样本数量不合法": "Invalid number of face samples",
+  "人脸特征不合法": "Invalid face features",
+}
+
+registerEnglishTranslations(FACE_ENGLISH)

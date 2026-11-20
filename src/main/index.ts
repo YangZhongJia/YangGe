@@ -1,6 +1,7 @@
 import { AiReplier, buildPolishMessages, callChatCompletion, isPolishMode } from './services/ai-replier'
 import { createFastTransfer, type FastTransfer } from './services/fast-transfer'
 import { listMagpieModels, normalizeRouter, PiService } from './services/pi/pi-service'
+import { FaceService } from './services/face'
 import { normalizeAi, normalizeClipboardFollow } from './store/app-state'
 import { AcpAgentService } from './services/agent/agent-service'
 import { AgentCoordinator } from './services/agent/agent-coordinator'
@@ -38,6 +39,7 @@ import {
   powerMonitor,
   protocol,
   screen,
+  session,
   shell,
   systemPreferences,
   type Tray
@@ -56,7 +58,7 @@ import {
 } from 'node:fs'
 import { copyFile, mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
-import { basename, dirname, extname, join, resolve } from 'node:path'
+import { basename, dirname, extname, join, resolve, sep } from 'node:path'
 import {
   DEFAULT_CAPTURE_SHORTCUT,
   DEFAULT_SHOWHIDE_SHORTCUT,
@@ -80,6 +82,8 @@ import {
   type ImageSourceBytes,
   type LockRequestedEvent,
   type LockVerifyResult,
+  type FaceStatusView,
+  type FaceVerifyResult,
   type MessageView,
   type MainWindowShownEvent,
   type NetState,
@@ -263,7 +267,9 @@ if (WAYLAND_SESSION) {
 protocol.registerSchemesAsPrivileged([
   { scheme: 'pantry-avatar', privileges: { standard: true, secure: true } },
   // 内嵌掼蛋静态包：标准协议 + 安全上下文，模块 Worker 与相对路径才能正常工作。
-  { scheme: 'yangge-game', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }
+  { scheme: 'yangge-game', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } },
+  // 人脸模型只读本地权重；标准 + fetch 权限后 face-api 才能加载 manifest。
+  { scheme: 'yangge-face', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }
 ])
 
 // 纯内网 IP 工具：全局禁用代理、强制直连（决议 #78）。不走系统/环境代理，
@@ -359,6 +365,7 @@ if (!gotLock) {
   let files: FilesService | null = null
   /** 独立 Pi 编程会话；与旧 ACP Agent 完全分离。 */
   let piService: PiService | null = null
+  let faceService: FaceService | null = null
   /** 高速通道与旧栈并存；启动失败时保持 null，聊天附件仍走旧栈。 */
   let fast: FastTransfer | null = null
   /** 入站高速报价：transferId → 渲染层确认结果。超时按拒绝处理。 */
@@ -3792,6 +3799,8 @@ if (!gotLock) {
 
   let lockFailures = 0
   let lockCooldownUntil = 0
+  let faceFailures = 0
+  let faceCooldownUntil = 0
   ipcMain.handle(IpcChannels.lockVerify, (_event, pin: unknown): LockVerifyResult => {
     if (!appState?.config.lockEnabled || !isLockPinHash(appState.config.lockPinHash)) {
       return { ok: false }
@@ -3801,6 +3810,8 @@ if (!gotLock) {
     if (verifyLockPin(pin, appState.config.lockPinHash)) {
       lockFailures = 0
       lockCooldownUntil = 0
+      faceFailures = 0
+      faceCooldownUntil = 0
       lockScreenActive = false
       return { ok: true }
     }
@@ -3832,6 +3843,51 @@ if (!gotLock) {
   })
 
   ipcMain.handle(IpcChannels.lockNow, (): boolean => requestAppLock('manual'))
+
+  const getFaceService = (): FaceService => {
+    if (!faceService) faceService = new FaceService(app.getPath('userData'))
+    return faceService
+  }
+
+  ipcMain.handle(IpcChannels.faceStatus, (): FaceStatusView => getFaceService().status())
+
+  ipcMain.handle(IpcChannels.faceEnroll, (_event, descriptors: unknown): FaceStatusView => {
+    if (lockScreenActive) throw new Error('锁屏状态下不能录入人脸')
+    return getFaceService().enroll(descriptors)
+  })
+
+  ipcMain.handle(IpcChannels.faceRemove, (): FaceStatusView => {
+    if (lockScreenActive) throw new Error('锁屏状态下不能删除人脸')
+    return getFaceService().remove()
+  })
+
+  ipcMain.handle(IpcChannels.faceVerify, (_event, descriptor: unknown): FaceVerifyResult => {
+    if (!appState?.config.lockEnabled) return { ok: false, distance: null }
+    if (!lockScreenActive) return { ok: false, distance: null }
+    const now = Date.now()
+    if (faceCooldownUntil > 0 && now >= faceCooldownUntil) {
+      faceFailures = 0
+      faceCooldownUntil = 0
+    }
+    if (now < faceCooldownUntil) {
+      return { ok: false, distance: null, retryAfterMs: faceCooldownUntil - now }
+    }
+    const result = getFaceService().verify(descriptor)
+    if (result.ok) {
+      faceFailures = 0
+      faceCooldownUntil = 0
+      lockFailures = 0
+      lockCooldownUntil = 0
+      lockScreenActive = false
+      return result
+    }
+    faceFailures += 1
+    if (faceFailures >= 5) {
+      faceCooldownUntil = now + 30_000
+      return { ...result, retryAfterMs: 30_000 }
+    }
+    return result
+  })
 
   ipcMain.handle(IpcChannels.netImportRanges, (_event, input: unknown): ScanRangeImportResult => {
     if (!appState) return { ok: false, reason: 'unavailable', view: settingsView() }
@@ -4364,6 +4420,43 @@ if (!gotLock) {
     remoteView.start()
     void imagePreview.prune()
     registerGuandanProtocol(guandanRoot(app.getAppPath(), process.resourcesPath, app.isPackaged))
+    protocol.registerFileProtocol('yangge-face', (request, callback) => {
+      try {
+        const url = new URL(request.url)
+        if (url.hostname !== 'models') {
+          callback({ error: -6 })
+          return
+        }
+        const root = resolve(app.getAppPath(), 'out', 'renderer', 'face-models')
+        const relative = decodeURIComponent(url.pathname).replace(/^\/+/, '')
+        const target = resolve(root, relative)
+        if (target !== root && !target.startsWith(`${root}${sep}`)) {
+          callback({ error: -6 })
+          return
+        }
+        callback({ path: target })
+      } catch {
+        callback({ error: -6 })
+      }
+    })
+    session.defaultSession.setPermissionRequestHandler((contents, permission, callback) => {
+      const win = BrowserWindow.fromWebContents(contents)
+      const trusted = win === mainWindow || win === getSettingsWindow()
+      if (permission !== 'media' || !trusted) {
+        callback(false)
+        return
+      }
+      if (process.platform === 'darwin') {
+        void systemPreferences.askForMediaAccess('camera').then(callback).catch(() => callback(false))
+        return
+      }
+      callback(true)
+    })
+    session.defaultSession.setPermissionCheckHandler((contents, permission) => {
+      if (!contents) return false
+      const win = BrowserWindow.fromWebContents(contents)
+      return permission === 'media' && (win === mainWindow || win === getSettingsWindow())
+    })
     startGuandanServer({
       scriptPath: app.isPackaged
         ? join(process.resourcesPath, 'guandan-server', 'server.cjs')

@@ -2,6 +2,7 @@ import type { Language, TranslationParams } from '../shared/i18n'
 
 let language: Language = 'zh-CN'
 let english: Record<string, string> = {}
+const extraEnglish: Record<string, string> = {}
 let loading: Promise<void> | undefined
 let request = 0
 
@@ -18,7 +19,7 @@ export function initialLanguage(existing: boolean, saved: unknown, system: strin
 export async function setLanguage(next: Language): Promise<boolean> {
   const id = ++request
   if (next === 'en') {
-    loading ??= import('./en').then((module) => { english = module.default }).catch((error: unknown) => {
+    loading ??= import('./en').then((module) => { english = { ...module.default, ...extraEnglish } }).catch((error: unknown) => {
       loading = undefined
       throw error
     })
@@ -30,6 +31,12 @@ export async function setLanguage(next: Language): Promise<boolean> {
 
 export function getLanguage(): Language {
   return language
+}
+
+/** 按需模块可注册额外英文词条，避免把低频功能文案放进公共语言包。 */
+export function registerEnglishTranslations(entries: Record<string, string>): void {
+  Object.assign(extraEnglish, entries)
+  if (language === 'en') Object.assign(english, entries)
 }
 
 export function formatTemplate(template: string, params: TranslationParams = {}): string {

@@ -10,6 +10,17 @@ export interface ReleaseHighlights {
  * 主窗按 localStorage 中的 lastSeenVersion 判断是否展示，避免每次启动重复弹出。
  */
 export const RELEASE_HIGHLIGHTS: Record<string, ReleaseHighlights> = {
+  '1.12.4': {
+    version: '1.12.4',
+    notes: [
+      'Pi 聊天按项目保存，退出阳鸽后重新打开会恢复聊天记录和模型上下文。',
+      '重新进入 AI 编程时自动回到上次项目，并回填历史消息与工具记录。',
+      '恢复的历史助手回复仍按 Markdown 排版。',
+      '锁屏新增本机人脸解锁：在设置中采集，锁屏点击「人脸识别」，通过后进入。',
+      '只在本机保存人脸特征，不保存照片；识别失败会提示并保留密码登录。'
+    ],
+    fixed: true
+  },
   '1.12.3': {
     version: '1.12.3',
     notes: [

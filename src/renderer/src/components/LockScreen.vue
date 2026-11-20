@@ -2,6 +2,13 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { tr } from '../utils/i18n'
 import { pinInputSlots } from '../utils/lock-pin-input'
+import {
+  cameraErrorMessage,
+  faceDescriptorFromVideo,
+  loadFaceEngine,
+  startCamera,
+  stopCamera
+} from '../utils/face'
 import doveMarkUrl from '../assets/brand/yangge-mark.svg?url'
 
 defineProps<{
@@ -23,6 +30,13 @@ const pinShellRef = ref<HTMLElement | null>(null)
 const brandRef = ref<HTMLElement | null>(null)
 const doveRef = ref<HTMLElement | null>(null)
 const doveAway = ref(false)
+const faceAvailable = ref(false)
+const faceScanning = ref(false)
+const faceBusy = ref(false)
+const faceStatusText = ref('')
+const faceError = ref('')
+const faceVideo = ref<HTMLVideoElement | null>(null)
+let faceAttempt = 0
 let cooldownTimer: ReturnType<typeof setInterval> | null = null
 let shakeTimer: ReturnType<typeof setTimeout> | null = null
 let focusHandler: (() => void) | null = null
@@ -251,6 +265,7 @@ function onPinInput(event: Event): void {
   pin.value = digits
   input.value = digits
   error.value = ''
+  faceError.value = ''
 
   if (slots.length > 0) {
     void flyToSlot(slots[slots.length - 1])
@@ -289,6 +304,62 @@ function triggerShake(): void {
       shakeTimer = null
     }, 420)
   })
+}
+
+async function startFace(): Promise<void> {
+  if (faceBusy.value || faceScanning.value || settling.value || cooldownRemaining.value > 0) return
+  faceError.value = ''
+  faceScanning.value = true
+  faceBusy.value = true
+  const attempt = ++faceAttempt
+  faceStatusText.value = tr('正在打开摄像头…')
+  await nextTick()
+  try {
+    await startCamera(faceVideo.value as HTMLVideoElement)
+    if (attempt !== faceAttempt) return
+    faceStatusText.value = tr('正在加载人脸模型…')
+    await loadFaceEngine()
+    if (attempt !== faceAttempt) return
+    faceStatusText.value = tr('请正对摄像头…')
+    await wait(650)
+    if (attempt !== faceAttempt) return
+    const descriptor = await faceDescriptorFromVideo(faceVideo.value as HTMLVideoElement)
+    if (attempt !== faceAttempt) return
+    if (!descriptor) throw new Error(tr('没有检测到人脸，请正对摄像头'))
+    faceStatusText.value = tr('正在识别…')
+    const result = await window.pantry.verifyFace(descriptor)
+    if (attempt !== faceAttempt) return
+    if (result.ok) {
+      stopCamera(faceVideo.value)
+      faceScanning.value = false
+      emit('unlocked')
+      return
+    }
+    if (result.retryAfterMs && result.retryAfterMs > 0) {
+      cooldownUntil.value = Date.now() + result.retryAfterMs
+      now.value = Date.now()
+      faceError.value = tr('尝试次数过多，请 {0} 秒后再试', { 0: Math.ceil(result.retryAfterMs / 1000) })
+    } else {
+      faceError.value = tr('未识别到已录入的人脸，请重试或输入密码')
+    }
+  } catch (err) {
+    if (attempt === faceAttempt) faceError.value = tr(cameraErrorMessage(err))
+  } finally {
+    if (attempt === faceAttempt) {
+      stopCamera(faceVideo.value)
+      faceScanning.value = false
+      faceBusy.value = false
+    }
+  }
+}
+
+function cancelFace(): void {
+  faceAttempt += 1
+  stopCamera(faceVideo.value)
+  faceScanning.value = false
+  faceBusy.value = false
+  faceStatusText.value = ''
+  void nextTick(() => focusInput())
 }
 
 async function submit(): Promise<void> {
@@ -336,6 +407,7 @@ function startCooldownClock(): void {
     }
     cooldownUntil.value = 0
     error.value = ''
+    faceError.value = ''
     focusInput()
   }, 500)
 }
@@ -346,6 +418,11 @@ onMounted(async () => {
   startCooldownClock()
   focusHandler = () => focusInput()
   window.addEventListener('focus', focusHandler)
+  void window.pantry.getFaceStatus().then((status) => {
+    faceAvailable.value = status.enrolled
+  }).catch(() => {
+    faceAvailable.value = false
+  })
   const start = iconTopLeft()
   if (doveRef.value) {
     doveRef.value.style.transform = `translate3d(${start.x}px, ${start.y}px, 0) scale(.22)`
@@ -354,6 +431,8 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  faceAttempt += 1
+  stopCamera(faceVideo.value)
   cancelFlight()
   if (focusHandler) window.removeEventListener('focus', focusHandler)
   if (cooldownTimer) clearInterval(cooldownTimer)
@@ -409,8 +488,30 @@ onBeforeUnmount(() => {
         />
       </div>
 
-      <p class="lock-error" role="status" aria-live="polite">{{ error }}</p>
+      <p class="lock-error" role="status" aria-live="polite">{{ faceError || error }}</p>
+      <button
+        v-if="faceAvailable && !faceScanning"
+        type="button"
+        class="face-entry"
+        :disabled="busy || settling || cooldownRemaining > 0"
+        @click="startFace"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M8 5.5h8a2.5 2.5 0 0 1 2.5 2.5v8a2.5 2.5 0 0 1-2.5 2.5H8A2.5 2.5 0 0 1 5.5 16V8A2.5 2.5 0 0 1 8 5.5Z" stroke="currentColor" stroke-width="1.6" />
+          <circle cx="12" cy="12" r="2.6" stroke="currentColor" stroke-width="1.6" />
+          <path d="M9 4.5 10 3h4l1 1.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+        </svg>
+        <span>{{ tr('人脸识别') }}</span>
+      </button>
     </section>
+    <div v-if="faceScanning" class="face-scanner" role="dialog" aria-modal="true" :aria-label="tr('人脸识别')">
+      <div class="face-scanner-card">
+        <video ref="faceVideo" class="face-scanner-video" muted playsinline></video>
+        <div class="face-scanner-frame" aria-hidden="true"></div>
+        <p class="face-scanner-status" role="status">{{ faceStatusText }}</p>
+        <button type="button" class="face-cancel" @click="cancelFace">{{ tr('取消') }}</button>
+      </div>
+    </div>
     <div ref="doveRef" class="lock-dove" aria-hidden="true">
       <span class="dove-body">
         <span class="dove-glow"></span>
@@ -657,6 +758,93 @@ html[data-theme='dark'] .lock-stars { display: block; }
 .pin-shell.shake { animation: lock-shake 380ms cubic-bezier(.36,.07,.19,.97); }
 .pin-shell.shake .pin-slot { border-color: #c44f70; }
 .lock-error { min-height: 18px; margin: 10px 0 0; color: #b43157; font-size: 12px; }
+.face-entry {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin-top: 8px;
+  padding: 8px 14px;
+  border: 1px solid rgba(75, 95, 150, .18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .34);
+  color: #34466d;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease;
+}
+.face-entry:hover:not(:disabled) { background: rgba(255, 255, 255, .64); border-color: rgba(75, 95, 150, .32); }
+.face-entry:disabled { opacity: .5; cursor: default; }
+.face-scanner {
+  position: fixed;
+  inset: 0;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  background: rgba(14, 24, 48, .34);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.face-scanner-card {
+  position: relative;
+  width: min(360px, calc(100vw - 48px));
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, .56);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, .42);
+  box-shadow: 0 24px 68px rgba(28, 42, 78, .24);
+}
+.face-scanner-video {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 14px;
+  background: #101827;
+  transform: scaleX(-1);
+}
+.face-scanner-frame {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 45%;
+  aspect-ratio: 1 / 1.18;
+  transform: translate(-50%, -54%);
+  border: 2px dashed rgba(255, 255, 255, .78);
+  border-radius: 44%;
+  pointer-events: none;
+}
+.face-scanner-status {
+  margin: 10px 0 8px;
+  color: #30436b;
+  font-size: 12px;
+  text-align: center;
+}
+.face-cancel {
+  display: block;
+  margin: 0 auto;
+  padding: 5px 16px;
+  border: 1px solid rgba(75, 95, 150, .2);
+  border-radius: 999px;
+  background: transparent;
+  color: #50617f;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+html[data-theme='dark'] .face-entry {
+  border-color: rgba(180, 200, 255, .2);
+  background: rgba(255, 255, 255, .08);
+  color: #d4dcf3;
+}
+html[data-theme='dark'] .face-entry:hover:not(:disabled) { background: rgba(255, 255, 255, .14); }
+html[data-theme='dark'] .face-scanner-card {
+  border-color: rgba(160, 182, 255, .24);
+  background: rgba(25, 34, 58, .78);
+}
+html[data-theme='dark'] .face-scanner-status { color: #c8d3ec; }
+html[data-theme='dark'] .face-cancel { border-color: rgba(180, 200, 255, .2); color: #b9c6e3; }
 .lock-dove {
   position: absolute;
   left: 0;

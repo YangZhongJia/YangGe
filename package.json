@@ -1,7 +1,7 @@
 {
   "name": "yangge",
   "productName": "阳鸽",
-  "version": "1.12.3",
+  "version": "1.12.4",
   "description": "阳鸽（YangGe）—— 纯内网、基于 IP 的局域网即时通讯与文件传输工具（衍生自开源项目 Teahouse，GPL-3.0）",
   "license": "GPL-3.0-only",
   "private": true,
@@ -10,18 +10,19 @@
     "node": ">=18"
   },
   "dependencies": {
+    "@vladmandic/face-api": "1.7.15",
     "better-sqlite3": "9.6.0"
   },
   "scripts": {
     "postinstall": "node node_modules/@electron/rebuild/lib/cli.js -o better-sqlite3",
     "rebuild:electron": "node node_modules/@electron/rebuild/lib/cli.js -f -o better-sqlite3",
-    "dev": "node scripts/prepare-ocr-assets.mjs && electron-vite dev",
+    "dev": "node scripts/prepare-ocr-assets.mjs && node scripts/prepare-face-assets.mjs && electron-vite dev",
     "dev:2": "sh scripts/dev-clients.sh 2",
     "dev:3": "sh scripts/dev-clients.sh 3",
     "dev:client1": "sh scripts/dev-client.sh 1",
     "dev:client2": "sh scripts/dev-client.sh 2",
     "dev:client3": "sh scripts/dev-client.sh 3",
-    "build": "node scripts/prepare-ocr-assets.mjs && electron-vite build && npm run check:renderer-bundles",
+    "build": "node scripts/prepare-ocr-assets.mjs && node scripts/prepare-face-assets.mjs && electron-vite build && npm run check:renderer-bundles",
     "start": "electron-vite preview",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
     "typecheck:web": "vue-tsc --noEmit -p tsconfig.web.json --composite false",

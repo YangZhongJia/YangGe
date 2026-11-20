@@ -47,6 +47,8 @@ import {
   type ImageSourceBytes,
   type LockRequestedEvent,
   type LockVerifyResult,
+  type FaceStatusView,
+  type FaceVerifyResult,
   type ImageViewerNavigation,
   type MessageView,
   type MsgStatusEvent,
@@ -337,6 +339,12 @@ const api: PantryApi = {
   setLockEnabled: (enabled: boolean): Promise<SettingsView> =>
     ipcRenderer.invoke(IpcChannels.lockSetEnabled, enabled),
   lockNow: (): Promise<boolean> => ipcRenderer.invoke(IpcChannels.lockNow),
+  getFaceStatus: (): Promise<FaceStatusView> => ipcRenderer.invoke(IpcChannels.faceStatus),
+  enrollFace: (descriptors: number[][]): Promise<FaceStatusView> =>
+    ipcRenderer.invoke(IpcChannels.faceEnroll, descriptors),
+  verifyFace: (descriptor: number[]): Promise<FaceVerifyResult> =>
+    ipcRenderer.invoke(IpcChannels.faceVerify, descriptor),
+  removeFace: (): Promise<FaceStatusView> => ipcRenderer.invoke(IpcChannels.faceRemove),
   onLockRequested: (listener: (event: LockRequestedEvent) => void): (() => void) =>
     subscribe<LockRequestedEvent>(IpcEvents.lockRequested, listener),
   setShareRoot: (clear?: boolean): Promise<ShareRootPickResult> =>

@@ -108,6 +108,10 @@ export const IpcChannels = {
   lockSetPin: 'lock:set-pin',
   lockSetEnabled: 'lock:set-enabled',
   lockNow: 'lock:now',
+  faceStatus: 'face:status',
+  faceEnroll: 'face:enroll',
+  faceVerify: 'face:verify',
+  faceRemove: 'face:remove',
   /** 我的文件柜（决议 #271/#277）：共享根与默认档随 settings:get / settings:updated 下发 */
   shareMySetRoot: 'share:my-set-root',
   shareMySetMode: 'share:my-set-mode',
@@ -412,12 +416,19 @@ export interface PiStartInput {
   router: PiRouterView
 }
 
+export type PiHistoryEntry =
+  | { kind: 'user'; text: string }
+  | { kind: 'assistant'; text: string }
+  | { kind: 'tool'; toolCallId: string; toolName: string; args: string; state: 'done' | 'error' }
+
 export interface PiStateView {
   projectPath: string
   models: PiModelView[]
   currentModel: PiModelView | null
   thinkingLevel: string
   thinkingLevels: string[]
+  /** 当前 Pi 会话的活动分支；随项目会话文件持久化。 */
+  history: PiHistoryEntry[]
   running: boolean
 }
 
@@ -1088,6 +1099,20 @@ export interface LockVerifyResult {
   retryAfterMs?: number
 }
 
+export interface FaceStatusView {
+  enrolled: boolean
+  sampleCount: number
+  updatedAt: number | null
+}
+
+export interface FaceVerifyResult {
+  ok: boolean
+  /** 与已录入人脸的最小欧氏距离；未录入或输入无效时为 null。 */
+  distance: number | null
+  /** 锁屏连续失败后的冷却剩余时间。 */
+  retryAfterMs?: number
+}
+
 export interface LockRequestedEvent {
   reason: 'hidden' | 'minimize' | 'system' | 'manual' | 'blur'
 }
@@ -1677,6 +1702,11 @@ export interface PantryApi {
   setLockEnabled(enabled: boolean): Promise<SettingsView>
   /** 立即锁定主窗；未启用锁屏时返回 false。 */
   lockNow(): Promise<boolean>
+  /** 本机人脸解锁状态；只保存特征，不保存照片。 */
+  getFaceStatus(): Promise<FaceStatusView>
+  enrollFace(descriptors: number[][]): Promise<FaceStatusView>
+  verifyFace(descriptor: number[]): Promise<FaceVerifyResult>
+  removeFace(): Promise<FaceStatusView>
   onLockRequested(listener: (event: LockRequestedEvent) => void): () => void
   /** 我的文件柜：选共享根（打开目录选择器并校验）；clear=true 表示清除共享根 */
   setShareRoot(clear?: boolean): Promise<ShareRootPickResult>

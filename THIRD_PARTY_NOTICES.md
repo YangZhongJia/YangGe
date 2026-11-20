@@ -29,6 +29,16 @@
 - Lucide：<https://github.com/lucide-icons/lucide/tree/0.468.0>，ISC License（部分图形源自 Feather / MIT）
 - 完整版权与许可：[navigation-icons.txt](build/licenses/navigation-icons.txt)，随应用打包到 `licenses/navigation-icons.txt`。
 
+## 人脸识别模型
+
+锁屏人脸识别使用 @vladmandic/face-api 的 Tiny Face Detector、68 点人脸关键点与 128 维人脸特征模型，模型文件随应用本地打包，通过只读本地协议加载；不访问外网，不保存照片。
+
+- 来源：<https://github.com/vladmandic/face-api>
+- 版本：1.7.15
+- 使用方式：`tiny_face_detector_model`、`face_landmark_68_model`、`face_recognition_model` 权重
+- 许可：MIT License
+- 版权：Copyright (c) Vladimir Mandic 及上游贡献者
+
 ## 掼蛋（内嵌游戏）
 
 主界面左侧「掼蛋」入口打开的内嵌单机游戏来自第三方开源项目，静态资源随应用本地打包，运行时不访问外网。
