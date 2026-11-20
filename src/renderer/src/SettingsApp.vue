@@ -2237,8 +2237,9 @@ async function confirmRemove(cidr: string): Promise<void> {
   min-height: 0;
   /* 滚动视口从拖拽带下方开始，内容滚动时不会钻进顶部 32px 不可交互区 */
   margin-top: 32px;
-  padding: 4px 28px 24px;
+  padding: 4px 24px 24px;
   overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 .page-head {
@@ -2279,7 +2280,7 @@ async function confirmRemove(cidr: string): Promise<void> {
 .page-section {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-6);
+  gap: var(--sp-5);
 }
 
 .panel,
@@ -2301,7 +2302,7 @@ async function confirmRemove(cidr: string): Promise<void> {
 }
 
 .panel-head h2 {
-  margin: 0 0 var(--sp-1);
+  margin: 0 0 3px;
   font-size: var(--fs-section);
   font-weight: 700;
   line-height: 1.35;
@@ -2324,6 +2325,7 @@ async function confirmRemove(cidr: string): Promise<void> {
 
 .setting-line > div:first-child {
   flex: 1;
+  max-width: 100%;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -2346,6 +2348,7 @@ async function confirmRemove(cidr: string): Promise<void> {
 
 .control-select {
   width: 156px;
+  max-width: 45%;
   flex: 0 0 auto;
 }
 

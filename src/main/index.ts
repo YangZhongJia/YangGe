@@ -2478,6 +2478,7 @@ if (!gotLock) {
 
   ipcMain.handle(IpcChannels.piStart, async (_event, input: unknown): Promise<PiStartResult> => {
     if (!isPiStartInput(input)) return { ok: false, error: 'Pi 启动参数不合法' }
+    if (lockScreenActive) return { ok: false, error: '请先解锁再使用 AI 编程' }
     return getPiService().start({ ...input, router: normalizeRouter(input.router) })
   })
 
@@ -2486,6 +2487,7 @@ if (!gotLock) {
   })
 
   ipcMain.handle(IpcChannels.piPrompt, async (_event, text: unknown): Promise<PiStartResult> => {
+    if (lockScreenActive) return { ok: false, error: '请先解锁再使用 AI 编程' }
     if (typeof text !== 'string' || text.length === 0 || text.length > 128 * 1024) {
       return { ok: false, error: '提示词不合法' }
     }

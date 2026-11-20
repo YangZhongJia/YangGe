@@ -94,7 +94,8 @@ describe('面板与文件柜页签对齐（决议 #283/#284）', () => {
     expect(appSource).toContain("type Tab = 'chat' | 'contacts' | 'pi' | 'cabinet'")
     expect(appSource).toContain("tab.value = 'cabinet'")
     expect(appSource).toContain('<CabinetList v-else-if="tab === \'cabinet\'" />')
-    expect(appSource).toContain('<CabinetPane v-else-if="tab === \'cabinet\'" />')
+    // Pi 的 KeepAlive 独立挂点；文件柜改为后续普通分支，避免破坏 Pi 的保留生命周期。
+    expect(appSource).toContain('<CabinetPane v-if="tab === \'cabinet\'" />')
     // 设置窗等非主窗调用方仍走 IPC，由主进程把主窗切过去
     expect(appSource).toContain('window.pantry.onCabinetFocusPeer')
   })

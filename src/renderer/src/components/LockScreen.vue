@@ -757,13 +757,13 @@ html[data-theme='dark'] .lock-stars { display: block; }
 .pin-input:disabled { cursor: wait; }
 .pin-shell.shake { animation: lock-shake 380ms cubic-bezier(.36,.07,.19,.97); }
 .pin-shell.shake .pin-slot { border-color: #c44f70; }
-.lock-error { min-height: 18px; margin: 10px 0 0; color: #b43157; font-size: 12px; }
+.lock-error { min-height: 18px; margin: 10px 0 0; color: #b43157; font-size: 12px; line-height: 1.5; }
 .face-entry {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 7px;
-  margin-top: 8px;
+  margin-top: 10px;
   padding: 8px 14px;
   border: 1px solid rgba(75, 95, 150, .18);
   border-radius: 999px;
@@ -774,6 +774,7 @@ html[data-theme='dark'] .lock-stars { display: block; }
   cursor: pointer;
   transition: background 150ms ease, border-color 150ms ease;
 }
+.face-entry:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
 .face-entry:hover:not(:disabled) { background: rgba(255, 255, 255, .64); border-color: rgba(75, 95, 150, .32); }
 .face-entry:disabled { opacity: .5; cursor: default; }
 .face-scanner {
@@ -818,7 +819,9 @@ html[data-theme='dark'] .lock-stars { display: block; }
 .face-scanner-status {
   margin: 10px 0 8px;
   color: #30436b;
+  min-height: 18px;
   font-size: 12px;
+  line-height: 1.5;
   text-align: center;
 }
 .face-cancel {
@@ -833,6 +836,8 @@ html[data-theme='dark'] .lock-stars { display: block; }
   font-size: 12px;
   cursor: pointer;
 }
+.face-cancel:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+.face-cancel:hover { background: rgba(255,255,255,.24); }
 html[data-theme='dark'] .face-entry {
   border-color: rgba(180, 200, 255, .2);
   background: rgba(255, 255, 255, .08);

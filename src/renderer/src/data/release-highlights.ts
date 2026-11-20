@@ -10,6 +10,15 @@ export interface ReleaseHighlights {
  * 主窗按 localStorage 中的 lastSeenVersion 判断是否展示，避免每次启动重复弹出。
  */
 export const RELEASE_HIGHLIGHTS: Record<string, ReleaseHighlights> = {
+  '1.12.5': {
+    version: '1.12.5',
+    notes: [
+      'Pi 工作区保留上次对话与工具状态，切换聊天页签不再清空。',
+      '修复 Pi 页面与聊天空态重叠、锁屏提前启动后台会话的问题。',
+      '优化工作区头部、模型控制、Markdown 阅读、锁屏按钮和设置滚动留白。'
+    ],
+    fixed: true
+  },
   '1.12.4': {
     version: '1.12.4',
     notes: [

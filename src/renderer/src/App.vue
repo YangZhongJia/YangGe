@@ -79,7 +79,7 @@ watch(
           agentPaneRequested = false
         })
     }
-    if (next === 'pi' && !PiWorkspacePane.value && !piPaneRequested) {
+    if (next === 'pi' && !appLocked.value && !PiWorkspacePane.value && !piPaneRequested) {
       piPaneRequested = true
       void import('./components/PiPane.vue')
         .then((module) => {
@@ -842,8 +842,14 @@ onUnmounted(() => {
     <main class="content">
       <WorkTasksPane v-if="tab === 'tasks'" />
       <component :is="AgentPane" v-else-if="tab === 'agent' && AgentPane" />
-      <component :is="PiWorkspacePane" v-else-if="tab === 'pi' && PiWorkspacePane" />
-      <CabinetPane v-else-if="tab === 'cabinet'" />
+      <KeepAlive>
+        <component
+          :is="PiWorkspacePane"
+          v-if="PiWorkspacePane"
+          v-show="tab === 'pi' && !appLocked"
+        />
+      </KeepAlive>
+      <CabinetPane v-if="tab === 'cabinet'" />
       <ProfileCard
         v-else-if="tab === 'contacts' && selectedPeer"
         :peer="selectedPeer"
@@ -853,7 +859,7 @@ onUnmounted(() => {
         v-else-if="chatStore.activeConv"
         :win7-ime-compat="info?.windows7 === true"
       />
-      <div v-else class="empty">
+      <div v-else-if="tab === 'chat' || (tab === 'contacts' && !selectedPeer)" class="empty">
         <img :src="doveMarkUrl" class="empty-mark" alt="" draggable="false" />
         <div class="quote-card">
           <p class="quote">{{ tr(quote.text) }}</p>

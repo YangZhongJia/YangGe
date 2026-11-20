@@ -13,7 +13,7 @@
 
 <p>
   <a href="https://github.com/YangZhongJia/YangGe/releases">
-    <img src="https://img.shields.io/badge/version-1.12.4-3D8B6B?style=flat-square" alt="Version 1.12.4" />
+    <img src="https://img.shields.io/badge/version-1.12.5-3D8B6B?style=flat-square" alt="Version 1.12.5" />
   </a>
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/License-GPL--3.0--only-3D8B6B?style=flat-square" alt="GPL-3.0-only" />
@@ -50,9 +50,15 @@
 
 Start YangGe on computers connected to the same local network and they discover each other automatically. Open a peer to chat, transfer files, browse shared folders, or challenge them to a quick duel. No cloud account, central server, telemetry, or Internet access is involved. YangGe is designed for corporate intranets, isolated networks, and laboratories where external connectivity is limited or prohibited.
 
-> **1.12.4 status**: The Pi workspace saves a session per project, so quitting and reopening YangGe restores the last project, transcript, and model context. The lock screen also supports local face unlock, enrolled in Settings; model and thinking controls live under the composer, and the game center lives in Settings.
+> **1.12.5 status**: The Pi workspace saves a session per project, so quitting and reopening YangGe restores the last project, transcript, and model context. The lock screen also supports local face unlock, enrolled in Settings; model and thinking controls live under the composer, and the game center lives in Settings.
 
-## Recent updates (v1.12.4)
+## Recent updates (v1.12.5)
+
+- **UI refinement**: preserves the palette while polishing Pi headers, model controls, Markdown reading, lock-screen actions, and Settings scrolling.
+- **Session stability**: switching main tabs no longer clears Pi chat/tool state; fixes the Pi/empty-chat overlap.
+- **Locking fix**: Pi does not load or start in the background before unlock.
+
+**v1.12.4**
 
 - **Persistent Pi sessions**: each project has a stable Pi session; transcripts and model context are stored locally and survive restarts.
 - **Return to the last project**: opening AI coding again restores the last project and its messages/tool activity.
