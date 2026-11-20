@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { tr, language } from './utils/i18n'
 import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
-import type { Component } from 'vue'
+import type { Component, ShallowRef } from 'vue'
 import { darkTheme, dateZhCN, dateEnUS, enUS, NButton, NConfigProvider, NInput, zhCN } from 'naive-ui'
 import type {
   AppInfo,
@@ -53,7 +53,7 @@ import { teahouseDarkThemeOverrides, teahouseLightThemeOverrides } from './ui/na
 import { accentPalette, normalizeAccent } from './utils/accents'
 import { releaseHighlightsFor, VERSION_SEEN_KEY } from './data/release-highlights'
 
-type Tab = 'chat' | 'contacts' | 'cabinet' | 'agent' | 'tasks'
+type Tab = 'chat' | 'contacts' | 'pi' | 'cabinet' | 'agent' | 'tasks'
 
 // 暂时隐藏协作任务与 Agent 入口；保留页面、store 与 IPC，打开此开关即可恢复。
 const SHOW_TASK_AGENT_ENTRIES = false
@@ -62,7 +62,9 @@ const tab = ref<Tab>('chat')
 // Agent 面板较重（权限弹窗/转录样式）；首次切到 Agent 页签时再加载，
 // 避免进入 App.vue 的静态 CSS 闭包，也避免 App 内再套 defineAsyncComponent 影响五入口 manifest。
 const AgentPane = shallowRef<Component | null>(null)
+const PiWorkspacePane: ShallowRef<Component | null> = shallowRef(null)
 let agentPaneRequested = false
+let piPaneRequested = false
 watch(
   tab,
   (next) => {
@@ -75,6 +77,16 @@ watch(
         })
         .catch(() => {
           agentPaneRequested = false
+        })
+    }
+    if (next === 'pi' && !PiWorkspacePane.value && !piPaneRequested) {
+      piPaneRequested = true
+      void import('./components/PiPane.vue')
+        .then((module) => {
+          PiWorkspacePane.value = module.default as Component
+        })
+        .catch(() => {
+          piPaneRequested = false
         })
     }
   },
@@ -663,6 +675,18 @@ onUnmounted(() => {
         <RailNavIcon name="contacts" />
       </button>
       <button
+        type="button"
+        class="rail-btn rail-hint"
+        :class="{ active: tab === 'pi', 'show-hint': activeRailHint === 'pi' }"
+        :data-label="tr('AI 编程')"
+        :aria-label="tr('AI 编程')"
+        @pointermove="scheduleRailHint('pi')"
+        @pointerleave="hideRailHint('pi')"
+        @click="activateTab('pi', $event)"
+      >
+        <RailNavIcon name="ai" />
+      </button>
+      <button
         v-if="SHOW_TASK_AGENT_ENTRIES"
         type="button"
         class="rail-btn rail-hint"
@@ -804,7 +828,7 @@ onUnmounted(() => {
       </NButton>
     </div>
 
-    <aside v-if="tab !== 'agent' && tab !== 'tasks'" class="list">
+    <aside v-if="tab !== 'agent' && tab !== 'tasks' && tab !== 'pi'" class="list">
       <div v-if="tab !== 'cabinet'" class="search-box">
         <NInput
           v-model:value="searchQuery"
@@ -846,6 +870,7 @@ onUnmounted(() => {
     <main class="content">
       <WorkTasksPane v-if="tab === 'tasks'" />
       <component :is="AgentPane" v-else-if="tab === 'agent' && AgentPane" />
+      <component :is="PiWorkspacePane" v-else-if="tab === 'pi' && PiWorkspacePane" />
       <CabinetPane v-else-if="tab === 'cabinet'" />
       <ProfileCard
         v-else-if="tab === 'contacts' && selectedPeer"

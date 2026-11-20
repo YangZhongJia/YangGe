@@ -10,6 +10,16 @@ export interface ReleaseHighlights {
  * 主窗按 localStorage 中的 lastSeenVersion 判断是否展示，避免每次启动重复弹出。
  */
 export const RELEASE_HIGHLIGHTS: Record<string, ReleaseHighlights> = {
+  '1.12.0': {
+    version: '1.12.0',
+    notes: [
+      '左侧新增独立「AI 编程」入口：左侧项目、右侧 Pi 对话与工具流、底部输入区。',
+      '主进程直接驱动 pi --mode rpc，支持模型切换、流式回复、工具状态与停止。',
+      '支持 Pi 默认模型和 Magpie 本地网关，应用内可读取 Magpie 模型列表。',
+      '需要本机安装 Pi 与 Node 22.19+；请在可信项目目录中使用。'
+    ],
+    fixed: true
+  },
   '1.11.19': {
     version: '1.11.19',
     notes: [

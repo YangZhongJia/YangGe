@@ -3,7 +3,7 @@
 // Keep these navigation glyphs separate from the smaller in-content icon family.
 withDefaults(
   defineProps<{
-    name: 'chat' | 'contacts' | 'cabinet' | 'settings' | 'agent' | 'tasks'
+    name: 'chat' | 'contacts' | 'cabinet' | 'settings' | 'agent' | 'tasks' | 'ai'
     size?: number
   }>(),
   { size: 28 }
@@ -50,6 +50,11 @@ withDefaults(
       <path d="M20 14h2" />
       <path d="M15 13v2" />
       <path d="M9 13v2" />
+    </g>
+    <!-- AI programming: sparkle indicates the Pi workspace. -->
+    <g v-else-if="name === 'ai'">
+      <path d="M12 3.2 13.9 8 18.7 9.9l-4.8 1.9L12 16.6l-1.9-4.8L5.3 9.9 10.1 8 12 3.2Z" />
+      <path d="m18.3 15.3.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2Z" />
     </g>
     <!-- lucide: list-checks; local geometry for the task records entry. -->
     <g v-else-if="name === 'tasks'">

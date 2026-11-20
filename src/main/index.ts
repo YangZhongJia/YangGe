@@ -1,5 +1,6 @@
 import { AiReplier, buildPolishMessages, callChatCompletion, isPolishMode } from './services/ai-replier'
 import { createFastTransfer, type FastTransfer } from './services/fast-transfer'
+import { listMagpieModels, normalizeRouter, PiService } from './services/pi/pi-service'
 import { normalizeAi, normalizeClipboardFollow } from './store/app-state'
 import { AcpAgentService } from './services/agent/agent-service'
 import { AgentCoordinator } from './services/agent/agent-coordinator'
@@ -86,6 +87,8 @@ import {
   type NudgeResult,
   type PeerCleanupCandidate,
   type PeerView,
+  type PiStartInput,
+  type PiStartResult,
   type ProfileSubmit,
   type ScanProgressView,
   type ScanRangeImportResult,
@@ -354,6 +357,8 @@ if (!gotLock) {
   let chat: ChatService | null = null
   let duel: DuelService | null = null
   let files: FilesService | null = null
+  /** 独立 Pi 编程会话；与旧 ACP Agent 完全分离。 */
+  let piService: PiService | null = null
   /** 高速通道与旧栈并存；启动失败时保持 null，聊天附件仍走旧栈。 */
   let fast: FastTransfer | null = null
   /** 入站高速报价：transferId → 渲染层确认结果。超时按拒绝处理。 */
@@ -2428,6 +2433,82 @@ if (!gotLock) {
     return discovery?.probeNode(nodeId) ?? false
   })
 
+  // ——— Pi 编程：独立 RPC 子进程，不经过旧 ACP Agent ———
+  const getPiService = (): PiService => {
+    if (!piService) {
+      piService = new PiService({
+        userDataDir: app.getPath('userData'),
+        emit: (event) => mainWindow?.webContents.send(IpcEvents.piEvent, event),
+        diagnostics: (scope, data, error) =>
+          diagnostics.record(scope as Parameters<typeof diagnostics.record>[0], data, error)
+      })
+    }
+    return piService
+  }
+
+  const isPiStartInput = (input: unknown): input is PiStartInput => {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) return false
+    const raw = input as Record<string, unknown>
+    if (typeof raw.projectPath !== 'string' || raw.projectPath.length === 0) return false
+    if (!raw.router || typeof raw.router !== 'object') return false
+    const router = raw.router as Record<string, unknown>
+    return (
+      (router.mode === 'pi' || router.mode === 'magpie') &&
+      typeof router.baseUrl === 'string' &&
+      typeof router.apiKey === 'string' &&
+      typeof router.modelId === 'string'
+    )
+  }
+
+  ipcMain.handle(IpcChannels.piPickProject, async (): Promise<string | null> => {
+    if (!mainWindow) return null
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: tr('选择 Pi 编程项目文件夹'),
+      properties: ['openDirectory', 'createDirectory']
+    })
+    return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0]
+  })
+
+  ipcMain.handle(IpcChannels.piStart, async (_event, input: unknown): Promise<PiStartResult> => {
+    if (!isPiStartInput(input)) return { ok: false, error: 'Pi 启动参数不合法' }
+    return getPiService().start({ ...input, router: normalizeRouter(input.router) })
+  })
+
+  ipcMain.handle(IpcChannels.piStop, async (): Promise<void> => {
+    await piService?.stop()
+  })
+
+  ipcMain.handle(IpcChannels.piPrompt, async (_event, text: unknown): Promise<PiStartResult> => {
+    if (typeof text !== 'string' || text.length === 0 || text.length > 128 * 1024) {
+      return { ok: false, error: '提示词不合法' }
+    }
+    return getPiService().prompt(text)
+  })
+
+  ipcMain.handle(IpcChannels.piAbort, async (): Promise<boolean> => {
+    return (await piService?.abort()) ?? false
+  })
+
+  ipcMain.handle(
+    IpcChannels.piSetModel,
+    async (_event, provider: unknown, modelId: unknown): Promise<PiStartResult> => {
+      if (typeof provider !== 'string' || typeof modelId !== 'string') {
+        return { ok: false, error: '模型参数不合法' }
+      }
+      return getPiService().setModel(provider, modelId)
+    }
+  )
+
+  ipcMain.handle(
+    IpcChannels.piMagpieModels,
+    async (_event, baseUrl: unknown, apiKey: unknown) => {
+      if (typeof baseUrl !== 'string' || typeof apiKey !== 'string') {
+        throw new Error('Magpie 参数不合法')
+      }
+      return listMagpieModels(baseUrl, apiKey)
+    }
+  )
+
   // ——— ACP Agent：只校验参数并转发；生命周期与权限在 AcpAgentService ———
   ipcMain.handle(IpcChannels.agentList, () => agentService?.listAgents() ?? [])
 
@@ -4447,6 +4528,8 @@ if (!gotLock) {
     workTaskSync = null
     agentService?.dispose()
     agentService = null
+    piService?.dispose()
+    piService = null
     void files?.stop()
     void fast?.stop()
     fast = null

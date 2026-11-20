@@ -182,6 +182,14 @@ export const IpcChannels = {
   aiPolish: 'ai:polish',
   /** 消息稍后提醒（决议 #325） */
   reminderAdd: 'reminder:add',
+  /** Pi 编程：独立于旧 ACP Agent，直接控制 pi --mode rpc 子进程。 */
+  piPickProject: 'pi:pick-project',
+  piStart: 'pi:start',
+  piStop: 'pi:stop',
+  piPrompt: 'pi:prompt',
+  piAbort: 'pi:abort',
+  piSetModel: 'pi:set-model',
+  piMagpieModels: 'pi:magpie-models',
   /** ACP Agent：本机 CLI 扫描、会话、提示、取消与权限应答 */
   agentList: 'agent:list',
   agentProfileUpdate: 'agent:profile-update',
@@ -273,6 +281,8 @@ export const IpcEvents = {
   updateAvailable: 'update:available',
   /** 局域网自更新：安装包接收完成，可一键安装重启（决议 #166 第三步） */
   updatePackageReady: 'update:package-ready',
+  /** Pi 编程会话的流式事件。 */
+  piEvent: 'pi:event',
   /** 输入中提示：对方开始输入（决议 #321），短时展示由渲染层超时收尾 */
   typing: 'typing:incoming',
   /** 文件柜窗口已开着时再次请求打开某位同事的柜子（决议 #283） */
@@ -378,6 +388,48 @@ export interface UpdatePackageReady {
   /** 安装包内解析出的版本（高于本机才推送） */
   version: string
 }
+
+/** Pi 编程模型条目；provider/id 直接来自 Pi 的 get_available_models。 */
+export interface PiModelView {
+  provider: string
+  id: string
+  name: string
+}
+
+/** Pi 模型路由配置：默认走 Pi 自己的模型，或经本机 Magpie 网关。 */
+export interface PiRouterView {
+  mode: 'pi' | 'magpie'
+  /** Magpie OpenAI 兼容地址，例如 http://127.0.0.1:3425/v1 */
+  baseUrl: string
+  apiKey: string
+  /** Magpie 模型 ID；空 = 由主进程取第一个可用模型 */
+  modelId: string
+}
+
+export interface PiStartInput {
+  projectPath: string
+  router: PiRouterView
+}
+
+export interface PiStateView {
+  projectPath: string
+  models: PiModelView[]
+  currentModel: PiModelView | null
+  running: boolean
+}
+
+export type PiStartResult =
+  | { ok: true; state: PiStateView }
+  | { ok: false; error: string }
+
+export type PiEvent =
+  | { type: 'assistant_delta'; delta: string }
+  | { type: 'assistant_end'; text: string }
+  | { type: 'tool_start'; toolCallId: string; toolName: string; args: unknown }
+  | { type: 'tool_end'; toolCallId: string; toolName: string; isError: boolean }
+  | { type: 'settled'; aborted: boolean }
+  | { type: 'error'; message: string }
+  | { type: 'status'; message: string }
 
 /** 本机 ACP Agent 来源：启动扫描命中的目录类型或用户手动指定。 */
 export type AgentSource = 'path' | 'windows-dir' | 'manual'
@@ -1782,6 +1834,17 @@ export interface PantryApi {
   onAgentPermissionResolved(listener: (event: AgentPermissionResolvedEvent) => void): () => void
   onAgentExit(listener: (event: AgentExitEvent) => void): () => void
   onAgentError(listener: (event: AgentErrorEvent) => void): () => void
+
+  // ——— Pi 编程（独立于 ACP Agent） ———
+  pickPiProject(): Promise<string | null>
+  startPi(input: PiStartInput): Promise<PiStartResult>
+  stopPi(): Promise<void>
+  promptPi(text: string): Promise<PiStartResult | { ok: true; state: null }>
+  abortPi(): Promise<boolean>
+  setPiModel(provider: string, modelId: string): Promise<PiStartResult>
+  listMagpieModels(baseUrl: string, apiKey: string): Promise<PiModelView[]>
+  onPiEvent(listener: (event: PiEvent) => void): () => void
+
   listAgentTasks(limit?: number): Promise<AgentTaskView[]>
   createAgentTask(input: AgentTaskCreateInput): Promise<AgentResult<AgentTaskView>>
   getAgentTask(taskId: string): Promise<AgentTaskDetailView | null>

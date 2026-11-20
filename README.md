@@ -10,7 +10,7 @@
 
 <p>
   <a href="https://github.com/YangZhongJia/YangGe/releases">
-    <img src="https://img.shields.io/badge/version-1.11.19-3D8B6B?style=flat-square" alt="Version 1.11.19" />
+    <img src="https://img.shields.io/badge/version-1.12.0-3D8B6B?style=flat-square" alt="Version 1.12.0" />
   </a>
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/License-GPL--3.0--only-3D8B6B?style=flat-square" alt="GPL-3.0-only" />
@@ -52,7 +52,7 @@
 
 > **二开说明**：阳鸽是开源项目 [Teahouse（茶话间）](https://github.com/skyjt/teahouse) 的二次开发版本（GPL-3.0-only），仓库为 [YangZhongJia/YangGe](https://github.com/YangZhongJia/YangGe)。相对上游重做了品牌与界面，并新增 AI 分身 / 剪贴板 / 输入中提示 / AI 群总结 / 任务中心 / 双人角斗场 / ACP Agent 协作等能力。
 
-> **1.11.19 当前状态**：任务中心与 Agent 入口暂时隐藏，相关代码与数据保留；右侧传输浮层已移除，进度改为输入框上方行内条；私聊文件默认免确认接收。
+> **1.12.0 当前状态**：新增独立的「AI 编程」Pi 工作区：左侧项目、右侧对话、底部输入，支持 Pi 模型和 Magpie 本地路由；旧 Agent 入口仍隐藏，聊天/文件功能不变。
 
 ## 为什么做这个
 
@@ -65,6 +65,13 @@
 干脆自己写一个：免费开源、纯内网直连、从 Windows 7 到国产统信 UOS 再到 macOS 全平台覆盖、打开就会用。这就是阳鸽。
 
 ## 最近更新
+
+**v1.12.0**
+
+- **AI 编程**：左侧导航新增独立 Pi 入口，左侧项目列表、右侧对话/工具流、底部输入区，不复用旧 Agent 页。
+- **直接驱动 Pi**：主进程通过 `pi --mode rpc` 子进程工作，支持项目目录、模型切换、流式回复、工具状态和停止。
+- **模型与 Magpie**：可选择 Pi 已有模型，也可在应用内切到 Magpie 本地网关（默认 `127.0.0.1:3425/v1`），自动读取 Magpie 模型列表。
+- **前置条件**：本机需要安装 Pi 和 Node 22.19+；Pi 在所选项目目录内可读写文件、执行命令，请只打开可信项目。
 
 **v1.11.19**
 

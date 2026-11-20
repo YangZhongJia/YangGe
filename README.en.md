@@ -13,7 +13,7 @@
 
 <p>
   <a href="https://github.com/YangZhongJia/YangGe/releases">
-    <img src="https://img.shields.io/badge/version-1.11.19-3D8B6B?style=flat-square" alt="Version 1.11.19" />
+    <img src="https://img.shields.io/badge/version-1.12.0-3D8B6B?style=flat-square" alt="Version 1.12.0" />
   </a>
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/License-GPL--3.0--only-3D8B6B?style=flat-square" alt="GPL-3.0-only" />
@@ -50,9 +50,16 @@
 
 Start YangGe on computers connected to the same local network and they discover each other automatically. Open a peer to chat, transfer files, browse shared folders, or challenge them to a quick duel. No cloud account, central server, telemetry, or Internet access is involved. YangGe is designed for corporate intranets, isolated networks, and laboratories where external connectivity is limited or prohibited.
 
-> **1.11.19 status**: The Task center and local Agent entries are temporarily hidden; their implementation and data remain. The right-side transfer overlay is gone; progress now appears as a slim inline strip above the composer. 1:1 files are accepted without a prompt.
+> **1.12.0 status**: Adds an independent "AI coding" Pi workspace with projects on the left, the conversation on the right, and a bottom composer. It supports Pi models and the local Magpie gateway. The old Agent entry remains hidden.
 
-## Recent updates (v1.11.19)
+## Recent updates (v1.12.0)
+
+- **AI coding**: a new independent Pi entry with projects on the left, streamed conversation/tool activity on the right, and a bottom composer. The old Agent page is not reused.
+- **Direct Pi control**: the main process drives `pi --mode rpc` as a child process, with project folders, model switching, streaming replies, tool status, and stop.
+- **Models and Magpie**: choose Pi's configured models or switch to the local Magpie gateway (default `127.0.0.1:3425/v1`) and load its model list.
+- **Requirements**: Pi and Node 22.19+ must be installed; Pi can read/write files and run commands in the selected project, so only open trusted folders.
+
+**v1.11.19**
 
 - **Right-side overlay removed**: no more floating transfer history panel. Active transfers show as a slim strip above the composer with filename, percentage, and live speed.
 - **No receive prompt retained**: 1:1 normal and fast files are still accepted automatically; pending offers within the claim window resume after launch.

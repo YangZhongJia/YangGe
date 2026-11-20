@@ -62,6 +62,10 @@ import {
   type SearchResult,
   type ScanProgressView,
   type ScanRangeImportResult,
+  type PiEvent,
+  type PiModelView,
+  type PiStartInput,
+  type PiStartResult,
   type SettingsView,
   type ShareBrowseResult,
   type ShareDownloadResult,
@@ -499,6 +503,21 @@ const api: PantryApi = {
     subscribe<AgentPermissionResolvedEvent>(IpcEvents.agentPermissionResolved, listener),
   onAgentExit: (listener) => subscribe<AgentExitEvent>(IpcEvents.agentExit, listener),
   onAgentError: (listener) => subscribe<AgentErrorEvent>(IpcEvents.agentError, listener),
+
+  // ——— Pi 编程（独立于旧 ACP Agent） ———
+  pickPiProject: (): Promise<string | null> => ipcRenderer.invoke(IpcChannels.piPickProject),
+  startPi: (input: PiStartInput): Promise<PiStartResult> =>
+    ipcRenderer.invoke(IpcChannels.piStart, input),
+  stopPi: (): Promise<void> => ipcRenderer.invoke(IpcChannels.piStop),
+  promptPi: (text: string): Promise<PiStartResult> =>
+    ipcRenderer.invoke(IpcChannels.piPrompt, text),
+  abortPi: (): Promise<boolean> => ipcRenderer.invoke(IpcChannels.piAbort),
+  setPiModel: (provider: string, modelId: string): Promise<PiStartResult> =>
+    ipcRenderer.invoke(IpcChannels.piSetModel, provider, modelId),
+  listMagpieModels: (baseUrl: string, apiKey: string): Promise<PiModelView[]> =>
+    ipcRenderer.invoke(IpcChannels.piMagpieModels, baseUrl, apiKey),
+  onPiEvent: (listener) => subscribe<PiEvent>(IpcEvents.piEvent, listener),
+
   listAgentTasks: (limit?: number): Promise<AgentTaskView[]> =>
     ipcRenderer.invoke(IpcChannels.agentTaskList, limit),
   createAgentTask: (input: AgentTaskCreateInput): Promise<AgentResult<AgentTaskView>> =>

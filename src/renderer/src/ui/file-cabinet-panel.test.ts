@@ -90,8 +90,8 @@ describe('面板与文件柜页签对齐（决议 #283/#284）', () => {
     const appSource = readFileSync(new URL('../App.vue', import.meta.url), 'utf8')
     expect(appSource).toContain("data-label=\"tr('文件柜')\"")
     expect(appSource).toContain('name="cabinet"')
-    // 文件柜是主窗第三个页签：列表栏与内容区各占一格，不再有独立窗口
-    expect(appSource).toContain("type Tab = 'chat' | 'contacts' | 'cabinet'")
+    // 文件柜仍是主窗页签，Pi 编程作为独立页签插在通讯录之后；不再有独立窗口
+    expect(appSource).toContain("type Tab = 'chat' | 'contacts' | 'pi' | 'cabinet'")
     expect(appSource).toContain("tab.value = 'cabinet'")
     expect(appSource).toContain('<CabinetList v-else-if="tab === \'cabinet\'" />')
     expect(appSource).toContain('<CabinetPane v-else-if="tab === \'cabinet\'" />')
