@@ -10,6 +10,20 @@ export interface ReleaseHighlights {
  * 主窗按 localStorage 中的 lastSeenVersion 判断是否展示，避免每次启动重复弹出。
  */
 export const RELEASE_HIGHLIGHTS: Record<string, ReleaseHighlights> = {
+  '1.12.2': {
+    version: '1.12.2',
+    notes: [
+      '模型选择与思考程度移到输入框底部左侧，顶部栏更清爽。',
+      'Pi 回复按 Markdown 文档排版：标题、列表、表格、代码块和链接更好读。',
+      'Magpie 模型支持在输入区切换思考程度（含最高 max），并同步给 Pi 子进程。'
+    ],
+    fixed: true
+  },
+  '1.12.1': {
+    version: '1.12.1',
+    notes: ['修复 Pi 编程页右上角被窗口关闭按钮遮挡的问题，并恢复顶部拖拽带。'],
+    fixed: true
+  },
   '1.12.0': {
     version: '1.12.0',
     notes: [

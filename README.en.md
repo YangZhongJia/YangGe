@@ -13,7 +13,7 @@
 
 <p>
   <a href="https://github.com/YangZhongJia/YangGe/releases">
-    <img src="https://img.shields.io/badge/version-1.12.0-3D8B6B?style=flat-square" alt="Version 1.12.0" />
+    <img src="https://img.shields.io/badge/version-1.12.2-3D8B6B?style=flat-square" alt="Version 1.12.2" />
   </a>
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/License-GPL--3.0--only-3D8B6B?style=flat-square" alt="GPL-3.0-only" />
@@ -50,9 +50,19 @@
 
 Start YangGe on computers connected to the same local network and they discover each other automatically. Open a peer to chat, transfer files, browse shared folders, or challenge them to a quick duel. No cloud account, central server, telemetry, or Internet access is involved. YangGe is designed for corporate intranets, isolated networks, and laboratories where external connectivity is limited or prohibited.
 
-> **1.12.0 status**: Adds an independent "AI coding" Pi workspace with projects on the left, the conversation on the right, and a bottom composer. It supports Pi models and the local Magpie gateway. The old Agent entry remains hidden.
+> **1.12.2 status**: Adds an independent "AI coding" Pi workspace with projects on the left, the conversation on the right, and a bottom composer. Model and thinking controls live under the composer, and replies render as styled Markdown. The old Agent entry remains hidden.
 
-## Recent updates (v1.12.0)
+## Recent updates (v1.12.2)
+
+- **Composer toolbar**: model and thinking-level controls now sit at the bottom-left of the composer; the header keeps only project, status, and routing.
+- **Markdown replies**: responses render as documents with headings, lists, tables, code fences, quotes, links, and inline styles.
+- **Thinking level**: Magpie models enable reasoning, so the composer can switch Off / Minimal / Low / Medium / High / Max and applies the change to the Pi child process.
+
+**v1.12.1**
+
+- **Pi page top inset**: reserves 32px for the window controls, so the model selector and Routing button are no longer covered by the close button; the drag strip and project add button also work normally.
+
+**v1.12.0**
 
 - **AI coding**: a new independent Pi entry with projects on the left, streamed conversation/tool activity on the right, and a bottom composer. The old Agent page is not reused.
 - **Direct Pi control**: the main process drives `pi --mode rpc` as a child process, with project folders, model switching, streaming replies, tool status, and stop.

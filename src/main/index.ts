@@ -2500,6 +2500,16 @@ if (!gotLock) {
   )
 
   ipcMain.handle(
+    IpcChannels.piSetThinking,
+    async (_event, level: unknown): Promise<PiStartResult> => {
+      if (typeof level !== 'string' || level.length > 40) {
+        return { ok: false, error: '思考程度参数不合法' }
+      }
+      return getPiService().setThinkingLevel(level)
+    }
+  )
+
+  ipcMain.handle(
     IpcChannels.piMagpieModels,
     async (_event, baseUrl: unknown, apiKey: unknown) => {
       if (typeof baseUrl !== 'string' || typeof apiKey !== 'string') {

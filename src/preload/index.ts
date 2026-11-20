@@ -514,6 +514,8 @@ const api: PantryApi = {
   abortPi: (): Promise<boolean> => ipcRenderer.invoke(IpcChannels.piAbort),
   setPiModel: (provider: string, modelId: string): Promise<PiStartResult> =>
     ipcRenderer.invoke(IpcChannels.piSetModel, provider, modelId),
+  setPiThinking: (level: string): Promise<PiStartResult> =>
+    ipcRenderer.invoke(IpcChannels.piSetThinking, level),
   listMagpieModels: (baseUrl: string, apiKey: string): Promise<PiModelView[]> =>
     ipcRenderer.invoke(IpcChannels.piMagpieModels, baseUrl, apiKey),
   onPiEvent: (listener) => subscribe<PiEvent>(IpcEvents.piEvent, listener),

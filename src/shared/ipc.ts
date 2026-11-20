@@ -189,6 +189,7 @@ export const IpcChannels = {
   piPrompt: 'pi:prompt',
   piAbort: 'pi:abort',
   piSetModel: 'pi:set-model',
+  piSetThinking: 'pi:set-thinking',
   piMagpieModels: 'pi:magpie-models',
   /** ACP Agent：本机 CLI 扫描、会话、提示、取消与权限应答 */
   agentList: 'agent:list',
@@ -415,6 +416,8 @@ export interface PiStateView {
   projectPath: string
   models: PiModelView[]
   currentModel: PiModelView | null
+  thinkingLevel: string
+  thinkingLevels: string[]
   running: boolean
 }
 
@@ -1842,6 +1845,7 @@ export interface PantryApi {
   promptPi(text: string): Promise<PiStartResult | { ok: true; state: null }>
   abortPi(): Promise<boolean>
   setPiModel(provider: string, modelId: string): Promise<PiStartResult>
+  setPiThinking(level: string): Promise<PiStartResult>
   listMagpieModels(baseUrl: string, apiKey: string): Promise<PiModelView[]>
   onPiEvent(listener: (event: PiEvent) => void): () => void
 

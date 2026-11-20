@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import PantryIcon from './PantryIcon.vue'
+import PiMarkdown from './PiMarkdown.vue'
 import type { PiEvent, PiModelView, PiRouterView, PiStateView } from '../../../shared/ipc'
 import { tr } from '../utils/i18n'
 
@@ -11,6 +12,15 @@ const DEFAULT_ROUTER: PiRouterView = {
   baseUrl: 'http://127.0.0.1:3425/v1',
   apiKey: 'magpie',
   modelId: ''
+}
+const THINKING_LABEL_KEYS: Record<string, string> = {
+  off: '关闭思考',
+  minimal: '极低',
+  low: '低',
+  medium: '中',
+  high: '高',
+  xhigh: '极高',
+  max: '最高'
 }
 
 type Entry =
@@ -95,6 +105,7 @@ const headerTone = ref<'info' | 'error'>('info')
 const currentAssistantId = ref<number | null>(null)
 const transcriptEl = ref<HTMLElement | null>(null)
 const modelSelection = ref('')
+const thinkingSelection = ref('')
 const magpieModels = ref<PiModelView[]>([])
 const magpieBusy = ref(false)
 const magpieError = ref('')
@@ -104,6 +115,12 @@ let unsubscribe: (() => void) | null = null
 
 const projectName = computed(() => (activePath.value ? pathName(activePath.value) : ''))
 const models = computed(() => state.value?.models ?? [])
+const thinkingLevels = computed(() => {
+  const levels = [...(state.value?.thinkingLevels ?? [])]
+  const current = state.value?.thinkingLevel
+  if (current && !levels.includes(current)) levels.unshift(current)
+  return levels
+})
 const magpieOptions = computed(() => {
   const options = magpieModels.value.map((model) => ({
     value: model.id,
@@ -133,6 +150,14 @@ const statusText = computed(() => {
 
 function modelKey(model: PiModelView | null): string {
   return model ? `${model.provider}::${model.id}` : ''
+}
+
+function thinkingLabel(level: string): string {
+  return tr(THINKING_LABEL_KEYS[level] ?? level)
+}
+
+function thinkingOptionLabel(level: string): string {
+  return level === 'off' ? tr('关闭思考') : `${tr('思考')} · ${thinkingLabel(level)}`
 }
 
 function nextId(): number {
@@ -454,6 +479,27 @@ async function changeModel(): Promise<void> {
   }
 }
 
+async function changeThinking(): Promise<void> {
+  const level = thinkingSelection.value
+  if (!level || !state.value) {
+    thinkingSelection.value = state.value?.thinkingLevel ?? ''
+    return
+  }
+  if (level === state.value.thinkingLevel) return
+  try {
+    const result = await window.pantry.setPiThinking(level)
+    if (result.ok) {
+      state.value = result.state
+    } else {
+      showError(result.error || tr('思考程度切换失败'))
+      thinkingSelection.value = state.value?.thinkingLevel ?? ''
+    }
+  } catch (error) {
+    showError(errorText(error))
+    thinkingSelection.value = state.value?.thinkingLevel ?? ''
+  }
+}
+
 function onKeydown(event: KeyboardEvent): void {
   if (event.key !== 'Enter' || event.shiftKey) return
   if (event.isComposing || composing || event.keyCode === 229) return
@@ -471,6 +517,7 @@ function onCompositionEnd(): void {
 
 watch(state, (value) => {
   modelSelection.value = modelKey(value?.currentModel ?? null)
+  thinkingSelection.value = value?.thinkingLevel ?? ''
 })
 watch(entries, () => void nextTick(scrollToBottom), { deep: true })
 watch(busy, () => void nextTick(scrollToBottom))
@@ -526,18 +573,6 @@ onBeforeUnmount(() => {
         <span class="ws-name">{{ projectName || tr('未选择项目') }}</span>
         <span class="ws-path" :title="activePath">{{ activePath || tr('从左侧选择或添加项目') }}</span>
         <span class="status" :class="{ error: headerTone === 'error' }" :title="statusText">{{ statusText }}</span>
-        <select
-          v-model="modelSelection"
-          class="ctl model-select"
-          :disabled="!models.length"
-          :title="tr('模型')"
-          @change="changeModel"
-        >
-          <option v-if="!models.length" value="">{{ tr('暂无可用模型') }}</option>
-          <option v-for="model in models" :key="modelKey(model)" :value="modelKey(model)">
-            {{ model.name && model.name !== model.id ? `${model.name} · ${model.provider}/${model.id}` : `${model.provider}/${model.id}` }}
-          </option>
-        </select>
         <button class="ghost-btn" type="button" @click="openRouter">
           <PantryIcon name="settings" :size="14" />
           <span>{{ tr('路由') }}</span>
@@ -555,7 +590,7 @@ onBeforeUnmount(() => {
 
         <template v-for="entry in entries" :key="entry.id">
           <div v-if="entry.kind === 'user'" class="entry-user">{{ entry.text }}</div>
-          <div v-else-if="entry.kind === 'assistant'" class="entry-assistant">{{ entry.text }}</div>
+          <PiMarkdown v-else-if="entry.kind === 'assistant'" class="entry-assistant" :text="entry.text" />
           <div v-else-if="entry.kind === 'tool'" class="tool-row" :class="entry.state">
             <span class="tool-name">{{ entry.toolName }}</span>
             <span v-if="entry.args" class="tool-args">{{ entry.args }}</span>
@@ -566,30 +601,60 @@ onBeforeUnmount(() => {
       </div>
 
       <div class="composer">
-        <textarea
-          v-model="draft"
-          :placeholder="tr('输入消息，Enter 发送，Shift+Enter 换行')"
-          :disabled="!activePath || !state?.running"
-          rows="2"
-          @keydown="onKeydown"
-          @compositionstart="onCompositionStart"
-          @compositionend="onCompositionEnd"
-        ></textarea>
-        <button v-if="busy" class="send-btn stop" type="button" :title="tr('停止')" @click="stop">
-          <PantryIcon name="x" :size="14" />
-          <span>{{ tr('停止') }}</span>
-        </button>
-        <button
-          v-else
-          class="send-btn"
-          type="button"
-          :title="tr('发送')"
-          :disabled="!canSend"
-          @click="send"
-        >
-          <PantryIcon name="send" :size="14" />
-          <span>{{ tr('发送') }}</span>
-        </button>
+        <div class="composer-card">
+          <textarea
+            v-model="draft"
+            :placeholder="tr('输入消息，Enter 发送，Shift+Enter 换行')"
+            :disabled="!activePath || !state?.running"
+            rows="2"
+            @keydown="onKeydown"
+            @compositionstart="onCompositionStart"
+            @compositionend="onCompositionEnd"
+          ></textarea>
+          <div class="composer-bar">
+            <select
+              v-model="modelSelection"
+              class="ctl model-select"
+              :disabled="!models.length || !state?.running || busy"
+              :title="tr('模型')"
+              :aria-label="tr('模型')"
+              @change="changeModel"
+            >
+              <option v-if="!models.length" value="">{{ tr('暂无可用模型') }}</option>
+              <option v-for="model in models" :key="modelKey(model)" :value="modelKey(model)">
+                {{ model.name && model.name !== model.id ? `${model.name} · ${model.provider}/${model.id}` : `${model.provider}/${model.id}` }}
+              </option>
+            </select>
+            <select
+              v-if="thinkingLevels.length"
+              v-model="thinkingSelection"
+              class="ctl thinking-select"
+              :disabled="!state?.running || busy"
+              :title="tr('思考程度')"
+              :aria-label="tr('思考程度')"
+              @change="changeThinking"
+            >
+              <option v-for="level in thinkingLevels" :key="level" :value="level">
+                {{ thinkingOptionLabel(level) }}
+              </option>
+            </select>
+            <button v-if="busy" class="send-btn stop" type="button" :title="tr('停止')" @click="stop">
+              <PantryIcon name="x" :size="14" />
+              <span>{{ tr('停止') }}</span>
+            </button>
+            <button
+              v-else
+              class="send-btn"
+              type="button"
+              :title="tr('发送')"
+              :disabled="!canSend"
+              @click="send"
+            >
+              <PantryIcon name="send" :size="14" />
+              <span>{{ tr('发送') }}</span>
+            </button>
+          </div>
+        </div>
       </div>
 
       <div v-if="showRouter" class="router-panel">
@@ -643,7 +708,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.pi-pane{--r:var(--radius-control);--xs:var(--font-xs);--sm:var(--font-sm);display:flex;height:100%;min-height:0;color:var(--text-1);font-size:var(--font-md)}
+.pi-pane{--r:var(--radius-control);--xs:var(--font-xs);--sm:var(--font-sm);display:flex;height:100%;min-width:0;min-height:0;box-sizing:border-box;padding-top:32px;color:var(--text-1);font-size:var(--font-md)}
 .projects{display:flex;flex:0 0 224px;flex-direction:column;min-height:0;background:var(--bg-list);border-right:1px solid var(--line)}
 .projects-head{display:flex;align-items:center;justify-content:space-between;padding:14px 14px 6px;font-size:var(--xs);color:var(--text-3)}
 .icon-btn{display:grid;place-items:center;width:26px;height:26px;padding:0;border:0;border-radius:var(--r);background:none;color:var(--text-3);cursor:pointer}
@@ -654,8 +719,8 @@ onBeforeUnmount(() => {
 .p-name{font-size:var(--sm);font-weight:500}
 .rail-empty{padding:6px 14px;color:var(--text-3);font-size:var(--xs);line-height:1.7}
 .workspace{position:relative;display:flex;flex:1;flex-direction:column;min-width:0;min-height:0}
-.ws-head{display:flex;align-items:center;gap:8px;padding:8px 18px;border-bottom:1px solid var(--line)}
-.ws-name{font-weight:600}
+.ws-head{display:flex;align-items:center;gap:8px;min-width:0;padding:8px 18px;border-bottom:1px solid var(--line)}
+.ws-name{min-width:0;font-weight:600}
 .ws-path,.status{min-width:0;font-size:var(--xs);color:var(--text-3)}
 .ws-path{flex:1}
 .status.error{color:var(--danger)}
@@ -668,7 +733,8 @@ onBeforeUnmount(() => {
 .welcome h2{margin:0;font-size:var(--font-lg)}
 .welcome p{margin:0;font-size:var(--sm);line-height:1.6}
 .entry-user{align-self:flex-end;max-width:min(78%,620px);padding:8px 12px;border-radius:var(--radius-panel);background:var(--primary-weak);white-space:pre-wrap}
-.entry-assistant,.entry-notice{white-space:pre-wrap;overflow-wrap:anywhere}
+.entry-assistant{width:100%;max-width:960px;min-width:0}
+.entry-notice{white-space:pre-wrap;overflow-wrap:anywhere}
 .entry-notice{font-size:var(--xs);color:var(--text-3)}
 .entry-notice.error{color:var(--danger)}
 .tool-row{display:flex;gap:8px;padding:5px 10px;border:1px solid var(--line);border-radius:var(--r);font-size:var(--xs);color:var(--text-3)}
@@ -676,9 +742,18 @@ onBeforeUnmount(() => {
 .tool-args{flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .tool-state{margin-left:auto}
 .tool-row.error{border-color:var(--danger);color:var(--danger)}
-.composer{display:flex;align-items:flex-end;gap:10px;flex-shrink:0;padding:12px 18px 16px;border-top:1px solid var(--line)}
-.composer textarea{flex:1;min-height:52px;max-height:150px;padding:9px 11px;border:1px solid var(--line);border-radius:var(--r);background:var(--bg-input);color:var(--text-1);font:inherit;font-size:var(--sm);line-height:1.5;resize:none;outline:none;user-select:text}
-.send-btn{display:inline-flex;align-items:center;gap:6px;flex-shrink:0;height:36px;padding:0 14px;border:0;border-radius:var(--r);background:var(--primary);color:var(--on-primary);font-size:var(--sm);cursor:pointer}
+.composer{flex-shrink:0;min-width:0;padding:10px 18px 14px;border-top:1px solid var(--line)}
+.composer-card{display:flex;flex-direction:column;width:100%;min-width:0;border:1px solid var(--line);border-radius:12px;background:var(--bg-input);transition:border-color 150ms ease,box-shadow 150ms ease}
+.composer-card:focus-within{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-weak)}
+.composer textarea{width:100%;min-height:50px;max-height:180px;padding:11px 12px 5px;border:0;background:transparent;color:var(--text-1);font:inherit;font-size:var(--sm);line-height:1.55;resize:none;outline:none;user-select:text}
+.composer-bar{display:flex;align-items:center;gap:6px;min-width:0;padding:5px 7px 7px 9px}
+.composer-bar .ctl{height:26px;min-width:0;border-color:transparent;background:var(--bg-list);color:var(--text-2)}
+.composer-bar .ctl:hover:enabled{border-color:var(--line);color:var(--text-1)}
+.composer-bar .model-select{width:min(240px,42vw);max-width:240px}
+.composer-bar .thinking-select{width:auto;max-width:140px}
+.composer-bar .send-btn{margin-left:auto}
+.send-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;flex-shrink:0;height:30px;padding:0 12px;border:0;border-radius:var(--r);background:var(--primary);color:var(--on-primary);font-size:var(--xs);cursor:pointer}
+.send-btn:disabled{opacity:.45;cursor:default}
 .send-btn.stop{border:1px solid var(--line);background:none;color:var(--text-2)}
 .router-panel{position:absolute;top:58px;right:14px;z-index:10;display:flex;flex-direction:column;gap:8px;width:292px;padding:14px;border:1px solid var(--line);border-radius:var(--radius-panel);background:var(--bg-window);box-shadow:var(--shadow-float)}
 .router-head{display:flex;align-items:center;justify-content:space-between;font-size:var(--sm);font-weight:600}

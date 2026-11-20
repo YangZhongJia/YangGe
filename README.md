@@ -10,14 +10,14 @@
 
 <p>
   <a href="https://github.com/YangZhongJia/YangGe/releases">
-    <img src="https://img.shields.io/badge/version-1.12.0-3D8B6B?style=flat-square" alt="Version 1.12.0" />
+    <img src="https://img.shields.io/badge/version-1.12.2-3D8B6B?style=flat-square" alt="Version 1.12.2" />
   </a>
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/License-GPL--3.0--only-3D8B6B?style=flat-square" alt="GPL-3.0-only" />
   </a>
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-0366d6?style=flat-square" alt="平台" />
   <img src="https://img.shields.io/badge/Electron-22-47848F?style=flat-square&logo=electron&logoColor=white" alt="Electron 22" />
-  <img src="https://img.shields.io/badge/tests-1284%20passing-2EA043?style=flat-square" alt="1284 tests passing" />
+  <img src="https://img.shields.io/badge/tests-1288%20passing-2EA043?style=flat-square" alt="1288 tests passing" />
 </p>
 
 <p>
@@ -52,7 +52,7 @@
 
 > **二开说明**：阳鸽是开源项目 [Teahouse（茶话间）](https://github.com/skyjt/teahouse) 的二次开发版本（GPL-3.0-only），仓库为 [YangZhongJia/YangGe](https://github.com/YangZhongJia/YangGe)。相对上游重做了品牌与界面，并新增 AI 分身 / 剪贴板 / 输入中提示 / AI 群总结 / 任务中心 / 双人角斗场 / ACP Agent 协作等能力。
 
-> **1.12.0 当前状态**：新增独立的「AI 编程」Pi 工作区：左侧项目、右侧对话、底部输入，支持 Pi 模型和 Magpie 本地路由；旧 Agent 入口仍隐藏，聊天/文件功能不变。
+> **1.12.2 当前状态**：新增独立的「AI 编程」Pi 工作区：左侧项目、右侧对话、底部输入；模型与思考程度放在输入框底部，Pi 回复按 Markdown 排版；旧 Agent 入口仍隐藏，聊天/文件功能不变。
 
 ## 为什么做这个
 
@@ -65,6 +65,16 @@
 干脆自己写一个：免费开源、纯内网直连、从 Windows 7 到国产统信 UOS 再到 macOS 全平台覆盖、打开就会用。这就是阳鸽。
 
 ## 最近更新
+
+**v1.12.2**
+
+- **输入区工具条**：模型选择和思考程度移到输入框底部左侧，顶部只保留项目、状态和路由。
+- **Markdown 回复**：Pi 回复按文档排版，支持标题、列表、表格、代码块、引用、链接与行内样式。
+- **思考程度**：Magpie 模型开启 reasoning 后，可在输入区切换关闭 / 极低 / 低 / 中 / 高 / 最高（max）；切换会同步给 Pi 子进程。
+
+**v1.12.1**
+
+- **Pi 页顶部留白**：为窗口最小化/最大化/关闭按钮预留 32px，右上角模型选择与「路由」不再被关闭按钮遮挡，顶部拖拽/项目按钮也恢复正常。
 
 **v1.12.0**
 

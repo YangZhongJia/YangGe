@@ -33,6 +33,8 @@ interface PiState {
   router: PiRouterView
   models: PiModelView[]
   currentModel: PiModelView | null
+  thinkingLevel: string
+  thinkingLevels: string[]
   running: boolean
 }
 
@@ -89,7 +91,13 @@ export class PiService {
                   baseUrl: router.baseUrl.replace(/\/+$/, ''),
                   api: 'openai-completions',
                   apiKey: router.apiKey || 'magpie',
-                  models: models.map((item) => ({ id: item.id, name: item.name || item.id }))
+                  // Magpie 是 OpenAI 兼容网关；开启 reasoning 才能让 Pi
+                  // 暴露思考程度，具体是否生效由上游模型/网关决定。
+                  models: models.map((item) => ({
+                    id: item.id,
+                    name: item.name || item.id,
+                    reasoning: true
+                  }))
                 }
               }
             },
@@ -109,11 +117,15 @@ export class PiService {
           await this.request('set_model', { provider: wanted.provider, modelId: wanted.id })
         }
         const current = await this.readCurrentModel()
+        const thinkingLevels = await this.getAvailableThinkingLevels()
+        const thinkingLevel = await this.readThinkingLevel()
         this.state = {
           projectPath,
           router,
           models: available,
           currentModel: current ?? wanted ?? null,
+          thinkingLevel,
+          thinkingLevels,
           running: true
         }
         if (current) this.emit({ type: 'status', message: `已连接 Pi · ${current.name || current.id}` })
@@ -123,11 +135,15 @@ export class PiService {
       this.spawn(command, projectPath, {})
       const available = await this.getAvailableModels()
       const current = await this.readCurrentModel()
+      const thinkingLevels = await this.getAvailableThinkingLevels()
+      const thinkingLevel = await this.readThinkingLevel()
       this.state = {
         projectPath,
         router,
         models: available,
         currentModel: current ?? available[0] ?? null,
+        thinkingLevel,
+        thinkingLevels,
         running: true
       }
       if (current) this.emit({ type: 'status', message: `已连接 Pi · ${current.name || current.id}` })
@@ -174,6 +190,26 @@ export class PiService {
       const response = await this.request('set_model', { provider, modelId })
       const model = normalizeModel(response)
       if (model) this.state.currentModel = model
+      const levels = await this.getAvailableThinkingLevels()
+      if (levels.length) this.state.thinkingLevels = levels
+      const level = await this.readThinkingLevel()
+      if (level) this.state.thinkingLevel = level
+      return { ok: true, state: this.view() }
+    } catch (error) {
+      return { ok: false, error: errorText(error) }
+    }
+  }
+
+  async setThinkingLevel(level: string): Promise<PiStartResult> {
+    if (!this.child || !this.state) return { ok: false, error: 'Pi 尚未启动' }
+    const next = level.trim()
+    if (!next) return { ok: false, error: '思考程度不合法' }
+    if (this.state.thinkingLevels.length && !this.state.thinkingLevels.includes(next)) {
+      return { ok: false, error: `当前模型不支持思考程度：${next}` }
+    }
+    try {
+      await this.request('set_thinking_level', { level: next })
+      this.state.thinkingLevel = next
       return { ok: true, state: this.view() }
     } catch (error) {
       return { ok: false, error: errorText(error) }
@@ -349,12 +385,35 @@ export class PiService {
     }
   }
 
+  private async getAvailableThinkingLevels(): Promise<string[]> {
+    try {
+      const response = await this.request('get_available_thinking_levels')
+      const raw = (response as { levels?: unknown })?.levels
+      if (!Array.isArray(raw)) return []
+      return raw.filter((item): item is string => typeof item === 'string' && item.length > 0)
+    } catch {
+      return []
+    }
+  }
+
+  private async readThinkingLevel(): Promise<string> {
+    try {
+      const response = await this.request('get_state')
+      const level = (response as { thinkingLevel?: unknown })?.thinkingLevel
+      return typeof level === 'string' ? level : ''
+    } catch {
+      return ''
+    }
+  }
+
   private view(): PiStateView {
     const state = this.state
     return {
       projectPath: state?.projectPath ?? '',
       models: state?.models ?? [],
       currentModel: state?.currentModel ?? null,
+      thinkingLevel: state?.thinkingLevel ?? '',
+      thinkingLevels: state?.thinkingLevels ?? [],
       running: state?.running === true
     }
   }
