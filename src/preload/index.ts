@@ -66,6 +66,8 @@ import {
   type ScanRangeImportResult,
   type PiEvent,
   type PiModelView,
+  type PiConfigSuggestion,
+  type PiRuntimeStatus,
   type PiStartInput,
   type PiStartResult,
   type SettingsView,
@@ -526,6 +528,10 @@ const api: PantryApi = {
     ipcRenderer.invoke(IpcChannels.piSetThinking, level),
   listMagpieModels: (baseUrl: string, apiKey: string): Promise<PiModelView[]> =>
     ipcRenderer.invoke(IpcChannels.piMagpieModels, baseUrl, apiKey),
+  scanPiConfigs: (): Promise<PiConfigSuggestion[]> => ipcRenderer.invoke(IpcChannels.piConfigScan),
+  getPiRuntimeStatus: (): Promise<PiRuntimeStatus> => ipcRenderer.invoke(IpcChannels.piRuntimeStatus),
+  installPiRuntime: (): Promise<{ ok: boolean; error?: string; status: PiRuntimeStatus }> =>
+    ipcRenderer.invoke(IpcChannels.piRuntimeInstall),
   onPiEvent: (listener) => subscribe<PiEvent>(IpcEvents.piEvent, listener),
 
   listAgentTasks: (limit?: number): Promise<AgentTaskView[]> =>

@@ -195,6 +195,9 @@ export const IpcChannels = {
   piSetModel: 'pi:set-model',
   piSetThinking: 'pi:set-thinking',
   piMagpieModels: 'pi:magpie-models',
+  piConfigScan: 'pi:config-scan',
+  piRuntimeStatus: 'pi:runtime-status',
+  piRuntimeInstall: 'pi:runtime-install',
   /** ACP Agent：本机 CLI 扫描、会话、提示、取消与权限应答 */
   agentList: 'agent:list',
   agentProfileUpdate: 'agent:profile-update',
@@ -401,14 +404,36 @@ export interface PiModelView {
   name: string
 }
 
-/** Pi 模型路由配置：默认走 Pi 自己的模型，或经本机 Magpie 网关。 */
+/** Pi 模型路由配置：Pi 默认、本机 Magpie，或用户自定义 OpenAI/Anthropic 兼容端点。 */
 export interface PiRouterView {
-  mode: 'pi' | 'magpie'
-  /** Magpie OpenAI 兼容地址，例如 http://127.0.0.1:3425/v1 */
+  mode: 'pi' | 'magpie' | 'custom'
+  /** 自定义服务显示名，也用于写入 Pi models.json。 */
+  name: string
+  /** 自定义服务的 API 协议。 */
+  api: 'openai-completions' | 'anthropic-messages'
   baseUrl: string
   apiKey: string
-  /** Magpie 模型 ID；空 = 由主进程取第一个可用模型 */
+  /** 选择的具体模型 ID；空 = 自动取第一个。 */
   modelId: string
+  /** 自定义服务可用模型 ID。 */
+  models: string[]
+}
+
+/** 本地扫描到的可导入 AI 服务配置。密钥只在主进程与本次 IPC 中传递，不写日志。 */
+export interface PiConfigSuggestion {
+  id: string
+  source: 'pi-switch' | 'magpie' | 'cc-switch' | 'claude' | 'codex'
+  label: string
+  detail: string
+  router: PiRouterView
+}
+
+export interface PiRuntimeStatus {
+  found: boolean
+  command: string
+  nodeVersion: string
+  npmVersion: string
+  canInstall: boolean
 }
 
 export interface PiStartInput {
@@ -1877,6 +1902,9 @@ export interface PantryApi {
   setPiModel(provider: string, modelId: string): Promise<PiStartResult>
   setPiThinking(level: string): Promise<PiStartResult>
   listMagpieModels(baseUrl: string, apiKey: string): Promise<PiModelView[]>
+  scanPiConfigs(): Promise<PiConfigSuggestion[]>
+  getPiRuntimeStatus(): Promise<PiRuntimeStatus>
+  installPiRuntime(): Promise<{ ok: boolean; error?: string; status: PiRuntimeStatus }>
   onPiEvent(listener: (event: PiEvent) => void): () => void
 
   listAgentTasks(limit?: number): Promise<AgentTaskView[]>

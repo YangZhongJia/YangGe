@@ -5,8 +5,10 @@ import PiMarkdown from './PiMarkdown.vue'
 import type {
   PiEvent,
   PiHistoryEntry,
+  PiConfigSuggestion,
   PiModelView,
   PiRouterView,
+  PiRuntimeStatus,
   PiStateView
 } from '../../../shared/ipc'
 import { tr } from '../utils/i18n'
@@ -14,11 +16,15 @@ import { tr } from '../utils/i18n'
 const PROJECTS_KEY = 'yangge.pi.projects'
 const ACTIVE_KEY = 'yangge.pi.active'
 const ROUTER_KEY = 'yangge.pi.router'
+const ROUTER_SETUP_KEY = 'yangge.pi.router-setup'
 const DEFAULT_ROUTER: PiRouterView = {
   mode: 'pi',
+  name: 'Pi',
+  api: 'openai-completions',
   baseUrl: 'http://127.0.0.1:3425/v1',
   apiKey: 'magpie',
-  modelId: ''
+  modelId: '',
+  models: []
 }
 const THINKING_LABEL_KEYS: Record<string, string> = {
   off: '关闭思考',
@@ -76,10 +82,15 @@ function loadRouter(): PiRouterView {
     if (!raw) return { ...DEFAULT_ROUTER }
     const parsed = JSON.parse(raw) as Partial<PiRouterView>
     return {
-      mode: parsed.mode === 'magpie' ? 'magpie' : 'pi',
+      mode: parsed.mode === 'magpie' || parsed.mode === 'custom' ? parsed.mode : 'pi',
+      name: typeof parsed.name === 'string' ? parsed.name : DEFAULT_ROUTER.name,
+      api: parsed.api === 'anthropic-messages' ? 'anthropic-messages' : 'openai-completions',
       baseUrl: typeof parsed.baseUrl === 'string' && parsed.baseUrl ? parsed.baseUrl : DEFAULT_ROUTER.baseUrl,
       apiKey: typeof parsed.apiKey === 'string' ? parsed.apiKey : DEFAULT_ROUTER.apiKey,
-      modelId: typeof parsed.modelId === 'string' ? parsed.modelId : ''
+      modelId: typeof parsed.modelId === 'string' ? parsed.modelId : '',
+      models: Array.isArray(parsed.models)
+        ? [...new Set(parsed.models.filter((item): item is string => typeof item === 'string' && item.trim().length > 0))]
+        : []
     }
   } catch {
     return { ...DEFAULT_ROUTER }
@@ -112,6 +123,68 @@ function saveActivePath(path: string): void {
   }
 }
 
+function saveRouter(next: PiRouterView): boolean {
+  try {
+    localStorage.setItem(ROUTER_KEY, JSON.stringify(next))
+    localStorage.setItem(ROUTER_SETUP_KEY, '1')
+    savedRouter.value = next
+    routerConfigured.value = true
+    return true
+  } catch {
+    return false
+  }
+}
+
+function syncCustomModelsText(): void {
+  customModelsText.value = router.models.join('\n')
+}
+
+function parseModelsText(value: string): string[] {
+  return [...new Set(value.split(/\r?\n|,/).map((item) => item.trim()).filter(Boolean))]
+}
+
+async function refreshRuntime(): Promise<void> {
+  try {
+    runtime.value = await window.pantry.getPiRuntimeStatus()
+  } catch {
+    runtime.value = null
+  }
+}
+
+async function scanConfigs(): Promise<void> {
+  if (scanning.value) return
+  scanning.value = true
+  try {
+    suggestions.value = await window.pantry.scanPiConfigs()
+  } catch {
+    suggestions.value = []
+  } finally {
+    scanning.value = false
+  }
+}
+
+async function installRuntime(): Promise<void> {
+  if (installBusy.value) return
+  installBusy.value = true
+  try {
+    const result = await window.pantry.installPiRuntime()
+    runtime.value = result.status
+    if (!result.ok) showError(result.error || tr('Pi 安装失败'))
+    else headerStatus.value = tr('Pi 已安装')
+  } catch (error) {
+    showError(errorText(error))
+  } finally {
+    installBusy.value = false
+  }
+}
+
+function useSuggestion(suggestion: PiConfigSuggestion): void {
+  Object.assign(router, suggestion.router)
+  syncCustomModelsText()
+  routerError.value = ''
+  void applyRouter()
+}
+
 function historyEntries(history: PiHistoryEntry[]): Entry[] {
   return history.map((item) => {
     const id = nextId()
@@ -132,9 +205,15 @@ function historyEntries(history: PiHistoryEntry[]): Entry[] {
 const projects = ref<string[]>(loadProjects())
 const savedRouter = ref<PiRouterView>(loadRouter())
 const router = reactive<PiRouterView>({ ...savedRouter.value })
+const routerConfigured = ref(Boolean(localStorage.getItem(ROUTER_SETUP_KEY)))
 const showRouter = ref(false)
 const routerError = ref('')
 const applying = ref(false)
+const scanning = ref(false)
+const installBusy = ref(false)
+const suggestions = ref<PiConfigSuggestion[]>([])
+const runtime = ref<PiRuntimeStatus | null>(null)
+const customModelsText = ref('')
 
 const activePath = ref('')
 const state = ref<PiStateView | null>(null)
@@ -446,9 +525,12 @@ async function startProject(path: string): Promise<void> {
       projectPath: path,
       router: {
         mode: router.mode,
+        name: router.name.trim() || '自定义 API',
+        api: router.api,
         baseUrl: router.baseUrl.trim(),
         apiKey: router.apiKey.trim(),
-        modelId: router.modelId
+        modelId: router.modelId,
+        models: parseModelsText(customModelsText.value)
       }
     })
     if (result.ok) {
@@ -501,11 +583,13 @@ async function selectProject(path: string): Promise<void> {
 
 function setRouterMode(mode: PiRouterView['mode']): void {
   router.mode = mode
+  if (mode === 'custom') syncCustomModelsText()
 }
 
 function openRouter(): void {
   if (applying.value) return
   Object.assign(router, savedRouter.value)
+  syncCustomModelsText()
   routerError.value = ''
   magpieError.value = ''
   showRouter.value = true
@@ -538,13 +622,18 @@ async function applyRouter(): Promise<void> {
   routerError.value = ''
   const next: PiRouterView = {
     mode: router.mode,
+    name: router.name.trim() || '自定义 API',
+    api: router.api,
     baseUrl: router.baseUrl.trim(),
     apiKey: router.apiKey.trim(),
-    modelId: router.modelId
+    modelId: router.modelId,
+    models: parseModelsText(customModelsText.value)
   }
-  try {
-    localStorage.setItem(ROUTER_KEY, JSON.stringify(next))
-  } catch {
+  if (next.mode === 'custom' && !next.models.length) {
+    routerError.value = tr('请至少填写一个模型 ID')
+    return
+  }
+  if (!saveRouter(next)) {
     routerError.value = tr('保存失败')
     return
   }
@@ -697,8 +786,23 @@ watch(busy, (value) => {
 onMounted(async () => {
   unsubscribe = window.pantry.onPiEvent(handleEvent)
   document.addEventListener('pointerdown', onPickerPointerDown)
+  await refreshRuntime()
+  if (!routerConfigured.value) {
+    await scanConfigs()
+    const first = suggestions.value[0]
+    if (first) {
+      Object.assign(router, first.router)
+      syncCustomModelsText()
+      saveRouter({ ...first.router })
+      headerStatus.value = tr('已导入 {0}', { 0: first.label })
+      headerTone.value = 'info'
+    } else {
+      showRouter.value = true
+    }
+  }
   const saved = loadActivePath()
-  if (saved) await selectProject(saved)
+  if (saved && runtime.value?.found) await selectProject(saved)
+  else if (saved && !runtime.value?.found) showRouter.value = true
 })
 
 onBeforeUnmount(() => {
@@ -915,19 +1019,72 @@ onBeforeUnmount(() => {
 
       <div v-if="showRouter" class="router-panel">
         <div class="router-head">
-          <span>{{ tr('模型路由') }}</span>
+          <span>{{ tr('AI 服务配置') }}</span>
           <button class="icon-btn" type="button" :title="tr('关闭')" :aria-label="tr('关闭')" @click="closeRouter">
             <PantryIcon name="x" :size="14" />
           </button>
         </div>
-        <label class="radio">
-          <input type="radio" :checked="router.mode === 'pi'" @change="setRouterMode('pi')" />
-          <span>{{ tr('Pi 默认模型') }}</span>
-        </label>
-        <label class="radio">
-          <input type="radio" :checked="router.mode === 'magpie'" @change="setRouterMode('magpie')" />
-          <span>{{ tr('Magpie 路由') }}</span>
-        </label>
+
+        <div class="runtime-line" :class="{ missing: runtime && !runtime.found }">
+          <i aria-hidden="true"></i>
+          <div class="runtime-copy">
+            <strong>
+              {{ runtime === null ? tr('正在检测 Pi…') : runtime.found ? tr('Pi 已就绪') : tr('未检测到 Pi') }}
+            </strong>
+            <small v-if="runtime?.found">{{ runtime.command }}</small>
+            <small v-else-if="runtime">
+              {{ runtime.nodeVersion ? tr('需要 Node 22.19+ 和 Pi CLI') : tr('需要 Node 22.19+ 和 Pi CLI') }}
+            </small>
+          </div>
+          <button
+            v-if="runtime && !runtime.found && runtime.canInstall"
+            class="ghost-btn"
+            type="button"
+            :disabled="installBusy"
+            @click="installRuntime"
+          >
+            <PantryIcon name="download" :size="13" />
+            <span>{{ installBusy ? tr('安装中…') : tr('安装 Pi') }}</span>
+          </button>
+        </div>
+
+        <div class="scan-block">
+          <button class="ghost-btn scan-btn" type="button" :disabled="scanning" @click="scanConfigs">
+            <PantryIcon name="search" :size="13" />
+            <span>{{ scanning ? tr('扫描中…') : tr('扫描本机 AI 配置') }}</span>
+          </button>
+          <div v-if="suggestions.length" class="suggestions">
+            <button
+              v-for="suggestion in suggestions"
+              :key="suggestion.id"
+              type="button"
+              class="suggestion"
+              @click="useSuggestion(suggestion)"
+            >
+              <span class="suggestion-copy">
+                <strong>{{ suggestion.label }}</strong>
+                <small>{{ suggestion.detail }}</small>
+              </span>
+              <PantryIcon name="chevron-right" :size="13" />
+            </button>
+          </div>
+          <p v-else class="scan-hint">{{ tr('可从 pi-switch、cc-switch、Magpie 或 Claude 配置导入') }}</p>
+        </div>
+
+        <div class="mode-list" role="radiogroup" :aria-label="tr('AI 服务')">
+          <label class="radio">
+            <input type="radio" :checked="router.mode === 'pi'" @change="setRouterMode('pi')" />
+            <span>{{ tr('Pi 默认模型') }}</span>
+          </label>
+          <label class="radio">
+            <input type="radio" :checked="router.mode === 'magpie'" @change="setRouterMode('magpie')" />
+            <span>{{ tr('Magpie 路由') }}</span>
+          </label>
+          <label class="radio">
+            <input type="radio" :checked="router.mode === 'custom'" @change="setRouterMode('custom')" />
+            <span>{{ tr('自定义 API') }}</span>
+          </label>
+        </div>
 
         <template v-if="router.mode === 'magpie'">
           <label class="field">
@@ -954,9 +1111,41 @@ onBeforeUnmount(() => {
           <span v-if="magpieError" class="form-error">{{ magpieError }}</span>
         </template>
 
+        <template v-if="router.mode === 'custom'">
+          <label class="field">
+            <span>{{ tr('服务名称') }}</span>
+            <input v-model="router.name" class="ctl" type="text" spellcheck="false" autocomplete="off" :placeholder="tr('例如：公司网关')" />
+          </label>
+          <div class="field">
+            <span>{{ tr('协议') }}</span>
+            <div class="protocol-row">
+              <label class="radio">
+                <input type="radio" :checked="router.api === 'openai-completions'" @change="router.api = 'openai-completions'" />
+                <span>{{ tr('OpenAI 兼容') }}</span>
+              </label>
+              <label class="radio">
+                <input type="radio" :checked="router.api === 'anthropic-messages'" @change="router.api = 'anthropic-messages'" />
+                <span>{{ tr('Anthropic 兼容') }}</span>
+              </label>
+            </div>
+          </div>
+          <label class="field">
+            <span>{{ tr('服务地址') }}</span>
+            <input v-model="router.baseUrl" class="ctl" type="text" spellcheck="false" autocomplete="off" placeholder="https://…/v1" />
+          </label>
+          <label class="field">
+            <span>{{ tr('API Key') }}</span>
+            <input v-model="router.apiKey" class="ctl" type="password" autocomplete="off" :placeholder="tr('只保存在本机')" />
+          </label>
+          <label class="field">
+            <span>{{ tr('模型 ID（每行一个）') }}</span>
+            <textarea v-model="customModelsText" class="ctl models-input" spellcheck="false" :placeholder="tr('例如：gpt-6.1-sol')"></textarea>
+          </label>
+        </template>
+
         <span v-if="routerError" class="form-error">{{ routerError }}</span>
         <button class="primary-btn" type="button" :disabled="applying || starting" @click="applyRouter">
-          {{ applying || starting ? tr('正在重启…') : tr('应用并重启 Pi') }}
+          {{ applying || starting ? tr('正在重启…') : tr('保存并重启 Pi') }}
         </button>
       </div>
     </section>
@@ -1049,11 +1238,38 @@ onBeforeUnmount(() => {
 .send-btn:disabled{opacity:.45;cursor:default}
 .send-btn.stop{border:1px solid var(--line);background:none;color:var(--text-2)}
 .send-btn.stop:hover:not(:disabled){background:var(--surface-hover);color:var(--text-1)}
-.router-panel{position:absolute;top:58px;right:14px;z-index:10;display:flex;flex-direction:column;gap:8px;width:292px;max-width:calc(100% - 28px);padding:14px;border:1px solid var(--line);border-radius:var(--radius-panel);background:var(--bg-window);box-shadow:var(--shadow-float)}
+.router-panel{position:absolute;top:58px;right:14px;z-index:10;display:flex;flex-direction:column;gap:10px;width:360px;max-width:calc(100% - 28px);max-height:calc(100% - 76px);overflow-y:auto;padding:14px;border:1px solid var(--line);border-radius:var(--radius-panel);background:var(--bg-window);box-shadow:var(--shadow-float);scrollbar-width:thin;scrollbar-color:var(--line) transparent}
 .router-head{display:flex;align-items:center;justify-content:space-between;font-size:var(--sm);font-weight:600}
-.radio{display:block;font-size:var(--xs);color:var(--text-2);cursor:pointer}
-.field{font-size:var(--xs);color:var(--text-3)}
-.field .ctl{display:block;width:100%;margin-top:4px}
+.radio{display:flex;align-items:center;gap:6px;font-size:var(--xs);color:var(--text-2);cursor:pointer}
+.radio input{accent-color:var(--primary)}
+.runtime-line{display:flex;align-items:center;gap:8px;padding:8px 9px;border:1px solid var(--line);border-radius:8px;background:var(--bg-list)}
+.runtime-line>i{width:6px;height:6px;flex-shrink:0;border-radius:50%;background:var(--online)}
+.runtime-line.missing{border-color:color-mix(in srgb,var(--away) 30%,var(--line));background:var(--bg-list)}
+.runtime-line.missing>i{background:var(--away)}
+.runtime-copy{display:flex;flex-direction:column;gap:2px;min-width:0}
+.runtime-copy strong{font-size:var(--xs);font-weight:600;color:var(--text-1)}
+.runtime-copy small{overflow:hidden;white-space:nowrap;text-overflow:ellipsis;color:var(--text-3);font-size:11px}
+.runtime-line .ghost-btn{margin-left:auto;height:26px;padding-inline:8px}
+.scan-block{display:flex;flex-direction:column;gap:6px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+.scan-btn{justify-content:center;width:100%}
+.scan-hint{margin:0;color:var(--text-3);font-size:11px;line-height:1.45}
+.suggestions{display:flex;flex-direction:column;gap:4px;max-height:160px;overflow-y:auto}
+.suggestion{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;padding:7px 8px;border:1px solid var(--line);border-radius:7px;background:var(--bg-input);color:var(--text-1);text-align:left;cursor:pointer}
+.suggestion:hover{background:var(--surface-hover);border-color:var(--line-strong,var(--line))}
+.suggestion-copy{display:flex;flex-direction:column;gap:1px;min-width:0}
+.suggestion-copy strong,.suggestion-copy small{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.suggestion-copy strong{font-size:var(--xs);font-weight:500}
+.suggestion-copy small{color:var(--text-3);font-size:11px}
+.mode-list{display:flex;flex-direction:column;gap:6px;padding:2px 0}
+.field{display:flex;flex-direction:column;gap:4px;font-size:var(--xs);color:var(--text-3)}
+.field .ctl{display:block;width:100%;margin-top:0}
+.field .radio{font-size:var(--xs);color:var(--text-2)}
+.protocol-row{display:flex;flex-wrap:wrap;gap:10px;margin-top:3px}
+.models-input{min-height:68px;padding:7px 8px;resize:vertical;line-height:1.45;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:11px}
+.form-error{font-size:var(--xs);color:var(--danger);overflow-wrap:anywhere}
+.primary-btn{width:100%;height:32px;border:0;border-radius:var(--r);background:var(--primary);color:var(--on-primary);font-size:var(--xs);cursor:pointer}
+.primary-btn:hover:not(:disabled){background:var(--primary-hover)}
+.primary-btn:disabled{opacity:.5;cursor:default}
 .form-error{font-size:var(--xs);color:var(--danger);overflow-wrap:anywhere}
 .primary-btn{width:100%;height:30px;border:0;border-radius:var(--r);background:var(--primary);color:var(--on-primary);font-size:var(--xs);cursor:pointer}
 .primary-btn:hover:not(:disabled){background:var(--primary-hover)}

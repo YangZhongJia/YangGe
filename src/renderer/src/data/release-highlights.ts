@@ -10,6 +10,15 @@ export interface ReleaseHighlights {
  * 主窗按 localStorage 中的 lastSeenVersion 判断是否展示，避免每次启动重复弹出。
  */
 export const RELEASE_HIGHLIGHTS: Record<string, ReleaseHighlights> = {
+  '1.13.0': {
+    version: '1.13.0',
+    notes: [
+      '路由升级为 AI 服务配置：支持 Pi 默认、Magpie 和自定义 OpenAI/Anthropic 兼容 API。',
+      '可扫描并自动导入 pi-switch、cc-switch、Magpie、Claude Code 的本机配置。',
+      '新增 API Key/服务地址/模型 ID 配置入口，并支持一键安装 Pi。'
+    ],
+    fixed: true
+  },
   '1.12.9': {
     version: '1.12.9',
     notes: [

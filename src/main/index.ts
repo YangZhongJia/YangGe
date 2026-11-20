@@ -1,6 +1,8 @@
 import { AiReplier, buildPolishMessages, callChatCompletion, isPolishMode } from './services/ai-replier'
 import { createFastTransfer, type FastTransfer } from './services/fast-transfer'
-import { listMagpieModels, normalizeRouter, PiService } from './services/pi/pi-service'
+import { listMagpieModels, normalizeRouter, PiService, resolvePiCommand } from './services/pi/pi-service'
+import { scanPiConfigs } from './services/pi/pi-config-scan'
+import { killProcessTree, spawnAgentProcess } from './services/agent/agent-process'
 import { FaceService } from './services/face'
 import { normalizeAi, normalizeClipboardFollow } from './store/app-state'
 import { AcpAgentService } from './services/agent/agent-service'
@@ -58,7 +60,7 @@ import {
 } from 'node:fs'
 import { copyFile, mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
-import { basename, dirname, extname, join, resolve, sep } from 'node:path'
+import { basename, delimiter, dirname, extname, join, resolve, sep } from 'node:path'
 import {
   DEFAULT_CAPTURE_SHORTCUT,
   DEFAULT_SHOWHIDE_SHORTCUT,
@@ -91,6 +93,8 @@ import {
   type NudgeResult,
   type PeerCleanupCandidate,
   type PeerView,
+  type PiConfigSuggestion,
+  type PiRuntimeStatus,
   type PiStartInput,
   type PiStartResult,
   type ProfileSubmit,
@@ -2460,10 +2464,14 @@ if (!gotLock) {
     if (!raw.router || typeof raw.router !== 'object') return false
     const router = raw.router as Record<string, unknown>
     return (
-      (router.mode === 'pi' || router.mode === 'magpie') &&
+      (router.mode === 'pi' || router.mode === 'magpie' || router.mode === 'custom') &&
       typeof router.baseUrl === 'string' &&
       typeof router.apiKey === 'string' &&
-      typeof router.modelId === 'string'
+      typeof router.modelId === 'string' &&
+      (router.mode !== 'custom' ||
+        (typeof router.name === 'string' &&
+          (router.api === 'openai-completions' || router.api === 'anthropic-messages') &&
+          Array.isArray(router.models)))
     )
   }
 
@@ -2474,6 +2482,57 @@ if (!gotLock) {
       properties: ['openDirectory', 'createDirectory']
     })
     return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0]
+  })
+
+  const piRuntimeStatus = async (): Promise<PiRuntimeStatus> => {
+    const command = resolvePiCommand()
+    const nodeVersion = await probeVersion('node')
+    const npmCommand = resolveNpmCommand()
+    const npmVersion = npmCommand ? await probeVersion(npmCommand) : ''
+    const nodeMajor = Number.parseInt(nodeVersion.replace(/^v/, '').split('.')[0] ?? '', 10)
+    return {
+      found: Boolean(command),
+      command: command ?? '',
+      nodeVersion,
+      npmVersion,
+      canInstall: Boolean(npmVersion) && Number.isFinite(nodeMajor) && nodeMajor >= 22
+    }
+  }
+
+  ipcMain.handle(IpcChannels.piRuntimeStatus, () => piRuntimeStatus())
+  ipcMain.handle(IpcChannels.piConfigScan, (): PiConfigSuggestion[] => scanPiConfigs())
+  ipcMain.handle(IpcChannels.piRuntimeInstall, async () => {
+    const npm = resolveNpmCommand() ?? (process.platform === 'win32' ? 'npm.cmd' : 'npm')
+    try {
+      const child = spawnAgentProcess({
+        command: npm,
+        args: ['install', '-g', '@earendil-works/pi-coding-agent'],
+        cwd: app.getPath('userData'),
+        env: { NO_UPDATE_NOTIFIER: '1' }
+      })
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => {
+          void killProcessTree(child.pid)
+          reject(new Error('安装超时，请检查网络后重试'))
+        }, 5 * 60_000)
+        child.once('error', (error) => {
+          clearTimeout(timer)
+          reject(error)
+        })
+        child.once('exit', (code) => {
+          clearTimeout(timer)
+          if (code === 0) resolve()
+          else reject(new Error(`npm 安装失败（退出码 ${code ?? 'unknown'}）`))
+        })
+      })
+      return { ok: true as const, status: await piRuntimeStatus() }
+    } catch (error) {
+      return {
+        ok: false as const,
+        error: error instanceof Error ? error.message : String(error),
+        status: await piRuntimeStatus()
+      }
+    }
   })
 
   ipcMain.handle(IpcChannels.piStart, async (_event, input: unknown): Promise<PiStartResult> => {
@@ -4654,4 +4713,63 @@ if (!gotLock) {
   app.on('window-all-closed', () => {
     app.quit()
   })
+}
+
+function resolveNpmCommand(): string | null {
+  const names = process.platform === 'win32' ? ['npm.cmd', 'npm.exe'] : ['npm']
+  const dirs = (process.env.PATH ?? process.env.Path ?? '')
+    .split(delimiter)
+    .filter(Boolean)
+  if (process.platform === 'win32') {
+    const appData = process.env.APPDATA
+    const programFiles = process.env.ProgramFiles
+    if (appData) dirs.push(join(appData, 'npm'))
+    if (programFiles) dirs.push(join(programFiles, 'nodejs'))
+  }
+  for (const dir of dirs) {
+    for (const name of names) {
+      const candidate = join(dir, name)
+      try {
+        accessSync(candidate, fsConstants.F_OK)
+        return candidate
+      } catch {
+        // continue
+      }
+    }
+  }
+  return null
+}
+
+async function probeVersion(command: string): Promise<string> {
+  try {
+    const child = spawnAgentProcess({
+      command,
+      args: ['--version'],
+      cwd: process.cwd(),
+      env: { NO_UPDATE_NOTIFIER: '1' }
+    })
+    let output = ''
+    child.stdout.on('data', (chunk: Buffer) => {
+      output += chunk.toString('utf8')
+    })
+    child.stderr.on('data', (chunk: Buffer) => {
+      output += chunk.toString('utf8')
+    })
+    return await new Promise<string>((resolve) => {
+      const timer = setTimeout(() => {
+        void killProcessTree(child.pid)
+        resolve('')
+      }, 5000)
+      child.once('error', () => {
+        clearTimeout(timer)
+        resolve('')
+      })
+      child.once('exit', (code) => {
+        clearTimeout(timer)
+        resolve(code === 0 ? output.trim().split(/\r?\n/)[0] ?? '' : '')
+      })
+    })
+  } catch {
+    return ''
+  }
 }

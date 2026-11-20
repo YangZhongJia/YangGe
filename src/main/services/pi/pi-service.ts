@@ -74,6 +74,63 @@ export class PiService {
       }
       await this.stop()
       const router = normalizeRouter(input.router)
+      if (router.mode === 'custom') {
+        const models = uniqueModels(router.models, router.modelId)
+        if (!/^https?:\/\//i.test(router.baseUrl)) {
+          return { ok: false, error: 'API 地址必须以 http:// 或 https:// 开头' }
+        }
+        if (!router.apiKey) return { ok: false, error: '请填写 API Key' }
+        if (!models.length) return { ok: false, error: '请至少填写一个模型 ID' }
+        const configDir = join(this.options.userDataDir, 'pi-custom')
+        mkdirSync(configDir, { recursive: true })
+        writeFileSync(
+          join(configDir, 'models.json'),
+          JSON.stringify(
+            {
+              providers: {
+                custom: {
+                  name: router.name || '自定义 API',
+                  baseUrl: router.baseUrl.replace(/\/+$/, ''),
+                  api: router.api,
+                  apiKey: router.apiKey,
+                  models: models.map((id) => ({ id, name: id, reasoning: false }))
+                }
+              }
+            },
+            null,
+            2
+          ),
+          'utf8'
+        )
+        this.spawn(command, projectPath, {
+          PI_CODING_AGENT_DIR: configDir,
+          PI_OFFLINE: '1'
+        })
+        const available = await this.getAvailableModels()
+        const wanted =
+          available.find((item) => item.id === router.modelId) ??
+          available.find((item) => models.includes(item.id)) ??
+          available[0]
+        if (wanted) {
+          await this.request('set_model', { provider: wanted.provider, modelId: wanted.id })
+        }
+        const current = await this.readCurrentModel()
+        const thinkingLevels = await this.getAvailableThinkingLevels()
+        const thinkingLevel = await this.readThinkingLevel()
+        this.state = {
+          projectPath,
+          router,
+          models: available,
+          currentModel: current ?? wanted ?? null,
+          thinkingLevel,
+          thinkingLevels,
+          history: [],
+          running: true
+        }
+        this.state.history = await this.readHistory()
+        if (current) this.emit({ type: 'status', message: `已连接 ${router.name || '自定义 API'} · ${current.name || current.id}` })
+        return { ok: true, state: this.view() }
+      }
       if (router.mode === 'magpie') {
         const models = await listMagpieModels(router.baseUrl, router.apiKey)
         if (models.length === 0) {
@@ -539,12 +596,24 @@ export class PiService {
 }
 
 export function normalizeRouter(input: PiRouterView): PiRouterView {
+  const mode = input.mode === 'magpie' || input.mode === 'custom' ? input.mode : 'pi'
+  const models = Array.isArray(input.models)
+    ? [...new Set(input.models.filter((item): item is string => typeof item === 'string').map((item) => item.trim()).filter(Boolean))]
+    : []
   return {
-    mode: input.mode === 'magpie' ? 'magpie' : 'pi',
+    mode,
+    name: typeof input.name === 'string' ? input.name.trim() : '',
+    api: input.api === 'anthropic-messages' ? 'anthropic-messages' : 'openai-completions',
     baseUrl: typeof input.baseUrl === 'string' ? input.baseUrl.trim() : '',
     apiKey: typeof input.apiKey === 'string' ? input.apiKey.trim() : '',
-    modelId: typeof input.modelId === 'string' ? input.modelId.trim() : ''
+    modelId: typeof input.modelId === 'string' ? input.modelId.trim() : '',
+    models
   }
+}
+
+function uniqueModels(models: string[], selected: string): string[] {
+  const result = [...new Set([...models, selected].map((item) => item.trim()).filter(Boolean))]
+  return result
 }
 
 export async function listMagpieModels(baseUrl: string, apiKey: string): Promise<PiModelView[]> {
@@ -657,7 +726,7 @@ function messageText(message: Record<string, unknown>): string {
     .join('')
 }
 
-function resolvePiCommand(): string | null {
+export function resolvePiCommand(): string | null {
   const names = process.platform === 'win32' ? ['pi.cmd', 'pi.exe', 'pi'] : ['pi']
   const dirs = (process.env.PATH ?? process.env.Path ?? '')
     .split(delimiter)

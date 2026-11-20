@@ -10,7 +10,7 @@
 
 <p>
   <a href="https://github.com/YangZhongJia/YangGe/releases">
-    <img src="https://img.shields.io/badge/version-1.12.9-3D8B6B?style=flat-square" alt="Version 1.12.9" />
+    <img src="https://img.shields.io/badge/version-1.13.0-3D8B6B?style=flat-square" alt="Version 1.13.0" />
   </a>
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/License-GPL--3.0--only-3D8B6B?style=flat-square" alt="GPL-3.0-only" />
@@ -52,7 +52,7 @@
 
 > **二开说明**：阳鸽是开源项目 [Teahouse（茶话间）](https://github.com/skyjt/teahouse) 的二次开发版本（GPL-3.0-only），仓库为 [YangZhongJia/YangGe](https://github.com/YangZhongJia/YangGe)。相对上游重做了品牌与界面，并新增 AI 分身 / 剪贴板 / 输入中提示 / AI 群总结 / 任务中心 / 双人角斗场 / ACP Agent 协作等能力。
 
-> **1.12.9 当前状态**：Pi 工作区会按项目保存会话，退出阳鸽后重新打开会恢复上次项目和聊天记录；锁屏新增本机人脸解锁（设置中采集），Pi 模型/思考程度在输入框底部，游戏中心位于设置。旧 Agent 入口仍隐藏。
+> **1.13.0 当前状态**：Pi 工作区会按项目保存会话，退出阳鸽后重新打开会恢复上次项目和聊天记录；锁屏新增本机人脸解锁（设置中采集），Pi 模型/思考程度在输入框底部，游戏中心位于设置。旧 Agent 入口仍隐藏。
 
 ## 为什么做这个
 
@@ -65,6 +65,13 @@
 干脆自己写一个：免费开源、纯内网直连、从 Windows 7 到国产统信 UOS 再到 macOS 全平台覆盖、打开就会用。这就是阳鸽。
 
 ## 最近更新
+
+**v1.13.0**
+
+- **AI 服务配置**：路由面板升级为服务配置中心，支持 Pi 默认、Magpie、自定义 OpenAI/Anthropic 兼容 API。
+- **本机配置扫描**：首次使用/升级后可扫描 pi-switch、cc-switch、Magpie、Claude Code 的本地配置，自动导入可用服务和模型。
+- **API Key 入口**：可直接填写服务地址、协议、API Key 和模型 ID；不再依赖预置的 Pi 模型。
+- **Pi 运行时**：检测 Pi/Node/npm，并提供一键安装 Pi 的入口（需要 Node 22.19+ 与网络）。
 
 **v1.12.9**
 

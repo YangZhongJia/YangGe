@@ -13,7 +13,7 @@
 
 <p>
   <a href="https://github.com/YangZhongJia/YangGe/releases">
-    <img src="https://img.shields.io/badge/version-1.12.9-3D8B6B?style=flat-square" alt="Version 1.12.9" />
+    <img src="https://img.shields.io/badge/version-1.13.0-3D8B6B?style=flat-square" alt="Version 1.13.0" />
   </a>
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/License-GPL--3.0--only-3D8B6B?style=flat-square" alt="GPL-3.0-only" />
@@ -50,9 +50,16 @@
 
 Start YangGe on computers connected to the same local network and they discover each other automatically. Open a peer to chat, transfer files, browse shared folders, or challenge them to a quick duel. No cloud account, central server, telemetry, or Internet access is involved. YangGe is designed for corporate intranets, isolated networks, and laboratories where external connectivity is limited or prohibited.
 
-> **1.12.9 status**: The Pi workspace saves a session per project, so quitting and reopening YangGe restores the last project, transcript, and model context. The lock screen also supports local face unlock, enrolled in Settings; model and thinking controls live under the composer, and the game center lives in Settings.
+> **1.13.0 status**: The Pi workspace saves a session per project, so quitting and reopening YangGe restores the last project, transcript, and model context. The lock screen also supports local face unlock, enrolled in Settings; model and thinking controls live under the composer, and the game center lives in Settings.
 
-## Recent updates (v1.12.9)
+## Recent updates (v1.13.0)
+
+- **AI service setup**: the routing popover is now a setup center for Pi, Magpie, and custom OpenAI/Anthropic-compatible APIs.
+- **Local config scan**: on first use or after upgrade, import services/models from pi-switch, cc-switch, Magpie, and Claude Code settings automatically.
+- **API key entry**: enter a base URL, protocol, key, and model IDs directly instead of relying on preconfigured Pi models.
+- **Pi runtime**: detect Pi/Node/npm and install Pi with one click when Node 22.19+ and network are available.
+
+**v1.12.9**
 
 - **Model picker**: replaced the native dropdown with an in-app searchable popover with scrolling, selected state, keyboard navigation, and outside-click dismissal.
 - **Thinking picker**: uses the same lightweight popover language as the rest of the composer.
