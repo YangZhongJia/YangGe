@@ -10,6 +10,15 @@ export interface ReleaseHighlights {
  * 主窗按 localStorage 中的 lastSeenVersion 判断是否展示，避免每次启动重复弹出。
  */
 export const RELEASE_HIGHLIGHTS: Record<string, ReleaseHighlights> = {
+  '1.12.9': {
+    version: '1.12.9',
+    notes: [
+      '模型选择改为应用内搜索弹层，替换老旧的系统原生下拉。',
+      '思考程度使用同款弹层，支持键盘操作、选中态和点击外部关闭。',
+      '模型/思考切换时显示进行状态，避免误以为卡住。'
+    ],
+    fixed: true
+  },
   '1.12.8': {
     version: '1.12.8',
     notes: ['左侧「AI 编程」图标改为居中的对称 AI 芯片图标。'],

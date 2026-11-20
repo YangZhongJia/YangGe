@@ -148,6 +148,14 @@ const currentAssistantId = ref<number | null>(null)
 const transcriptEl = ref<HTMLElement | null>(null)
 const modelSelection = ref('')
 const thinkingSelection = ref('')
+const modelMenuOpen = ref(false)
+const thinkingMenuOpen = ref(false)
+const modelSearch = ref('')
+const modelSearchEl = ref<HTMLInputElement | null>(null)
+const modelActive = ref(0)
+const thinkingActive = ref(0)
+const modelBusy = ref(false)
+const thinkingBusy = ref(false)
 const magpieModels = ref<PiModelView[]>([])
 const magpieBusy = ref(false)
 const magpieError = ref('')
@@ -157,6 +165,17 @@ let unsubscribe: (() => void) | null = null
 
 const projectName = computed(() => (activePath.value ? pathName(activePath.value) : ''))
 const models = computed(() => state.value?.models ?? [])
+const selectedModel = computed(() =>
+  models.value.find((item) => modelKey(item) === modelSelection.value) ?? state.value?.currentModel ?? null
+)
+const filteredModels = computed(() => {
+  const query = modelSearch.value.trim().toLowerCase()
+  if (!query) return models.value
+  return models.value.filter((model) => {
+    const haystack = `${model.name} ${model.provider}/${model.id}`.toLowerCase()
+    return haystack.includes(query)
+  })
+})
 const thinkingLevels = computed(() => {
   const levels = [...(state.value?.thinkingLevels ?? [])]
   const current = state.value?.thinkingLevel
@@ -178,6 +197,8 @@ const canSend = computed(
     Boolean(activePath.value) &&
     Boolean(state.value?.running) &&
     !busy.value &&
+    !modelBusy.value &&
+    !thinkingBusy.value &&
     !starting.value &&
     draft.value.trim().length > 0
 )
@@ -198,8 +219,95 @@ function thinkingLabel(level: string): string {
   return tr(THINKING_LABEL_KEYS[level] ?? level)
 }
 
+function modelLabel(model: PiModelView | null): string {
+  if (!model) return tr('暂无可用模型')
+  return model.name && model.name !== model.id ? model.name : model.id
+}
+
+function modelMeta(model: PiModelView): string {
+  return `${model.provider}/${model.id}`
+}
+
 function thinkingOptionLabel(level: string): string {
   return level === 'off' ? tr('关闭思考') : `${tr('思考')} · ${thinkingLabel(level)}`
+}
+
+function closePickers(): void {
+  modelMenuOpen.value = false
+  thinkingMenuOpen.value = false
+}
+
+async function openModelMenu(): Promise<void> {
+  if (!models.value.length || !state.value?.running || busy.value || modelBusy.value || starting.value) return
+  thinkingMenuOpen.value = false
+  modelMenuOpen.value = true
+  modelSearch.value = ''
+  const current = filteredModels.value.findIndex((model) => modelKey(model) === modelKey(state.value?.currentModel ?? null))
+  modelActive.value = Math.max(0, current)
+  await nextTick()
+  modelSearchEl.value?.focus()
+}
+
+function toggleModelMenu(): void {
+  if (modelMenuOpen.value) modelMenuOpen.value = false
+  else void openModelMenu()
+}
+
+function openThinkingMenu(): void {
+  if (!thinkingLevels.value.length || !state.value?.running || busy.value || thinkingBusy.value || starting.value) return
+  modelMenuOpen.value = false
+  thinkingMenuOpen.value = true
+  const current = thinkingLevels.value.indexOf(state.value?.thinkingLevel ?? '')
+  thinkingActive.value = Math.max(0, current)
+}
+
+function toggleThinkingMenu(): void {
+  if (thinkingMenuOpen.value) thinkingMenuOpen.value = false
+  else openThinkingMenu()
+}
+
+function moveModel(delta: number): void {
+  if (!modelMenuOpen.value || !filteredModels.value.length) return
+  const size = filteredModels.value.length
+  modelActive.value = (modelActive.value + delta + size) % size
+  void nextTick(() => {
+    document.querySelector('.model-menu .picker-option.active')?.scrollIntoView({ block: 'nearest' })
+  })
+}
+
+function chooseActiveModel(): void {
+  const model = filteredModels.value[modelActive.value]
+  if (model) applyModel(model)
+}
+
+function applyModel(model: PiModelView): void {
+  modelSelection.value = modelKey(model)
+  closePickers()
+  void changeModel()
+}
+
+function moveThinking(delta: number): void {
+  if (!thinkingMenuOpen.value || !thinkingLevels.value.length) return
+  const size = thinkingLevels.value.length
+  thinkingActive.value = (thinkingActive.value + delta + size) % size
+}
+
+function chooseActiveThinking(): void {
+  const level = thinkingLevels.value[thinkingActive.value]
+  if (level) applyThinking(level)
+}
+
+function applyThinking(level: string): void {
+  thinkingSelection.value = level
+  closePickers()
+  void changeThinking()
+}
+
+function onPickerPointerDown(event: PointerEvent): void {
+  const target = event.target
+  if (!(target instanceof Element)) return
+  if (!target.closest('.model-picker')) modelMenuOpen.value = false
+  if (!target.closest('.thinking-picker')) thinkingMenuOpen.value = false
 }
 
 function nextId(): number {
@@ -506,16 +614,21 @@ async function stop(): Promise<void> {
 }
 
 async function changeModel(): Promise<void> {
+  if (modelBusy.value) return
   const model = models.value.find((item) => modelKey(item) === modelSelection.value)
   if (!model || !state.value) {
     modelSelection.value = modelKey(state.value?.currentModel ?? null)
     return
   }
   if (modelKey(state.value.currentModel) === modelKey(model)) return
+  modelBusy.value = true
+  headerStatus.value = tr('切换模型中…')
+  headerTone.value = 'info'
   try {
     const result = await window.pantry.setPiModel(model.provider, model.id)
     if (result.ok) {
       state.value = result.state
+      headerStatus.value = ''
     } else {
       showError(result.error || tr('模型切换失败'))
       modelSelection.value = modelKey(state.value?.currentModel ?? null)
@@ -523,20 +636,27 @@ async function changeModel(): Promise<void> {
   } catch (error) {
     showError(errorText(error))
     modelSelection.value = modelKey(state.value?.currentModel ?? null)
+  } finally {
+    modelBusy.value = false
   }
 }
 
 async function changeThinking(): Promise<void> {
+  if (thinkingBusy.value) return
   const level = thinkingSelection.value
   if (!level || !state.value) {
     thinkingSelection.value = state.value?.thinkingLevel ?? ''
     return
   }
   if (level === state.value.thinkingLevel) return
+  thinkingBusy.value = true
+  headerStatus.value = tr('切换思考程度…')
+  headerTone.value = 'info'
   try {
     const result = await window.pantry.setPiThinking(level)
     if (result.ok) {
       state.value = result.state
+      headerStatus.value = ''
     } else {
       showError(result.error || tr('思考程度切换失败'))
       thinkingSelection.value = state.value?.thinkingLevel ?? ''
@@ -544,6 +664,8 @@ async function changeThinking(): Promise<void> {
   } catch (error) {
     showError(errorText(error))
     thinkingSelection.value = state.value?.thinkingLevel ?? ''
+  } finally {
+    thinkingBusy.value = false
   }
 }
 
@@ -567,15 +689,20 @@ watch(state, (value) => {
   thinkingSelection.value = value?.thinkingLevel ?? ''
 })
 watch(entries, () => void nextTick(scrollToBottom), { deep: true })
-watch(busy, () => void nextTick(scrollToBottom))
+watch(busy, (value) => {
+  if (value) closePickers()
+  void nextTick(scrollToBottom)
+})
 
 onMounted(async () => {
   unsubscribe = window.pantry.onPiEvent(handleEvent)
+  document.addEventListener('pointerdown', onPickerPointerDown)
   const saved = loadActivePath()
   if (saved) await selectProject(saved)
 })
 
 onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', onPickerPointerDown)
   unsubscribe?.()
   unsubscribe = null
 })
@@ -665,32 +792,108 @@ onBeforeUnmount(() => {
             @compositionend="onCompositionEnd"
           ></textarea>
           <div class="composer-bar">
-            <select
-              v-model="modelSelection"
-              class="ctl model-select"
-              :disabled="!models.length || !state?.running || busy"
-              :title="tr('模型')"
-              :aria-label="tr('模型')"
-              @change="changeModel"
-            >
-              <option v-if="!models.length" value="">{{ tr('暂无可用模型') }}</option>
-              <option v-for="model in models" :key="modelKey(model)" :value="modelKey(model)">
-                {{ model.name && model.name !== model.id ? `${model.name} · ${model.provider}/${model.id}` : `${model.provider}/${model.id}` }}
-              </option>
-            </select>
-            <select
-              v-if="thinkingLevels.length"
-              v-model="thinkingSelection"
-              class="ctl thinking-select"
-              :disabled="!state?.running || busy"
-              :title="tr('思考程度')"
-              :aria-label="tr('思考程度')"
-              @change="changeThinking"
-            >
-              <option v-for="level in thinkingLevels" :key="level" :value="level">
-                {{ thinkingOptionLabel(level) }}
-              </option>
-            </select>
+            <div class="picker model-picker">
+              <button
+                class="ctl picker-trigger model-trigger"
+                type="button"
+                :disabled="!models.length || !state?.running || busy || modelBusy || starting"
+                :title="selectedModel ? modelMeta(selectedModel) : tr('暂无可用模型')"
+                :aria-label="tr('模型')"
+                aria-haspopup="listbox"
+                :aria-expanded="modelMenuOpen"
+                @click="toggleModelMenu"
+                @keydown.down.prevent="openModelMenu"
+                @keydown.esc.prevent="closePickers"
+              >
+                <span class="picker-value">{{ modelLabel(selectedModel) }}</span>
+                <PantryIcon name="chevron-down" :size="13" />
+              </button>
+              <div v-if="modelMenuOpen" class="picker-menu model-menu" role="listbox" :aria-label="tr('模型')">
+                <label class="picker-search">
+                  <PantryIcon name="search" :size="13" />
+                  <input
+                    ref="modelSearchEl"
+                    v-model="modelSearch"
+                    type="search"
+                    spellcheck="false"
+                    autocomplete="off"
+                    :placeholder="tr('搜索模型')"
+                    :aria-label="tr('搜索模型')"
+                    @input="modelActive = 0"
+                    @keydown.down.prevent="moveModel(1)"
+                    @keydown.up.prevent="moveModel(-1)"
+                    @keydown.enter.prevent="chooseActiveModel"
+                    @keydown.esc.prevent="closePickers"
+                  />
+                </label>
+                <div class="picker-list">
+                  <button
+                    v-for="(model, index) in filteredModels"
+                    :key="modelKey(model)"
+                    type="button"
+                    class="picker-option"
+                    :class="{
+                      active: index === modelActive,
+                      selected: modelKey(model) === modelKey(state?.currentModel ?? null)
+                    }"
+                    role="option"
+                    :aria-selected="modelKey(model) === modelKey(state?.currentModel ?? null)"
+                    @mouseenter="modelActive = index"
+                    @click="applyModel(model)"
+                  >
+                    <span class="picker-option-text">
+                      <strong>{{ modelLabel(model) }}</strong>
+                      <small>{{ modelMeta(model) }}</small>
+                    </span>
+                    <PantryIcon
+                      v-if="modelKey(model) === modelKey(state?.currentModel ?? null)"
+                      name="check"
+                      :size="13"
+                    />
+                  </button>
+                  <p v-if="!filteredModels.length" class="picker-empty">{{ tr('没有匹配的模型') }}</p>
+                </div>
+              </div>
+            </div>
+            <div v-if="thinkingLevels.length" class="picker thinking-picker">
+              <button
+                class="ctl picker-trigger thinking-trigger"
+                type="button"
+                :disabled="!state?.running || busy || thinkingBusy || starting"
+                :title="tr('思考程度')"
+                :aria-label="tr('思考程度')"
+                aria-haspopup="listbox"
+                :aria-expanded="thinkingMenuOpen"
+                @click="toggleThinkingMenu"
+                @keydown.down.prevent="thinkingMenuOpen ? moveThinking(1) : openThinkingMenu()"
+                @keydown.up.prevent="thinkingMenuOpen ? moveThinking(-1) : openThinkingMenu()"
+                @keydown.enter.prevent="thinkingMenuOpen ? chooseActiveThinking() : toggleThinkingMenu()"
+                @keydown.esc.prevent="closePickers"
+              >
+                <span class="picker-value">
+                  {{ thinkingSelection ? thinkingOptionLabel(thinkingSelection) : tr('思考程度') }}
+                </span>
+                <PantryIcon name="chevron-down" :size="13" />
+              </button>
+              <div v-if="thinkingMenuOpen" class="picker-menu thinking-menu" role="listbox" :aria-label="tr('思考程度')">
+                <div class="picker-list">
+                  <button
+                    v-for="(level, index) in thinkingLevels"
+                    :key="level"
+                    type="button"
+                    class="picker-option"
+                    :class="{ active: index === thinkingActive, selected: level === state?.thinkingLevel }"
+                    role="option"
+                    :aria-selected="level === state?.thinkingLevel"
+                    @mouseenter="thinkingActive = index"
+                    @click="applyThinking(level)"
+                  >
+                    <span class="picker-option-text"><strong>{{ thinkingOptionLabel(level) }}</strong></span>
+                    <PantryIcon v-if="level === state?.thinkingLevel" name="check" :size="13" />
+                  </button>
+                </div>
+              </div>
+            </div>
             <button v-if="busy" class="send-btn stop" type="button" :title="tr('停止')" @click="stop">
               <PantryIcon name="x" :size="14" />
               <span>{{ tr('停止') }}</span>
@@ -784,7 +987,6 @@ onBeforeUnmount(() => {
 .status.error{color:var(--danger)}
 .status.error i{background:var(--danger)}
 .ctl{min-width:0;height:30px;padding:0 8px;border:1px solid var(--line);border-radius:var(--r);background:var(--bg-input);color:var(--text-1);font-size:var(--xs)}
-.model-select{max-width:200px}
 .ghost-btn{display:inline-flex;align-items:center;gap:5px;flex-shrink:0;height:30px;padding:0 10px;border:1px solid var(--line);border-radius:var(--r);background:none;color:var(--text-2);font-size:var(--xs);white-space:nowrap;cursor:pointer;transition:background 150ms ease,color 150ms ease,border-color 150ms ease}
 .ghost-btn:hover:not(:disabled){background:var(--surface-hover);color:var(--text-1)}
 .ctl:focus,.composer textarea:focus{border-color:var(--primary)}
@@ -805,7 +1007,7 @@ onBeforeUnmount(() => {
 .tool-args{flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .tool-state{margin-left:auto;flex-shrink:0}
 .tool-row.error{border-color:var(--danger);color:var(--danger)}
-.composer{flex-shrink:0;min-width:0;padding:10px 18px 14px;border-top:1px solid var(--line)}
+.composer{position:relative;z-index:5;flex-shrink:0;min-width:0;padding:10px 18px 14px;border-top:1px solid var(--line)}
 .composer-card{display:flex;flex-direction:column;width:100%;min-width:0;border:1px solid var(--line);border-radius:12px;background:var(--bg-input);transition:border-color 150ms ease,box-shadow 150ms ease}
 .composer-card:focus-within{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-weak)}
 .composer textarea{width:100%;min-height:50px;max-height:180px;padding:11px 12px 5px;border:0;background:transparent;color:var(--text-1);font:inherit;font-size:var(--sm);line-height:1.55;resize:none;outline:none;user-select:text}
@@ -815,8 +1017,31 @@ onBeforeUnmount(() => {
 .composer-bar .ctl{height:28px;min-width:0;border-color:transparent;background:var(--bg-list);color:var(--text-2);transition:background 150ms ease,color 150ms ease,border-color 150ms ease}
 .composer-bar .ctl:hover:enabled{border-color:var(--line);background:var(--surface-hover);color:var(--text-1)}
 .composer-bar .ctl:disabled{opacity:.65;cursor:default}
-.composer-bar .model-select{width:min(240px,42vw);max-width:240px}
-.composer-bar .thinking-select{width:auto;max-width:140px}
+.picker{position:relative;min-width:0}
+.picker-trigger{display:inline-flex;align-items:center;gap:6px;max-width:100%;padding:0 8px;text-align:left;cursor:pointer}
+.picker-trigger .pantry-icon{flex:0 0 auto;color:var(--text-3)}
+.picker-value{min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.model-trigger{width:min(240px,42vw);max-width:240px}
+.thinking-trigger{width:auto;max-width:150px}
+.picker-menu{position:absolute;left:0;bottom:calc(100% + 8px);z-index:30;overflow:hidden;border:1px solid var(--line);border-radius:12px;background:var(--bg-window);box-shadow:var(--shadow-float);animation:picker-in 120ms ease-out}
+.model-menu{width:min(340px,calc(100vw - 96px))}
+.thinking-menu{width:180px}
+.picker-search{display:flex;align-items:center;gap:7px;padding:8px 10px;border-bottom:1px solid var(--line);color:var(--text-3)}
+.picker-search input{width:100%;min-width:0;height:26px;padding:0;border:0;background:transparent;color:var(--text-1);font:inherit;font-size:var(--xs);outline:none}
+.picker-search input::placeholder{color:var(--text-placeholder)}
+.picker-search input::-webkit-search-cancel-button{display:none}
+.picker-list{max-height:280px;overflow-y:auto;padding:4px;scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+.picker-list::-webkit-scrollbar{width:6px}
+.picker-list::-webkit-scrollbar-thumb{border-radius:6px;background:var(--line)}
+.picker-option{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;min-width:0;padding:8px;border:0;border-radius:8px;background:none;color:var(--text-1);text-align:left;cursor:pointer}
+.picker-option.active{background:var(--surface-hover)}
+.picker-option.selected{background:var(--surface-selected)}
+.picker-option .pantry-icon{flex:0 0 auto;color:var(--primary)}
+.picker-option-text{display:flex;flex-direction:column;gap:2px;min-width:0}
+.picker-option-text strong{overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-size:var(--xs);font-weight:500;line-height:1.4}
+.picker-option-text small{overflow:hidden;white-space:nowrap;text-overflow:ellipsis;color:var(--text-3);font-size:11px;line-height:1.35}
+.picker-empty{margin:0;padding:14px 10px;color:var(--text-3);font-size:var(--xs);text-align:center}
+@keyframes picker-in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
 .composer-bar .send-btn{margin-left:auto}
 .send-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;flex-shrink:0;height:30px;padding:0 12px;border:0;border-radius:var(--r);background:var(--primary);color:var(--on-primary);font-size:var(--xs);cursor:pointer;transition:background 150ms ease,transform 90ms ease-out}
 .send-btn:hover:not(:disabled){background:var(--primary-hover)}
@@ -833,5 +1058,5 @@ onBeforeUnmount(() => {
 .primary-btn{width:100%;height:30px;border:0;border-radius:var(--r);background:var(--primary);color:var(--on-primary);font-size:var(--xs);cursor:pointer}
 .primary-btn:hover:not(:disabled){background:var(--primary-hover)}
 .primary-btn:disabled{opacity:.5;cursor:default}
-@media(max-width:700px){.projects{flex-basis:160px}.ws-head{gap:8px;padding-inline:14px}.transcript{padding:18px 16px}.composer{padding-inline:14px}.composer-bar .model-select{width:min(200px,34vw)}}
+@media(max-width:700px){.projects{flex-basis:160px}.ws-head{gap:8px;padding-inline:14px}.transcript{padding:18px 16px}.composer{padding-inline:14px}.model-trigger{width:min(200px,34vw)}}
 </style>
