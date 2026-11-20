@@ -13,7 +13,7 @@
 
 <p>
   <a href="https://github.com/YangZhongJia/YangGe/releases">
-    <img src="https://img.shields.io/badge/version-1.12.7-3D8B6B?style=flat-square" alt="Version 1.12.7" />
+    <img src="https://img.shields.io/badge/version-1.12.8-3D8B6B?style=flat-square" alt="Version 1.12.8" />
   </a>
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/License-GPL--3.0--only-3D8B6B?style=flat-square" alt="GPL-3.0-only" />
@@ -50,9 +50,13 @@
 
 Start YangGe on computers connected to the same local network and they discover each other automatically. Open a peer to chat, transfer files, browse shared folders, or challenge them to a quick duel. No cloud account, central server, telemetry, or Internet access is involved. YangGe is designed for corporate intranets, isolated networks, and laboratories where external connectivity is limited or prohibited.
 
-> **1.12.7 status**: The Pi workspace saves a session per project, so quitting and reopening YangGe restores the last project, transcript, and model context. The lock screen also supports local face unlock, enrolled in Settings; model and thinking controls live under the composer, and the game center lives in Settings.
+> **1.12.8 status**: The Pi workspace saves a session per project, so quitting and reopening YangGe restores the last project, transcript, and model context. The lock screen also supports local face unlock, enrolled in Settings; model and thinking controls live under the composer, and the game center lives in Settings.
 
-## Recent updates (v1.12.7)
+## Recent updates (v1.12.8)
+
+- **Centered AI icon**: the AI coding rail entry now uses a symmetrical AI chip mark, optically aligned with Chat and Contacts.
+
+**v1.12.7**
 
 - **Fix post-reply lockup**: Pi stays ready after a turn finishes, so model/thinking controls and the composer remain usable.
 

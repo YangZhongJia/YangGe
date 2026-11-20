@@ -51,10 +51,13 @@ withDefaults(
       <path d="M15 13v2" />
       <path d="M9 13v2" />
     </g>
-    <!-- AI programming: sparkle indicates the Pi workspace. -->
+    <!-- AI programming: symmetrical chip mark, visually centered in the rail button. -->
     <g v-else-if="name === 'ai'">
-      <path d="M12 3.2 13.9 8 18.7 9.9l-4.8 1.9L12 16.6l-1.9-4.8L5.3 9.9 10.1 8 12 3.2Z" />
-      <path d="m18.3 15.3.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2Z" />
+      <rect x="4.5" y="4.5" width="15" height="15" rx="4" />
+      <path d="M8.4 15.2 10.2 9l1.8 6.2" />
+      <path d="M9 13.4h2.4" />
+      <path d="M15 9v6.2" />
+      <path d="M19.5 10.5H21M19.5 13.5H21M3 10.5h1.5M3 13.5h1.5" />
     </g>
     <!-- lucide: list-checks; local geometry for the task records entry. -->
     <g v-else-if="name === 'tasks'">
