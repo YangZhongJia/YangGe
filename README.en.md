@@ -13,7 +13,7 @@
 
 <p>
   <a href="https://github.com/YangZhongJia/YangGe/releases">
-    <img src="https://img.shields.io/badge/version-1.12.2-3D8B6B?style=flat-square" alt="Version 1.12.2" />
+    <img src="https://img.shields.io/badge/version-1.12.3-3D8B6B?style=flat-square" alt="Version 1.12.3" />
   </a>
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/License-GPL--3.0--only-3D8B6B?style=flat-square" alt="GPL-3.0-only" />
@@ -50,9 +50,14 @@
 
 Start YangGe on computers connected to the same local network and they discover each other automatically. Open a peer to chat, transfer files, browse shared folders, or challenge them to a quick duel. No cloud account, central server, telemetry, or Internet access is involved. YangGe is designed for corporate intranets, isolated networks, and laboratories where external connectivity is limited or prohibited.
 
-> **1.12.2 status**: Adds an independent "AI coding" Pi workspace with projects on the left, the conversation on the right, and a bottom composer. Model and thinking controls live under the composer, and replies render as styled Markdown. The old Agent entry remains hidden.
+> **1.12.3 status**: Adds an independent "AI coding" Pi workspace with projects on the left, the conversation on the right, and a bottom composer. Model and thinking controls live under the composer, replies render as styled Markdown, and the game center moved from the rail into Settings. The old Agent entry remains hidden.
 
-## Recent updates (v1.12.2)
+## Recent updates (v1.12.3)
+
+- **Games moved to Settings**: the rail no longer shows the gamepad; use Settings → Games. "Open game" still opens the standalone Guandan window.
+- **Cleaner rail**: only Chat, Contacts, AI coding, File cabinet, and Settings remain.
+
+**v1.12.2**
 
 - **Composer toolbar**: model and thinking-level controls now sit at the bottom-left of the composer; the header keeps only project, status, and routing.
 - **Markdown replies**: responses render as documents with headings, lists, tables, code fences, quotes, links, and inline styles.

@@ -137,13 +137,6 @@ function openSettings(event?: Event): void {
   void window.pantry.openSettings()
 }
 
-// 内嵌掼蛋：独立游戏窗口（第三方静态包 + 本地自定义协议），不占主窗渲染包。
-function openGuandan(event?: Event): void {
-  hideRailHint()
-  releaseRailFocus(event)
-  void window.pantry.openGuandan()
-}
-
 // 文件柜（决议 #283，形态改为主窗页签见 #284）：底部工具组最上一格，切到文件柜页签；
 // 未设共享目录也可点——进去就是引导设置的空态
 function openCabinet(event?: Event): void {
@@ -715,27 +708,6 @@ onUnmounted(() => {
       >
         <RailNavIcon name="agent" />
       </button>
-      <button
-        type="button"
-        class="rail-btn rail-hint rail-game"
-        :class="{ 'show-hint': activeRailHint === 'game' }"
-        :data-label="tr('游戏中心')"
-        :aria-label="tr('游戏中心')"
-        @pointermove="scheduleRailHint('game')"
-        @pointerleave="hideRailHint('game')"
-        @click="openGuandan($event)"
-      >
-        <svg width="29" height="29" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path
-            d="M7.4 8.2h9.2a4.4 4.4 0 0 1 4.3 5.4l-.7 3.1a2.2 2.2 0 0 1-3.9 1l-1.2-1.7H8.9l-1.2 1.7a2.2 2.2 0 0 1-3.9-1l-.7-3.1a4.4 4.4 0 0 1 4.3-5.4Z"
-            stroke="currentColor"
-            stroke-width="1.7"
-          />
-          <path d="M7 11.2v3M5.5 12.7h3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
-          <circle cx="16.1" cy="11.7" r="0.95" fill="currentColor" />
-          <circle cx="18.2" cy="13.8" r="0.95" fill="currentColor" />
-        </svg>
-      </button>
       <div class="spacer"></div>
       <button
         v-if="updateStore.available"
@@ -1268,30 +1240,6 @@ onUnmounted(() => {
   outline-offset: 2px;
   box-shadow: none;
 }
-/* 掼蛋入口：比常规导航按钮更大，但保持与其它导航一致的静默外观 */
-.rail-game {
-  width: 52px;
-  height: 52px;
-  margin: 3px 0;
-  border-radius: 14px;
-  border: none;
-  background: transparent;
-  color: var(--rail-text);
-  box-shadow: none;
-}
-.rail-game:hover {
-  background: var(--rail-hover);
-  color: var(--rail-text);
-}
-.rail-game:focus-visible {
-  outline: 2px solid var(--rail-focus);
-  outline-offset: -2px;
-}
-.rail-game svg {
-  width: 29px;
-  height: 29px;
-}
-
 .rail-hint::after {
   content: attr(data-label);
   position: absolute;

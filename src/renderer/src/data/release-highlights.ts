@@ -10,6 +10,15 @@ export interface ReleaseHighlights {
  * 主窗按 localStorage 中的 lastSeenVersion 判断是否展示，避免每次启动重复弹出。
  */
 export const RELEASE_HIGHLIGHTS: Record<string, ReleaseHighlights> = {
+  '1.12.3': {
+    version: '1.12.3',
+    notes: [
+      '游戏中心从左侧导航移入「设置 → 游戏」。',
+      '主界面只保留聊天、通讯录、AI 编程、文件柜和设置，导航更清爽。',
+      '「打开游戏」仍会打开独立的掼蛋窗口。'
+    ],
+    fixed: true
+  },
   '1.12.2': {
     version: '1.12.2',
     notes: [

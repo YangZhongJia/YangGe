@@ -10,7 +10,7 @@
 
 <p>
   <a href="https://github.com/YangZhongJia/YangGe/releases">
-    <img src="https://img.shields.io/badge/version-1.12.2-3D8B6B?style=flat-square" alt="Version 1.12.2" />
+    <img src="https://img.shields.io/badge/version-1.12.3-3D8B6B?style=flat-square" alt="Version 1.12.3" />
   </a>
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/License-GPL--3.0--only-3D8B6B?style=flat-square" alt="GPL-3.0-only" />
@@ -52,7 +52,7 @@
 
 > **二开说明**：阳鸽是开源项目 [Teahouse（茶话间）](https://github.com/skyjt/teahouse) 的二次开发版本（GPL-3.0-only），仓库为 [YangZhongJia/YangGe](https://github.com/YangZhongJia/YangGe)。相对上游重做了品牌与界面，并新增 AI 分身 / 剪贴板 / 输入中提示 / AI 群总结 / 任务中心 / 双人角斗场 / ACP Agent 协作等能力。
 
-> **1.12.2 当前状态**：新增独立的「AI 编程」Pi 工作区：左侧项目、右侧对话、底部输入；模型与思考程度放在输入框底部，Pi 回复按 Markdown 排版；旧 Agent 入口仍隐藏，聊天/文件功能不变。
+> **1.12.3 当前状态**：新增独立的「AI 编程」Pi 工作区：左侧项目、右侧对话、底部输入；模型与思考程度放在输入框底部，Pi 回复按 Markdown 排版。游戏中心从主导航移入设置；旧 Agent 入口仍隐藏，聊天/文件功能不变。
 
 ## 为什么做这个
 
@@ -65,6 +65,11 @@
 干脆自己写一个：免费开源、纯内网直连、从 Windows 7 到国产统信 UOS 再到 macOS 全平台覆盖、打开就会用。这就是阳鸽。
 
 ## 最近更新
+
+**v1.12.3**
+
+- **游戏移入设置**：主导航不再显示游戏手柄，改为「设置 → 游戏」；点击「打开游戏」仍打开独立掼蛋窗口。
+- **导航更清爽**：左侧只保留聊天、通讯录、AI 编程、文件柜和设置。
 
 **v1.12.2**
 

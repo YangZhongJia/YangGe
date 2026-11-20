@@ -66,6 +66,12 @@ withDefaults(
       <path d="M13.5 13h3" />
       <path d="M8.5 15.7h7" />
     </g>
+    <g v-else-if="name === 'settings-games'">
+      <path d="M7.4 8.2h9.2a4.4 4.4 0 0 1 4.3 5.4l-.7 3.1a2.2 2.2 0 0 1-3.9 1l-1.2-1.7H8.9l-1.2 1.7a2.2 2.2 0 0 1-3.9-1l-.7-3.1a4.4 4.4 0 0 1 4.3-5.4Z" />
+      <path d="M7 11.2v3M5.5 12.7h3" />
+      <circle cx="16.1" cy="11.7" r="0.95" />
+      <circle cx="18.2" cy="13.8" r="0.95" />
+    </g>
     <g v-else-if="name === 'settings-about'">
       <circle cx="12" cy="12" r="7.5" />
       <path d="M12 11.2v4.8" />

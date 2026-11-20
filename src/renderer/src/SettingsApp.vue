@@ -59,7 +59,7 @@ import {
   teahouseLightThemeOverrides
 } from './ui/naive-theme'
 
-// 设置独立小窗（ui-design §8）：按 7 组承载本地设置（决议 #150 重组，端口归网络、发送键归聊天、去掉杂物抽屉）。
+// 设置独立小窗（ui-design §8）：按 8 组承载本地设置（决议 #150 重组，端口归网络、发送键归聊天、游戏归设置）。
 
 type Section =
   | 'profile'
@@ -68,6 +68,7 @@ type Section =
   | 'storage'
   | 'network'
   | 'shortcuts'
+  | 'games'
   | 'about'
 
 const sections = computed<Array<{ id: Section; icon: string; label: string; summary: string }>>(() => ([
@@ -106,6 +107,12 @@ const sections = computed<Array<{ id: Section; icon: string; label: string; summ
     icon: 'settings-shortcuts',
     label: tr('快捷键'),
     summary: tr('截图与主窗口的全局快捷键。')
+  },
+  {
+    id: 'games',
+    icon: 'settings-games',
+    label: tr('游戏'),
+    summary: tr('掼蛋等局域网小游戏，独立窗口运行。')
   },
   {
     id: 'about',
@@ -407,6 +414,10 @@ async function copyReleaseLinkNow(): Promise<void> {
 
 async function openUrl(url: string): Promise<void> {
   await window.pantry.openUrl(url)
+}
+
+function openGuandan(): void {
+  void window.pantry.openGuandan()
 }
 
 async function changeLanguage(value: SettingsView['language']): Promise<void> {
@@ -1874,6 +1885,22 @@ async function confirmRemove(cidr: string): Promise<void> {
             </div>
             <div class="panel-actions">
               <NButton secondary @click="resetShortcuts">{{ tr('恢复默认') }}</NButton>
+            </div>
+          </div>
+        </section>
+
+        <section v-else-if="section === 'games'" class="page-section">
+          <div class="panel">
+            <div class="panel-head">
+              <h2>{{ tr('游戏中心') }}</h2>
+              <p>{{ tr('游戏在独立窗口打开，不占用主窗聊天区域。') }}</p>
+            </div>
+            <div class="setting-line">
+              <div>
+                <strong>{{ tr('掼蛋') }}</strong>
+                <small>{{ tr('四人局 · 局域网联机 · 独立窗口') }}</small>
+              </div>
+              <NButton type="primary" @click="openGuandan">{{ tr('打开游戏') }}</NButton>
             </div>
           </div>
         </section>
