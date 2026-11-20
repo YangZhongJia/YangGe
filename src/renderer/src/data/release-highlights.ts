@@ -10,6 +10,11 @@ export interface ReleaseHighlights {
  * 主窗按 localStorage 中的 lastSeenVersion 判断是否展示，避免每次启动重复弹出。
  */
 export const RELEASE_HIGHLIGHTS: Record<string, ReleaseHighlights> = {
+  '1.12.6': {
+    version: '1.12.6',
+    notes: ['修复切换到 AI 编程时聊天头部和输入框偶现叠加的问题。'],
+    fixed: true
+  },
   '1.12.5': {
     version: '1.12.5',
     notes: [

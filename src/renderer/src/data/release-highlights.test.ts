@@ -3,7 +3,7 @@ import { releaseHighlightsFor } from './release-highlights'
 
 describe('版本亮点', () => {
   it('当前版本列出新增项，并保留一句已知 BUG 优化', () => {
-    const current = releaseHighlightsFor('1.12.5')
+    const current = releaseHighlightsFor('1.12.6')
     expect(current?.notes.length).toBeGreaterThan(0)
     expect(current?.fixed).toBe(true)
   })

@@ -9,8 +9,9 @@ describe('Pi 工作区生命周期', () => {
     expect(appSource).toMatch(/<KeepAlive>[\s\S]*?<component\s+:is="PiWorkspacePane"[\s\S]*?<\/KeepAlive>/)
   })
 
-  it('Pi 页不再同时渲染聊天空态，保持完整工作区高度', () => {
+  it('Pi 页不再同时渲染聊天空态或聊天面板', () => {
     expect(appSource).toContain('tab === \'chat\' || (tab === \'contacts\' && !selectedPeer)')
+    expect(appSource).toMatch(/<ChatPane\s+v-else-if="tab === 'chat' && chatStore\.activeConv"/)
   })
 
   it('锁屏未解除时不加载 Pi，也不启动后台会话', () => {

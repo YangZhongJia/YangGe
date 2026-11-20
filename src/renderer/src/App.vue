@@ -856,7 +856,7 @@ onUnmounted(() => {
         @chat="chatWith"
       />
       <ChatPane
-        v-else-if="chatStore.activeConv"
+        v-else-if="tab === 'chat' && chatStore.activeConv"
         :win7-ime-compat="info?.windows7 === true"
       />
       <div v-else-if="tab === 'chat' || (tab === 'contacts' && !selectedPeer)" class="empty">
